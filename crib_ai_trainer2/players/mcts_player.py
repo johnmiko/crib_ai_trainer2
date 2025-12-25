@@ -50,8 +50,8 @@ class ISMCTSPlayer:
             return None
         root_children = {c: {"N": 0, "W": 0.0} for c in playable}
         for _ in range(self.simulations):
-            # Belief sample: sample a possible opponent hand consistent with known cards
-            opp_hand = self._sample_opponent_hand(my_hand, known_cards)
+            # Belief sample: sample a possible opponent hand consistent with known cards and history
+            opp_hand = self._sample_opponent_hand_belief(my_hand, known_cards, history_since_reset)
             # select
             c = self._uct_select(root_children, count, history_since_reset)
             reward = self._simulate_play(c, count, history_since_reset, opp_hand)
@@ -79,9 +79,13 @@ class ISMCTSPlayer:
         # Optionally, simulate opponent response (not implemented in v1)
         return pts + future_val
 
-    def _sample_opponent_hand(self, my_hand: Optional[List[Card]], known_cards: Optional[List[Card]]) -> List[Card]:
-        # For v1: sample a random 4-card hand not in known_cards or my_hand
+    def _sample_opponent_hand_belief(self, my_hand: Optional[List[Card]], known_cards: Optional[List[Card]], history: Optional[List[Card]]) -> List[Card]:
+        # Sample a random 4-card hand for opponent, consistent with known cards and history (cards played by opponent)
         all_cards = [Card(s, r) for s in SUITS for r in RANKS]
         exclude = set((c.suit, c.rank) for c in (known_cards or []) + (my_hand or []))
+        # Remove cards played by both players in pegging history
+        if history:
+            exclude.update((c.suit, c.rank) for c in history)
         candidates = [c for c in all_cards if (c.suit, c.rank) not in exclude]
-        return self._rng.sample(candidates, 4) if len(candidates) >= 4 else []
+        # If not enough, return as many as possible
+        return self._rng.sample(candidates, min(4, len(candidates)))

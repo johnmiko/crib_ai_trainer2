@@ -10,7 +10,9 @@ from crib_ai_trainer2.players.random_player import RandomPlayer
 from crib_ai_trainer2.players.rule_based_player import RuleBasedPlayer
 from crib_ai_trainer2.players.mcts_player import ISMCTSPlayer
 from crib_ai_trainer2.features import D_TOTAL, encode_state
+
 from models.perceptron import SimplePerceptron, PerceptronConfig
+from crib_ai_trainer2.scoring import RANK_VALUE
 
 logger = getLogger(__name__)
 
@@ -95,6 +97,7 @@ class Trainer:
             teacher = self.models["reasonable"]
             perceptron = player
             # Generate imitation data
+            from crib_ai_trainer2.cards import Card
             X = []
             y = []
             for _ in range(100):
