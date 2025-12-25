@@ -50,16 +50,27 @@ def history_since_reset(history: List[Card], k: int = K_HISTORY) -> np.ndarray:
 def encode_state(hand: List[Card], starter: Card | None, seen: List[Card], count: int, history_reset: List[Card]) -> np.ndarray:
     """
     Returns a feature vector for the current state.
-    hand: cards in hand (multi-hot)
-    starter: starter card (one-hot)
-    seen: cards already played/seen (multi-hot)
-    count: current pegging count (one-hot)
+    hand: cards in hand (multi-hot, 52)
+    seen: cards already played/seen (multi-hot, 52)
+    starter: starter card (one-hot, 52)
+    count: current pegging count (one-hot, 32)
     history_reset: last K cards played since reset (K x 52 one-hot)
     """
+    # Defensive: ensure all arrays are correct length
+    hand_vec = multi_hot_cards(hand)
+    seen_vec = multi_hot_cards(seen)
+    starter_vec = one_hot_card(starter) if starter is not None else np.zeros(52, dtype=np.float32)
+    count_vec = one_hot_count(count)
+    hist_vec = history_since_reset(history_reset, K_HISTORY)
+    assert hand_vec.shape == (52,)
+    assert seen_vec.shape == (52,)
+    assert starter_vec.shape == (52,)
+    assert count_vec.shape == (32,)
+    assert hist_vec.shape == (K_HISTORY * 52,)
     return np.concatenate([
-        multi_hot_cards(hand),
-        multi_hot_cards(seen),
-        one_hot_card(starter),
-        one_hot_count(count),
-        history_since_reset(history_reset, K_HISTORY),
+        hand_vec,
+        seen_vec,
+        starter_vec,
+        count_vec,
+        hist_vec,
     ])
