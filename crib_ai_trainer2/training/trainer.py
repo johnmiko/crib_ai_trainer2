@@ -23,6 +23,7 @@ class TrainConfig:
     include_models: Optional[List[str]] = None
     exclude_models: Optional[List[str]] = None
     max_underperformance: float = 0.35
+    reward_win_bonus: int = 30
 
 class Trainer:
     def __init__(self, cfg: TrainConfig):
@@ -123,30 +124,51 @@ class Trainer:
 
         w = 0
         l = 0
+        total_reward = 0
         for _ in range(self.cfg.num_training_games):
             game = CribbageGame(player, opponent)
             s0, s1 = game.play_game()
+            # Reward shaping: primary = final point diff, bonus for win/loss
+            reward = (s0 - s1)
             if s0 >= 121 and s0 > s1:
                 w += 1
+                reward += self.cfg.reward_win_bonus
             else:
                 l += 1
-        logger.info(f"Training results: W={w} L={l}")
+                reward -= self.cfg.reward_win_bonus
+            total_reward += reward
+        logger.info(f"Training results: W={w} L={l} | Total reward: {total_reward}")
         # minimal: if wins exceed losses, consider improved (placeholder for proper update)
         # In real training, we'd update torch models with gradients here.
 
     def _rank_models(self, games: int) -> None:
+        import numpy as np
         names = list(self.models.keys())
         scores = {n: 0.0 for n in names}
         for i, a in enumerate(names):
             for b in names[i + 1:]:
                 w = 0
-                for _ in range(games):
-                    game = CribbageGame(self.models[a], self.models[b])
-                    s0, s1 = game.play_game()
-                    w += 1 if s0 > s1 else 0
+                results = []
+                for g in range(games):
+                    # Alternate dealer and swap positions for fairness
+                    if g % 2 == 0:
+                        game = CribbageGame(self.models[a], self.models[b], seed=g)
+                        s0, s1 = game.play_game()
+                        win = s0 > s1
+                    else:
+                        game = CribbageGame(self.models[b], self.models[a], seed=g)
+                        s1, s0 = game.play_game()
+                        win = s0 > s1
+                    w += int(win)
+                    results.append(int(win))
                 winrate = w / games
+                # Wilson score interval for CI
+                n = games
+                phat = winrate
+                z = 1.96  # 95% CI
+                ci = z * np.sqrt(phat * (1 - phat) / n)
+                logger.info(f"Benchmark {a} vs {b}: {winrate:.2f} ± {ci:.2f}")
                 scores[a] += winrate
                 scores[b] += (1 - winrate)
-                logger.info(f"Benchmark {a} vs {b}: {winrate:.2f}")
         self.best_model_name = max(scores.keys(), key=lambda n: scores[n])
         logger.info(f"Best model now: {self.best_model_name}")
