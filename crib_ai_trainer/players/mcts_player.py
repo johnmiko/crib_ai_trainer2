@@ -3,8 +3,8 @@ from typing import List, Tuple, Optional, Dict
 import math
 import random
 from logging import getLogger
-from crib_ai_trainer2.cards import Card, Deck, SUITS, RANKS
-from crib_ai_trainer2.scoring import score_pegging_play, RANK_VALUE
+from crib_ai_trainer.cards import Card, Deck, SUITS, RANKS
+from crib_ai_trainer.scoring import score_pegging_play, RANK_VALUE
 
 logger = getLogger(__name__)
 

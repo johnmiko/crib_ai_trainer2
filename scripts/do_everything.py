@@ -6,7 +6,7 @@ from logging import getLogger
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
-from crib_ai_trainer2.training.trainer import Trainer, TrainConfig
+from crib_ai_trainer.training.trainer import Trainer, TrainConfig
 
 logger = getLogger(__name__)
 

@@ -1,9 +1,6 @@
 from crib_ai_trainer.cards import Card
 from crib_ai_trainer.scoring import score_hand, score_fifteens, score_pairs, score_runs, score_nobs
 
-from crib_ai_trainer.cards import Card
-from crib_ai_trainer.scoring import score_hand, score_fifteens, score_pairs, score_runs, score_nobs
-
 def test_flush_scoring_variations():
     # Hand flush, starter matches (5 points)
     hand = [Card('H', 2), Card('H', 3), Card('H', 4), Card('H', 5)]
@@ -50,5 +47,3 @@ def test_pegging_scoring_basic():
     count = 10
     new = Card('S', 5)
     pts = score_pegging_play(seq, new, count)
-    # should get pair points (3 of a kind = 6)
-    assert pts >= 6

@@ -1,7 +1,3 @@
-
-from crib_ai_trainer.game import CribbageGame
-from crib_ai_trainer.players.random_player import RandomPlayer
-
 from crib_ai_trainer.game import CribbageGame
 from crib_ai_trainer.players.random_player import RandomPlayer
 

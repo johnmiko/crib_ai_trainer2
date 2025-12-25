@@ -1,6 +1,6 @@
 from __future__ import annotations
 from logging import getLogger
-from crib_ai_trainer2.training.trainer import Trainer, TrainConfig
+from crib_ai_trainer.training.trainer import Trainer, TrainConfig
 
 logger = getLogger(__name__)
 

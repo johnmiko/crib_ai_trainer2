@@ -1,7 +1,7 @@
 from typing import List, Tuple, Optional
 from logging import getLogger
-from crib_ai_trainer2.cards import Card
-from crib_ai_trainer2.scoring import score_hand, RANK_VALUE, score_pegging_play
+from crib_ai_trainer.cards import Card
+from crib_ai_trainer.scoring import score_hand, RANK_VALUE, score_pegging_play
 
 logger = getLogger(__name__)
 

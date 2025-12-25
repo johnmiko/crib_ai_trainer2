@@ -1,7 +1,7 @@
 import os
 import numpy as np
 from logging import getLogger
-from crib_ai_trainer2.training.trainer import Trainer, TrainConfig
+from crib_ai_trainer.training.trainer import Trainer, TrainConfig
 
 logger = getLogger(__name__)
 

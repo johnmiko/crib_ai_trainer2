@@ -36,7 +36,7 @@ class SimplePerceptron(nn.Module):
     def choose_discard(self, hand, dealer_is_self):
         # Select 2 cards to discard from hand (length 6)
         import numpy as np
-        from crib_ai_trainer2.features import encode_state
+        from crib_ai_trainer.features import encode_state
         best_pair = (hand[0], hand[1])
         best_score = -float('inf')
         for i in range(len(hand)):
@@ -54,7 +54,7 @@ class SimplePerceptron(nn.Module):
     def play_pegging(self, playable, count, history_since_reset):
         # Select a card to play from playable
         import numpy as np
-        from crib_ai_trainer2.features import encode_state
+        from crib_ai_trainer.features import encode_state
         if not playable:
             return None
         # Use dummy hand/starter/seen for encoding

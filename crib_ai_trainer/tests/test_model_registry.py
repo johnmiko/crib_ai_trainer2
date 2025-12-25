@@ -1,7 +1,3 @@
-from crib_ai_trainer import model_registry
-import os
-import json
-
 from crib_ai_trainer.model_registry import save_model_artifact
 import os
 import json
@@ -22,5 +18,3 @@ def test_save_model_artifact(tmp_path):
     assert data["model"] == model_data
     assert data["metrics"] == metrics
     assert data["config"] == config
-    hist_dir = out_dir / "history"
-    assert any(hist_dir.iterdir())

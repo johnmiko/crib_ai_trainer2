@@ -1,6 +1,6 @@
 from typing import List, Sequence
 from logging import getLogger
-from crib_ai_trainer2.cards import Card
+from crib_ai_trainer.cards import Card
 
 logger = getLogger(__name__)
 

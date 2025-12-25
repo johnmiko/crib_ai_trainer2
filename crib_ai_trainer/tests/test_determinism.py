@@ -1,7 +1,5 @@
 from crib_ai_trainer.cards import Deck
 
-from crib_ai_trainer.cards import Deck
-
 def test_seeded_sampling_determinism():
     d1 = Deck(seed=123)
     d1.shuffle()
@@ -10,4 +8,3 @@ def test_seeded_sampling_determinism():
     d2.shuffle()
     h2 = d2.deal(6)
     assert h1 == h2
-
