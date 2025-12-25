@@ -5,12 +5,12 @@ import time
 import numpy as np
 import torch
 from logging import getLogger
-from ..game import CribbageGame
-from ..players.random_player import RandomPlayer
-from ..players.rule_based_player import RuleBasedPlayer
-from ..players.mcts_player import ISMCTSPlayer
-from ..features import D_TOTAL, encode_state
-from ...models.perceptron import SimplePerceptron, PerceptronConfig
+from crib_ai_trainer2.game import CribbageGame
+from crib_ai_trainer2.players.random_player import RandomPlayer
+from crib_ai_trainer2.players.rule_based_player import RuleBasedPlayer
+from crib_ai_trainer2.players.mcts_player import ISMCTSPlayer
+from crib_ai_trainer2.features import D_TOTAL, encode_state
+from models.perceptron import SimplePerceptron, PerceptronConfig
 
 logger = getLogger(__name__)
 
@@ -38,7 +38,7 @@ class Trainer:
         # simple perceptron for discard (2-card select) and pegging (1-card select) as separate heads
         self.models["perceptron_discard"] = SimplePerceptron(PerceptronConfig(input_dim=D_TOTAL, output_dim=52))
         self.models["perceptron_pegging"] = SimplePerceptron(PerceptronConfig(input_dim=D_TOTAL, output_dim=52))
-        from ..players.cfr_player import CFRPlayer
+        from crib_ai_trainer2.players.cfr_player import CFRPlayer
         self.models["cfr"] = CFRPlayer(iterations=500)
 
     def train(self) -> None:
@@ -72,7 +72,7 @@ class Trainer:
         # If CFR, run internal training iterations to update regrets
         if name == "cfr":
             cfr = player
-            from ..cards import Card
+            from crib_ai_trainer2.cards import Card
             def legal_actions_fn(count: int):
                 # abstract legal actions as ranks 1..13 that keep count <=31
                 playable = []

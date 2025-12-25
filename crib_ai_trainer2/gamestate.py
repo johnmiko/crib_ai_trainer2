@@ -4,7 +4,7 @@ from typing import List, Optional, Tuple, Any
 import copy
 import json
 import hashlib
-from .cards import Card
+from crib_ai_trainer2.cards import Card
 
 @dataclass
 class GameState:

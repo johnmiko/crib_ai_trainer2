@@ -1,7 +1,7 @@
 from typing import List
 import numpy as np
 from logging import getLogger
-from .cards import Card
+from crib_ai_trainer2.cards import Card
 
 logger = getLogger(__name__)
 

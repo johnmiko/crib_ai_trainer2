@@ -2,9 +2,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 from logging import getLogger
-from .cards import Card, Deck
-from .scoring import score_hand, score_pegging_play, RANK_VALUE
-from .gamestate import GameState
+from crib_ai_trainer2.cards import Card, Deck
+from crib_ai_trainer2.scoring import score_hand, score_pegging_play, RANK_VALUE
+from crib_ai_trainer2.gamestate import GameState
 
 logger = getLogger(__name__)
 
