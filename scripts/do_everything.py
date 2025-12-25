@@ -10,10 +10,18 @@ from crib_ai_trainer2.training.trainer import Trainer, TrainConfig
 
 logger = getLogger(__name__)
 
+
+import logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
+
 def main():
+    logger.info("Initializing training configuration...")
     cfg = TrainConfig(num_training_games=10, benchmark_games=50, run_indefinitely=False)
+    logger.info("Creating Trainer instance...")
     t = Trainer(cfg)
+    logger.info("Starting training...")
     t.train()
+    logger.info("Training finished.")
 
 if __name__ == "__main__":
     main()

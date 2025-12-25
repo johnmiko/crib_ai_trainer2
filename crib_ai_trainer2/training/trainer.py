@@ -45,19 +45,26 @@ class Trainer:
         self.models["cfr"] = CFRPlayer(iterations=500)
 
     def train(self) -> None:
+        logger.info("Starting training loop...")
         start_time = time.time()
+        round_num = 1
         while True:
+            logger.info(f"=== Training round {round_num} ===")
             for name in list(self.models.keys()):
                 if self._is_excluded(name):
+                    logger.info(f"Skipping model: {name}")
                     continue
+                logger.info(f"Training model: {name}")
                 self._train_model(name)
-            # benchmarking among models
+            logger.info("Benchmarking models...")
             self._rank_models(self.cfg.benchmark_games)
             if not self.cfg.run_indefinitely:
+                logger.info("Training loop complete.")
                 break
             if self.cfg.max_seconds and (time.time() - start_time) > self.cfg.max_seconds:
                 logger.info("Max time reached, stopping training loop.")
                 break
+            round_num += 1
 
     def _is_excluded(self, name: str) -> bool:
         if self.cfg.include_models and name not in self.cfg.include_models:
@@ -115,6 +122,8 @@ class Trainer:
                     action = teacher.play_pegging(playable, count, history).to_index()
                 X.append(encode_state(hand, starter, seen, count, history))
                 y.append(action)
+            import numpy as np
+            X = np.array(X)
             X = torch.tensor(X, dtype=torch.float32)
             y = torch.tensor(y, dtype=torch.long)
             optimizer = optim.Adam(perceptron.parameters(), lr=0.01)
