@@ -14,7 +14,6 @@ trained_models/
 *.bak
 *.tmp
 *.old
-*.json
 !trained_models/**/*.json
 !trained_models/**/*.npz__pycache__/
 *.pyc

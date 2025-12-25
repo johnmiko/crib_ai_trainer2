@@ -7,3 +7,7 @@ use log statements instead of print statements (logger = getLogger(__name__))
 
 The root directory of the repo should contain as little files as possible. Put tests file in a "tests" directory, code files into subdirectory "crib_ai_trainer2", trained models into the directory "trained_models" and model definitions into "models" folder. 
 If a file starts becoming long (longer than 500 lines), check if some of the code can be refactored into functions and put the functions into other files. If the functions do not group together well, add them to utils.py
+
+Use absolute imports instead of relative imports
+
+ Any tests or scripts should be runnable from the root directory
