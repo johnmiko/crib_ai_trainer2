@@ -74,7 +74,6 @@ class Trainer:
             cfr = player
             from crib_ai_trainer2.cards import Card
             def legal_actions_fn(count: int):
-                # abstract legal actions as ranks 1..13 that keep count <=31
                 playable = []
                 for r in range(1,14):
                     if count + RANK_VALUE[r] <= 31:
@@ -83,11 +82,45 @@ class Trainer:
             def opponent_policy_fn(*args, **kwargs):
                 return None
             def hand_sampler_fn():
-                # sample a random 6-card hand (ranks only)
                 import random
                 return [Card('H', random.randint(1,13)) for _ in range(6)]
             cfr.train_pegging(legal_actions_fn, opponent_policy_fn)
             cfr.train_discard(hand_sampler_fn)
+        # If perceptron, do imitation learning from reasonable player
+        if name.startswith("perceptron"):
+            import torch
+            import torch.optim as optim
+            # Use reasonable player as teacher
+            teacher = self.models["reasonable"]
+            perceptron = player
+            # Generate imitation data
+            X = []
+            y = []
+            for _ in range(100):
+                # Random hand, starter, seen, count, history
+                hand = [Card('H', i+1) for i in range(6)]
+                starter = Card('S', 5)
+                seen = []
+                count = 0
+                history = []
+                # Teacher action
+                if name == "perceptron_discard":
+                    action = teacher.choose_discard(hand, dealer_is_self=True)[0].to_index()
+                else:
+                    playable = hand[:4]
+                    action = teacher.play_pegging(playable, count, history).to_index()
+                X.append(encode_state(hand, starter, seen, count, history))
+                y.append(action)
+            X = torch.tensor(X, dtype=torch.float32)
+            y = torch.tensor(y, dtype=torch.long)
+            optimizer = optim.Adam(perceptron.parameters(), lr=0.01)
+            for _ in range(20):
+                optimizer.zero_grad()
+                logits = perceptron(X)
+                loss = torch.nn.functional.nll_loss(logits, y)
+                loss.backward()
+                optimizer.step()
+
         w = 0
         l = 0
         for _ in range(self.cfg.num_training_games):
