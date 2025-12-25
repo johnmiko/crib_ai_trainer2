@@ -9,9 +9,10 @@ from crib_ai_trainer2.scoring import score_pegging_play, RANK_VALUE
 logger = getLogger(__name__)
 
 class ISMCTSPlayer:
-    def __init__(self, name: str = "is_mcts", simulations: int = 1000, seed: int | None = None):
+    def __init__(self, name: str = "is_mcts", simulations: int = 1000, seed: int | None = None, belief_samples: int = 10):
         self.name = name
         self.simulations = simulations
+        self.belief_samples = belief_samples
         self._rng = random.Random(seed)
 
     def choose_discard(self, hand: List[Card], dealer_is_self: bool) -> Tuple[Card, Card]:
@@ -25,8 +26,9 @@ class ISMCTSPlayer:
                 total = 0.0
                 for _ in range(max(50, self.simulations // n)):
                     # sample a starter from remaining deck uniformly
-                    # approximate: value of pegging ignored; focus on hand value
                     starter = Card(self._rng.choice(SUITS), self._rng.choice(RANKS))
+                    # sample opponent discards (belief sampling)
+                    # For v1, just random legal discards
                     total += self._estimate_hand_value(kept, starter)
                 avg = total / max(1, max(50, self.simulations // n))
                 if avg > best_score:
@@ -35,24 +37,24 @@ class ISMCTSPlayer:
         return best_pair
 
     def _estimate_hand_value(self, kept: List[Card], starter: Card) -> float:
-        # simple heuristic: favor 15s potential and runs; cheap estimation
-        # use rank values and proximity to 15
         v = 0.0
         s = sum(RANK_VALUE[c.rank] for c in kept) + RANK_VALUE[starter.rank]
         v += -abs(15 - (s % 15)) * 0.1
-        # small bonus for low cards aiding pegging flexibility
         v += sum(1 for c in kept if RANK_VALUE[c.rank] <= 5) * 0.2
         return v
 
-    def play_pegging(self, playable: List[Card], count: int, history_since_reset: List[Card]) -> Optional[Card]:
+    def play_pegging(self, playable: List[Card], count: int, history_since_reset: List[Card],
+                     my_hand: Optional[List[Card]] = None, known_cards: Optional[List[Card]] = None) -> Optional[Card]:
         # IS-MCTS: simulate opponent hidden hand consistent with history; UCT to select action
         if not playable:
             return None
         root_children = {c: {"N": 0, "W": 0.0} for c in playable}
         for _ in range(self.simulations):
+            # Belief sample: sample a possible opponent hand consistent with known cards
+            opp_hand = self._sample_opponent_hand(my_hand, known_cards)
             # select
             c = self._uct_select(root_children, count, history_since_reset)
-            reward = self._simulate_play(c, count, history_since_reset)
+            reward = self._simulate_play(c, count, history_since_reset, opp_hand)
             rc = root_children[c]
             rc["N"] += 1
             rc["W"] += reward
@@ -68,10 +70,18 @@ class ISMCTSPlayer:
             return (W / max(1, N)) + math.sqrt(2.0 * math.log(total_N) / max(1, N))
         return max(children.keys(), key=lambda c: uct(children[c]))
 
-    def _simulate_play(self, card: Card, count: int, history: List[Card]) -> float:
+    def _simulate_play(self, card: Card, count: int, history: List[Card], opp_hand: Optional[List[Card]]) -> float:
         # rollout: immediate points + heuristic future pegging potential
         pts = score_pegging_play(history, card, count)
         new_count = count + RANK_VALUE[card.rank]
         # heuristic: prefer keeping count <= 21 to avoid opponent 10 to 31
         future_val = -max(0, new_count - 21) * 0.05
+        # Optionally, simulate opponent response (not implemented in v1)
         return pts + future_val
+
+    def _sample_opponent_hand(self, my_hand: Optional[List[Card]], known_cards: Optional[List[Card]]) -> List[Card]:
+        # For v1: sample a random 4-card hand not in known_cards or my_hand
+        all_cards = [Card(s, r) for s in SUITS for r in RANKS]
+        exclude = set((c.suit, c.rank) for c in (known_cards or []) + (my_hand or []))
+        candidates = [c for c in all_cards if (c.suit, c.rank) not in exclude]
+        return self._rng.sample(candidates, 4) if len(candidates) >= 4 else []
