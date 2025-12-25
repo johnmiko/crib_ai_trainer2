@@ -28,19 +28,31 @@ class TrainConfig:
     reward_win_bonus: int = 30
 
 class Trainer:
+    BEST_MODEL_FILE = "trained_models/best_model.txt"
+
     def __init__(self, cfg: TrainConfig):
         self.cfg = cfg
         self.models: Dict[str, object] = {}
-        self.best_model_name: str = "reasonable"
+        self.best_model_name: str = self._load_best_model()
         self._init_models()
+
+    def _load_best_model(self) -> str:
+        try:
+            with open(self.BEST_MODEL_FILE, "r") as f:
+                name = f.read().strip()
+                if name:
+                    logger.info(f"Loaded best model from file: {name}")
+                    return name
+        except Exception:
+            pass
+        return "reasonable"
 
     def _init_models(self) -> None:
         self.models["random"] = RandomPlayer()
         self.models["reasonable"] = RuleBasedPlayer()
         self.models["is_mcts"] = ISMCTSPlayer(simulations=500)
-        # simple perceptron for discard (2-card select) and pegging (1-card select) as separate heads
-        self.models["perceptron_discard"] = SimplePerceptron(PerceptronConfig(input_dim=D_TOTAL, output_dim=52))
-        self.models["perceptron_pegging"] = SimplePerceptron(PerceptronConfig(input_dim=D_TOTAL, output_dim=52))
+        # single perceptron for both discard and pegging
+        self.models["perceptron"] = SimplePerceptron(PerceptronConfig(input_dim=D_TOTAL, output_dim=52))
         from crib_ai_trainer2.players.cfr_player import CFRPlayer
         self.models["cfr"] = CFRPlayer(iterations=500)
 
@@ -54,7 +66,6 @@ class Trainer:
                 if self._is_excluded(name):
                     logger.info(f"Skipping model: {name}")
                     continue
-                logger.info(f"Training model: {name}")
                 self._train_model(name)
             logger.info("Benchmarking models...")
             self._rank_models(self.cfg.benchmark_games)
@@ -67,6 +78,9 @@ class Trainer:
             round_num += 1
 
     def _is_excluded(self, name: str) -> bool:
+        # manually exclude certain models that don't need training
+        if name in ["random", "reasonable"]:
+            return True
         if self.cfg.include_models and name not in self.cfg.include_models:
             return True
         if self.cfg.exclude_models and name in self.cfg.exclude_models:
@@ -97,29 +111,34 @@ class Trainer:
             cfr.train_pegging(legal_actions_fn, opponent_policy_fn)
             cfr.train_discard(hand_sampler_fn)
         # If perceptron, do imitation learning from reasonable player
-        if name.startswith("perceptron"):
+        if name == "perceptron":
             import torch
             import torch.optim as optim
             # Use reasonable player as teacher
             teacher = self.models["reasonable"]
             perceptron = player
-            # Generate imitation data
+            # Generate imitation data for both discard and pegging
             from crib_ai_trainer2.cards import Card
             X = []
             y = []
-            for _ in range(100):
-                # Random hand, starter, seen, count, history
+            for _ in range(50):
+                # Discard imitation
                 hand = [Card('H', i+1) for i in range(6)]
                 starter = Card('S', 5)
                 seen = []
                 count = 0
                 history = []
-                # Teacher action
-                if name == "perceptron_discard":
-                    action = teacher.choose_discard(hand, dealer_is_self=True)[0].to_index()
-                else:
-                    playable = hand[:4]
-                    action = teacher.play_pegging(playable, count, history).to_index()
+                action = teacher.choose_discard(hand, dealer_is_self=True)[0].to_index()
+                X.append(encode_state(hand, starter, seen, count, history))
+                y.append(action)
+            for _ in range(50):
+                # Pegging imitation
+                hand = [Card('H', i+1) for i in range(4)]
+                starter = Card('S', 5)
+                seen = []
+                count = 0
+                history = []
+                action = teacher.play_pegging(hand, count, history).to_index()
                 X.append(encode_state(hand, starter, seen, count, history))
                 y.append(action)
             import numpy as np
@@ -149,38 +168,48 @@ class Trainer:
                 l += 1
                 reward -= self.cfg.reward_win_bonus
             total_reward += reward
-        logger.info(f"Training results: W={w} L={l} | Total reward: {total_reward}")
+        logger.info(f"Training results vs {opponent_name}: W={w} L={l} | Total reward: {total_reward}")
         # minimal: if wins exceed losses, consider improved (placeholder for proper update)
         # In real training, we'd update torch models with gradients here.
 
     def _rank_models(self, games: int) -> None:
         import numpy as np
         names = list(self.models.keys())
-        scores = {n: 0.0 for n in names}
-        for i, a in enumerate(names):
-            for b in names[i + 1:]:
-                w = 0
-                results = []
-                for g in range(games):
-                    # Alternate dealer and swap positions for fairness
-                    if g % 2 == 0:
-                        game = CribbageGame(self.models[a], self.models[b], seed=g)
-                        s0, s1 = game.play_game()
-                        win = s0 > s1
-                    else:
-                        game = CribbageGame(self.models[b], self.models[a], seed=g)
-                        s1, s0 = game.play_game()
-                        win = s0 > s1
-                    w += int(win)
-                    results.append(int(win))
-                winrate = w / games
-                # Wilson score interval for CI
-                n = games
-                phat = winrate
-                z = 1.96  # 95% CI
-                ci = z * np.sqrt(phat * (1 - phat) / n)
-                logger.info(f"Benchmark {a} vs {b}: {winrate:.2f} ± {ci:.2f}")
-                scores[a] += winrate
-                scores[b] += (1 - winrate)
-        self.best_model_name = max(scores.keys(), key=lambda n: scores[n])
+        # Always start with 'reasonable' as the best
+        best = 'reasonable'
+        best_score = 0.0
+        for name in names:
+            if name == best:
+                continue
+            w = 0
+            results = []
+            for g in range(games):
+                # Alternate dealer and swap positions for fairness
+                if g % 2 == 0:
+                    game = CribbageGame(self.models[name], self.models[best], seed=g)
+                    s0, s1 = game.play_game()
+                    win = s0 > s1
+                else:
+                    game = CribbageGame(self.models[best], self.models[name], seed=g)
+                    s1, s0 = game.play_game()
+                    win = s0 > s1
+                w += int(win)
+                results.append(int(win))
+            winrate = w / games
+            n = games
+            phat = winrate
+            z = 1.96  # 95% CI
+            ci = z * np.sqrt(phat * (1 - phat) / n)
+            logger.info(f"Benchmark {name} vs {best}: {winrate:.2f} ± {ci:.2f}")
+            if winrate > 0.5:
+                logger.info(f"{name} beats {best} with winrate {winrate:.2f}! Now considered best.")
+                best = name
+                best_score = winrate
+        self.best_model_name = best
         logger.info(f"Best model now: {self.best_model_name}")
+        # Save best model name to file
+        try:
+            with open(self.BEST_MODEL_FILE, "w") as f:
+                f.write(self.best_model_name)
+        except Exception as e:
+            logger.warning(f"Could not save best model: {e}")

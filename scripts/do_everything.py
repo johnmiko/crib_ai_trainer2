@@ -12,11 +12,11 @@ logger = getLogger(__name__)
 
 
 import logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 
 def main():
     logger.info("Initializing training configuration...")
-    cfg = TrainConfig(num_training_games=10, benchmark_games=50, run_indefinitely=False)
+    cfg = TrainConfig(num_training_games=20, benchmark_games=50, run_indefinitely=False)
     logger.info("Creating Trainer instance...")
     t = Trainer(cfg)
     logger.info("Starting training...")
