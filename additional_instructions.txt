@@ -1,0 +1,22 @@
+- There should be a single single GameState object that is the source of truth and can be (a) cloned, (b) serialized, (c) hashed for caching
+- reward shapping
+    primary = final_point_diff
+    bonus: +K for win (30 points) and -K points for loss
+    Keep K configurable and log it
+- perceptron is softmax logistic regression over actions for (discard pair) and (pegging card)
+- train perceptron first by imitation learning from the reasonable player
+- Benchmarking methodology.
+    Require:
+    - fixed random seeds per match batch
+    - alternate dealer equally
+    - swap starting positions
+    - confidence intervals (or at least Wilson interval) for winrate
+- Model registry/versioning.
+    file convention trained_models/{model_name}/v{major}/best.json + history/ snapshots.
+    Also store: git commit hash, training config, and evaluation metrics in the saved artifact
+- Performance knobs.
+    Add config for:
+        - discard_rollouts, mcts_sims, belief_samples, max_depth
+        - time-based decision cap (e.g., 200ms per move)
+- Partial observability (belief sampling) spec.
+    Require “known cards” definition: my hand, played cards, cut card (after reveal), discards (known/unknown), and how opponent remaining hand size is tracked. Also require determinism under a seed

@@ -1,0 +1,72 @@
+"crib" short for "cribbage", being used interchangeably. Before you start doing any work, read the below text and come up with a plan. If you need additional details, clarification, or if there is a mistake in the text, ask these questions first
+
+Create a "crib_ai_trainer2" python repo. The purpose of this repo is to create the best possible cribbage AI. 
+Create a readme for the repo, initialize a git repo, create a virtual environment in the folder .venv, activate the virtual environment and install the necessary requirements, updating requirements.txt. 
+The root directory of the repo should contain as little files as possible. Put tests file in a "tests" directory, code files into subdirectory "crib_ai_trainer2", trained models into the directory "trained_models" and model definitions into "models" folder. 
+If a file starts becoming long (longer than 500 lines), check if some of the code can be refactored into functions and put the functions into other files. If the functions do not group together well, add them to utils.py
+
+The repo should be flexible that in the future when new algorithms are added, or the feature that is used to train the weights are changed, that not much work has to be done. The AI should make it's decision about which cards to discard and which cards to play during the pegging phase with these features at a minimum
+- the 6 cards it was dealt (both the suite and rank of the card)
+- the starter card
+- who's crib is it
+- who counts their points first at the end of the round
+- it's current score/121
+- the opponents current score/121
+- the current round's count out of 31
+- the previous cards played this round
+
+The AIs may use more features than this to make their decision but not less. For example if possible, maybe for version 2 and not version 1, but we can include details about opponents play style (what they typically play and what they typically discard) to better guess what cards they have in their hand and what cards they will probably play during the round
+
+The AI should receive feedback after each game it plays with the penalty/reward being the amount of points it won/lost by and also whether it won the game or not. The purpose of the score feedback is to not just account for trying to score the most amount of points, but also account for the endgame scenario where sometimes only 1 or 2 points are required to win the game, or if the AI is very far behind, to take statistically less probably high scoring hands.
+
+For the first AI players include a 
+- random player
+- reasonable opponent - (discards based on highest scoring hand and always pegs points if available) 
+- Monte Carlo simulation for discards and Monte Carlo Tree Search (MCTS) for pegging with hidden information (belief sampling)
+- Simple Perceptron model
+
+I should be able to run this repository locally on my computer
+- There should be scripts to "do everything" which trains the models, updates which ones are best, replaces old models of the same version if they did better, save the model parameters, model weights, training parameters e.t.c.. The script should be flexible so that it has the option to run indefinitely, training each AI until the user cancels the execution. At which point the current iteration of training is cancelled. It should also be able to run for a set amount of time, or a set amount of iterations. All models should be trained by default, but include an option to train only specific models. For example say I want the AIs to play 10 games in a row before saving the model. Models should use their old weights when they begin training instead of starting from scratch. When a model is trained and ready to be saved, it needs to first play BENCHMARK_GAMES of the "_old" vs"_new" version of the model. If the new model does not beat the old one, it should not be updated. So we have NUM_TRAINING_GAMES say = 10, then after 10 games, play BENCHMARK_GAMES against your old self. Then once all of that is done, each AI should play against each other for BENCHMARK_GAMES so we can determine which AI is the best. This should generate a "rankings" report so I can see how the models are performing. The default model to train against should be the "reasonable player", but if a model performs better than the random player, future iterations should train against the best model. Include as an option a dynamic option to stop training models that are consistently underperforming. So this would be any model that scores MAX_UNDERPERFORMANCE say = 35% against the best model. So if the model plays against the best one and only wins 35% of the time or less, it is no longer trained anymore. The "ranking" code should have it's own __main__ section such that it can be run indepedently from the "do_everything" script
+
+- If you ever write any code that involves calculations, make sure to write a unit test to test that the calculation is correct
+- When you are done completing any task, run the projects test suite to confirm that none of the existing functionality is broken
+Once you have written the test, run the test iteratively and fix things until it passes
+
+use log statements instead of print statements (logger = getLogger(__name__))
+
+The crib AIs should follow the rules of cribbage, meaning things like respecting the "go" order, not playing over 31. Make sure that the same deck is used when training such that the AIs do not receive the same cards
+
+At the end of all of this I should be able to export/copy the model weights to a custom "crib_back" repo I have located here https://github.com/johnmiko/crib_back. The name of the crib ai trainer should be called "crib_ai_trainer2"
+
+Use pytest for tests
+When generating reports, the text should be printed to the screen, but also saved to a file. Include the option to generate graphs which is on by default which shows the improvement of each model over time, along with another graph which shows the win percentage over time of the best model against the "reasonable player"
+
+Include tests for the following
+scoring tests (15s, pairs, runs, flush, nobs; crib rules)
+
+pegging scoring tests (15/31, go, pairs, runs, last card)
+
+determinism tests (seeded sampling)
+
+“smoke test” full game ends with valid score
+
+Core functionality details
+Scoring
+
+Implement standard cribbage scoring:
+
+Hand/crib: fifteens, pairs, runs, flush (crib flush rules), nobs.
+
+Pegging: 15, 31, go, pairs (2/3/4 of a kind), runs (length 3+), last card.
+
+Game model
+
+Deal 6 each, choose 2 to crib, cut starter, pegging phase, then count hands + crib.
+
+Track dealer alternation and “go” logic correctly.
+
+Keep history needed for pegging run detection (most recent sequence since last reset).
+
+In the event that some of the AIs are slow to make decisions about what to do, please include an option when testing to include or exclude specific models along with an option to not train slow models
+
+this is all for version 1, make version 1 flexible enough such that in version 2, if I want to include a neural net that learns it's own features that I can just slot it in to the existing architecture
