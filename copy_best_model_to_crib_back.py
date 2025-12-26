@@ -4,9 +4,10 @@ from logging import getLogger
 
 logger = getLogger(__name__)
 
-BEST_MODEL_FILE = os.path.join(os.path.dirname(__file__), '..', 'trained_models', 'best_model.txt')
-TRAINED_MODELS_DIR = os.path.join(os.path.dirname(__file__), '..', 'trained_models')
-CRIB_BACK_DIR = os.path.join(os.path.dirname(__file__), '..', 'crib_back')
+BEST_MODEL_FILE = os.path.join(os.path.dirname(__file__), 'trained_models', 'best_model.txt')
+TRAINED_MODELS_DIR = os.path.join(os.path.dirname(__file__), 'trained_models')
+# Save directly to the absolute crib_back directory
+CRIB_BACK_DIR = r'C:\Users\johnm\ccode\crib_back'
 
 
 def get_best_model_name():

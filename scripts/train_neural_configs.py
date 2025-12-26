@@ -33,7 +33,7 @@ class FlexibleNN(nn.Module):
 def main():
     config_path = os.path.join('configs', 'neural_configs.json')
     configs = load_configs(config_path)
-    trainer = Trainer(TrainConfig(num_training_games=400, benchmark_games=400, run_indefinitely=False))
+    trainer = Trainer(TrainConfig(num_training_games=2000, benchmark_games=1000, run_indefinitely=False))
     # Remove default 'neural' if present
     if 'neural' in trainer.models:
         del trainer.models['neural']
