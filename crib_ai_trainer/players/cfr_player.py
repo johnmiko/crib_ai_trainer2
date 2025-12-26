@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import List, Tuple, Optional, Dict
 from logging import getLogger
 from cribbage.playingcards import Card
-from cribbage.scoring import score_pegging_play, RANK_VALUE
+from cribbage.cribbagegame import score_play as score_pegging_play, RANK_VALUE
 
 logger = getLogger(__name__)
 

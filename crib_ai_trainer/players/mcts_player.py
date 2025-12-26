@@ -3,8 +3,12 @@ from typing import List, Tuple, Optional, Dict
 import math
 import random
 from logging import getLogger
-from cribbage.playingcards import Card, Deck, SUITS, RANKS
-from cribbage.scoring import score_pegging_play, RANK_VALUE
+from cribbage.playingcards import Card, Deck
+from cribbage.playingcards import Deck
+from cribbage.cribbagegame import score_play as score_pegging_play
+
+SUITS = Deck.SUITS
+RANKS = Deck.RANKS
 
 logger = getLogger(__name__)
 
@@ -54,7 +58,7 @@ class ISMCTSPlayer:
                 total = 0.0
                 for _ in range(max(50, self.simulations // n)):
                     # sample a starter from remaining deck uniformly
-                    starter = Card(self._rng.choice(SUITS), self._rng.choice(RANKS))
+                    starter = Card(rank=self._rng.choice(list(RANKS.values())), suit=self._rng.choice(list(SUITS.values())))
                     # sample opponent discards (belief sampling)
                     # For v1, just random legal discards
                     total += self._estimate_hand_value(kept, starter)
@@ -66,9 +70,9 @@ class ISMCTSPlayer:
 
     def _estimate_hand_value(self, kept: List[Card], starter: Card) -> float:
         v = 0.0
-        s = sum(RANK_VALUE[c.rank] for c in kept) + RANK_VALUE[starter.rank]
+        s = sum(c.rank['value'] for c in kept) + starter.rank['value']
         v += -abs(15 - (s % 15)) * 0.1
-        v += sum(1 for c in kept if RANK_VALUE[c.rank] <= 5) * 0.2
+        v += sum(1 for c in kept if c.rank['value'] <= 5) * 0.2
         return v
 
     def play_pegging(self, playable: List[Card], count: int, history_since_reset: List[Card],
@@ -101,7 +105,7 @@ class ISMCTSPlayer:
     def _simulate_play(self, card: Card, count: int, history: List[Card], opp_hand: Optional[List[Card]]) -> float:
         # rollout: immediate points + heuristic future pegging potential
         pts = score_pegging_play(history, card, count)
-        new_count = count + RANK_VALUE[card.rank]
+        new_count = count + card.rank['value']
         # heuristic: prefer keeping count <= 21 to avoid opponent 10 to 31
         future_val = -max(0, new_count - 21) * 0.05
         # Optionally, simulate opponent response (not implemented in v1)
@@ -109,7 +113,7 @@ class ISMCTSPlayer:
 
     def _sample_opponent_hand_belief(self, my_hand: Optional[List[Card]], known_cards: Optional[List[Card]], history: Optional[List[Card]]) -> List[Card]:
         # Sample a random 4-card hand for opponent, consistent with known cards and history (cards played by opponent)
-        all_cards = [Card(s, r) for s in SUITS for r in RANKS]
+        all_cards = [Card(rank=RANKS[rank], suit=SUITS[suit]) for suit in SUITS for rank in RANKS]
         exclude = set((c.suit, c.rank) for c in (known_cards or []) + (my_hand or []))
         # Remove cards played by both players in pegging history
         if history:

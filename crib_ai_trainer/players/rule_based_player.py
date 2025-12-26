@@ -2,9 +2,8 @@ from typing import List, Tuple, Optional
 from logging import getLogger
 from crib_ai_trainer.cards import Card
 from cribbage.playingcards import Card
-from cribbage.scoring import score_hand, RANK_VALUE, score_pegging_play
-from crib_ai_trainer.constants import SUITES
-from crib_ai_trainer.scoring import score_hand, RANK_VALUE, score_pegging_play
+from cribbage.cribbagegame import score_hand, score_play as score_pegging_play
+from cribbage.playingcards import Deck
 from itertools import combinations
 
 logger = getLogger(__name__)
@@ -57,7 +56,7 @@ class RuleBasedPlayer:
         if best is not None:
             return best
         # otherwise play lowest value
-        return sorted(playable, key=lambda c: RANK_VALUE[c.rank])[0] if playable else None
+        return sorted(playable, key=lambda c: c.rank['value'])[0] if playable else None
 
 
 class DifficultRuleBasedPlayer:
@@ -71,7 +70,7 @@ class DifficultRuleBasedPlayer:
         best_discards = []
         best_score = -1
         n = len(hand)
-        deck = [Card(suit, rank) for suit in SUITES for rank in range(1, 14)]
+        deck = [Card(rank=Deck.RANKS[rank], suit=Deck.SUITS[suit]) for suit in Deck.SUITS for rank in Deck.RANKS]
         hand_set = set(hand)
         for i in range(n):
             for j in range(i + 1, n):
@@ -111,4 +110,4 @@ class DifficultRuleBasedPlayer:
                 best = c
         if best is not None:
             return best
-        return sorted(playable, key=lambda c: RANK_VALUE[c.rank])[0] if playable else None
+        return sorted(playable, key=lambda c: c.rank['value'])[0] if playable else None
