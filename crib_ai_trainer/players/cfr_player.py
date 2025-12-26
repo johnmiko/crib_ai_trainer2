@@ -7,15 +7,36 @@ from crib_ai_trainer.scoring import score_pegging_play, RANK_VALUE
 logger = getLogger(__name__)
 
 class CFRPlayer:
-    def __init__(self, name: str = "cfr", iterations: int = 1000):
+    def __init__(self, name: str = "cfr", iterations: int = 1000, load_path: str = None):
         self.name = name
         self.iterations = iterations
-        # regrets keyed by abstracted state -> action index
         self.regrets_pegging: Dict[str, Dict[int, float]] = {}
         self.strategy_sum_pegging: Dict[str, Dict[int, float]] = {}
-        # discard CFR (choose 2 of 6): abstract state -> pair index
         self.regrets_discard: Dict[str, Dict[int, float]] = {}
         self.strategy_sum_discard: Dict[str, Dict[int, float]] = {}
+        if load_path is not None:
+            self.load(load_path)
+    def save(self, path: str):
+        import json
+        data = {
+            'regrets_pegging': self.regrets_pegging,
+            'strategy_sum_pegging': self.strategy_sum_pegging,
+            'regrets_discard': self.regrets_discard,
+            'strategy_sum_discard': self.strategy_sum_discard
+        }
+        with open(path, 'w') as f:
+            json.dump(data, f)
+
+    def load(self, path: str):
+        import json
+        import os
+        if os.path.exists(path):
+            with open(path, 'r') as f:
+                data = json.load(f)
+            self.regrets_pegging = {k: {int(a): v for a, v in d.items()} for k, d in data.get('regrets_pegging', {}).items()}
+            self.strategy_sum_pegging = {k: {int(a): v for a, v in d.items()} for k, d in data.get('strategy_sum_pegging', {}).items()}
+            self.regrets_discard = {k: {int(a): v for a, v in d.items()} for k, d in data.get('regrets_discard', {}).items()}
+            self.strategy_sum_discard = {k: {int(a): v for a, v in d.items()} for k, d in data.get('strategy_sum_discard', {}).items()}
 
     # State abstractions to keep tables manageable
     def _peg_state_key(self, count: int, history_since_reset: List[Card]) -> str:

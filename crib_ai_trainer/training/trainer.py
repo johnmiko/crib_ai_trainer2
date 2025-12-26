@@ -8,10 +8,11 @@ from logging import getLogger
 from crib_ai_trainer.game import CribbageGame
 from crib_ai_trainer.players.random_player import RandomPlayer
 from crib_ai_trainer.players.rule_based_player import RuleBasedPlayer
+
 from crib_ai_trainer.players.mcts_player import ISMCTSPlayer
 from crib_ai_trainer.features import D_TOTAL, encode_state
-
 from models.perceptron import SimplePerceptron, PerceptronConfig
+from models.neural_config import NeuralNetConfig
 from crib_ai_trainer.scoring import RANK_VALUE
 
 logger = getLogger(__name__)
@@ -40,7 +41,7 @@ class Trainer:
         try:
             with open(self.BEST_MODEL_FILE, "r") as f:
                 name = f.read().strip()
-                if name:
+                if name and name in self.models:
                     logger.info(f"Loaded best model from file: {name}")
                     return name
         except Exception:
@@ -50,11 +51,46 @@ class Trainer:
     def _init_models(self) -> None:
         self.models["random"] = RandomPlayer()
         self.models["reasonable"] = RuleBasedPlayer()
-        self.models["is_mcts"] = ISMCTSPlayer(simulations=500)
+        from crib_ai_trainer.players.mcts_player import ISMCTSPlayer
+        import os
+        mcts_path = os.path.join('trained_models', 'is_mcts.json')
+        self._mcts_path = mcts_path
+        self.models["is_mcts"] = ISMCTSPlayer.load(mcts_path, name="is_mcts", seed=None)
         # single perceptron for both discard and pegging
-        self.models["perceptron"] = SimplePerceptron(PerceptronConfig(input_dim=D_TOTAL, output_dim=52))
+        from models.perceptron_io import load_perceptron, save_perceptron
+        self._save_perceptron = save_perceptron
+        self.models["perceptron"] = load_perceptron()
         from crib_ai_trainer.players.cfr_player import CFRPlayer
-        self.models["cfr"] = CFRPlayer(iterations=500)
+        import os
+        cfr_path = os.path.join('trained_models', 'cfr.json')
+        self._cfr_path = cfr_path
+        self.models["cfr"] = CFRPlayer(iterations=500, load_path=cfr_path)
+        from crib_ai_trainer.players.neural_player import NeuralPlayer
+        import torch.nn as nn
+        # Example config, can be loaded or set dynamically
+        self.neural_config = NeuralNetConfig(
+            hidden_sizes=[128],
+            depth=1,
+            learning_rate=1e-3,
+            entropy_coef=0.0,
+            regularization=None,
+            name="default"
+        )
+        class FlexibleNN(nn.Module):
+            def __init__(self, config: NeuralNetConfig):
+                super().__init__()
+                layers = []
+                input_dim = D_TOTAL
+                for i in range(config.depth):
+                    h = config.hidden_sizes[min(i, len(config.hidden_sizes)-1)]
+                    layers.append(nn.Linear(input_dim, h))
+                    layers.append(nn.ReLU())
+                    input_dim = h
+                layers.append(nn.Linear(input_dim, 52))
+                self.net = nn.Sequential(*layers)
+            def forward(self, x):
+                return self.net(x)
+        self.models["neural"] = NeuralPlayer(FlexibleNN(self.neural_config))
 
     def train(self) -> None:
         logger.info("Starting training loop...")
@@ -67,6 +103,43 @@ class Trainer:
                     logger.info(f"Skipping model: {name}")
                     continue
                 self._train_model(name)
+            # Only save/update models that are being trained
+            include = set(self.cfg.include_models) if self.cfg.include_models else set(self.models.keys())
+            # Save perceptron weights if being trained
+            if "perceptron" in self.models and hasattr(self, "_save_perceptron") and "perceptron" in include:
+                self._save_perceptron(self.models["perceptron"])
+            # Save CFR tables if being trained
+            if "cfr" in self.models and hasattr(self.models["cfr"], "save") and "cfr" in include:
+                self.models["cfr"].save(self._cfr_path)
+            # Save ISMCTS parameters if being trained, only if new model beats old
+            if "is_mcts" in self.models and hasattr(self.models["is_mcts"], "save") and "is_mcts" in include:
+                import shutil
+                from crib_ai_trainer.game import CribbageGame
+                mcts_model = self.models["is_mcts"]
+                mcts_path = self._mcts_path
+                # Load old model for comparison
+                from crib_ai_trainer.players.mcts_player import ISMCTSPlayer
+                old_model = ISMCTSPlayer.load(mcts_path, name="is_mcts", seed=None)
+                # Benchmark new vs old
+                new_wins = 0
+                old_wins = 0
+                benchmark_games = self.cfg.benchmark_games
+                for i in range(benchmark_games):
+                    if i % 2 == 0:
+                        game = CribbageGame(mcts_model, old_model, seed=i)
+                        s0, s1 = game.play_game()
+                    else:
+                        game = CribbageGame(old_model, mcts_model, seed=i)
+                        s1, s0 = game.play_game()
+                    if s0 > s1:
+                        new_wins += 1
+                    else:
+                        old_wins += 1
+                if new_wins > old_wins:
+                    mcts_model.save(mcts_path)
+                    logger.info(f"Updated ISMCTS model parameters (new: {new_wins}, old: {old_wins})")
+                else:
+                    logger.info(f"Retained old ISMCTS model parameters (new: {new_wins}, old: {old_wins})")
             logger.info("Benchmarking models...")
             self._rank_models(self.cfg.benchmark_games)
             if not self.cfg.run_indefinitely:
@@ -79,7 +152,7 @@ class Trainer:
 
     def _is_excluded(self, name: str) -> bool:
         # manually exclude certain models that don't need training
-        if name in ["random", "reasonable"]:
+        if name in ["random", "reasonable", "perceptron", "cfr"]:
             return True
         if self.cfg.include_models and name not in self.cfg.include_models:
             return True
@@ -89,8 +162,11 @@ class Trainer:
 
     def _train_model(self, name: str) -> None:
         logger.info(f"Training model: {name}")
-        # default train against best model
+        # Always train against the current best model (unless self-play)
         opponent_name = self.best_model_name if self.best_model_name != name else "reasonable"
+        # If the best model is not available (e.g., just started), fallback to reasonable
+        if opponent_name not in self.models:
+            opponent_name = "reasonable"
         player = self.models[name]
         opponent = self.models[opponent_name]
         # If CFR, run internal training iterations to update regrets
@@ -175,10 +251,13 @@ class Trainer:
     def _rank_models(self, games: int) -> None:
         import numpy as np
         names = list(self.models.keys())
-        # Always start with 'reasonable' as the best
-        best = 'reasonable'
+        # Load best model from file, default to 'reasonable'
+        best = self._load_best_model()
         best_score = 0.0
         for name in names:
+            if self._is_excluded(name):
+                logger.info(f"Skipping model: {name}")
+                continue
             if name == best:
                 continue
             w = 0
@@ -201,15 +280,29 @@ class Trainer:
             z = 1.96  # 95% CI
             ci = z * np.sqrt(phat * (1 - phat) / n)
             logger.info(f"Benchmark {name} vs {best}: {winrate:.2f} ± {ci:.2f}")
-            if winrate > 0.5:
+            # Save neural config and results for any neural config model
+            if hasattr(self, 'neural_config') and (name == getattr(self.neural_config, 'name', None) or name.startswith('nn_')):
+                from models.neural_config import NeuralNetConfig
+                config = self.neural_config
+                results_dict = {
+                    "winrate": winrate,
+                    "ci": ci,
+                    "games": games,
+                    "opponent": best
+                }
+                config.save(f"trained_models/neural_{name}.json", results=results_dict)
+            if (winrate - ci) > 0.5:
                 logger.info(f"{name} beats {best} with winrate {winrate:.2f}! Now considered best.")
                 best = name
                 best_score = winrate
+                # Save best model name to file, include neural variant if applicable
+                try:
+                    with open(self.BEST_MODEL_FILE, "w") as f:
+                        if hasattr(self, 'neural_config') and (name == getattr(self.neural_config, 'name', None) or name.startswith('nn_')):
+                            f.write(f"neural_{name}")
+                        else:
+                            f.write(best)
+                except Exception as e:
+                    logger.warning(f"Could not save best model: {e}")
         self.best_model_name = best
         logger.info(f"Best model now: {self.best_model_name}")
-        # Save best model name to file
-        try:
-            with open(self.BEST_MODEL_FILE, "w") as f:
-                f.write(self.best_model_name)
-        except Exception as e:
-            logger.warning(f"Could not save best model: {e}")

@@ -1,0 +1,6 @@
+[
+  {"hidden_sizes": [64], "depth": 1, "learning_rate": 0.001, "entropy_coef": 0.0, "regularization": null, "name": "nn_64x1"},
+  {"hidden_sizes": [128], "depth": 1, "learning_rate": 0.001, "entropy_coef": 0.0, "regularization": null, "name": "nn_128x1"},
+  {"hidden_sizes": [256], "depth": 1, "learning_rate": 0.001, "entropy_coef": 0.0, "regularization": null, "name": "nn_256x1"},
+  {"hidden_sizes": [128, 128], "depth": 2, "learning_rate": 0.0003, "entropy_coef": 0.01, "regularization": 0.001, "name": "nn_128x2_reg"}
+]

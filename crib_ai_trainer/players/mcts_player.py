@@ -9,6 +9,24 @@ from crib_ai_trainer.scoring import score_pegging_play, RANK_VALUE
 logger = getLogger(__name__)
 
 class ISMCTSPlayer:
+    def save(self, path: str):
+        import json
+        data = {
+            'simulations': self.simulations,
+            'belief_samples': self.belief_samples
+        }
+        with open(path, 'w') as f:
+            json.dump(data, f)
+
+    @classmethod
+    def load(cls, path: str, name: str = "is_mcts", seed: int = None):
+        import json
+        import os
+        if os.path.exists(path):
+            with open(path, 'r') as f:
+                data = json.load(f)
+            return cls(name=name, simulations=data.get('simulations', 1000), seed=seed, belief_samples=data.get('belief_samples', 10))
+        return cls(name=name, seed=seed)
     def __init__(self, name: str = "is_mcts", simulations: int = 1000, seed: int | None = None, belief_samples: int = 10):
         self.name = name
         self.simulations = simulations
