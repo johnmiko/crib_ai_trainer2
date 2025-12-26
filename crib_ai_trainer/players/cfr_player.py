@@ -121,7 +121,7 @@ class CFRPlayer:
             for i in range(len(pairs)):
                 self.regrets_discard[key][i] += utils[i] - avg_u
 
-    def choose_discard(self, hand: List[Card], dealer_is_self: bool) -> Tuple[Card, Card]:
+    def select_crib_cards(self, hand: List[Card], dealer_is_self: bool) -> Tuple[Card, Card]:
         key = self._discard_state_key(hand)
         n = len(hand)
         pairs = []

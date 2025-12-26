@@ -47,7 +47,7 @@ class ISMCTSPlayer:
         self.belief_samples = belief_samples
         self._rng = random.Random(seed)
 
-    def choose_discard(self, hand: List[Card], dealer_is_self: bool) -> Tuple[Card, Card]:
+    def select_crib_cards(self, hand: List[Card], dealer_is_self: bool) -> Tuple[Card, Card]:
         # Monte Carlo: sample starters and opponent discards; choose pair maximizing expected outcome
         n = len(hand)
         best_pair = (hand[0], hand[1])

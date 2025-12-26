@@ -13,7 +13,7 @@ from crib_ai_trainer.players.mcts_player import ISMCTSPlayer
 from crib_ai_trainer.features import D_TOTAL, encode_state
 from models.perceptron import SimplePerceptron, PerceptronConfig
 from models.neural_config import NeuralNetConfig
-from cribbage.scoring import RANK_VALUE
+from crib_ai_trainer.constants import RANK_VALUE
 
 logger = getLogger(__name__)
 
@@ -220,7 +220,7 @@ class Trainer:
                 seen = []
                 count = 0
                 history = []
-                action = teacher.choose_discard(hand, dealer_is_self=True)[0].to_index()
+                action = teacher.select_crib_cards(hand, dealer_is_self=True)[0].to_index()
                 X.append(encode_state(hand, starter, seen, count, history))
                 y.append(action)
             for _ in range(50):

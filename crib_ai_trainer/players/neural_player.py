@@ -1,5 +1,5 @@
 import torch
-from cribbage.playingcards import Card
+from cribbage.playingcards import Card, Deck
 from crib_ai_trainer.features import encode_state, D_TOTAL
 from crib_ai_trainer.players.rule_based_player import RuleBasedPlayer
 
@@ -8,8 +8,8 @@ class NeuralPlayer:
         self.model = model
         self.teacher = RuleBasedPlayer()  # fallback for invalid actions
 
-    def choose_discard(self, hand, dealer_is_self):
-        starter = Card('S', 5)  # dummy starter for encoding
+    def select_crib_cards(self, hand, dealer_is_self):
+        starter = Card(rank=Deck.RANKS['five'], suit=Deck.SUITS['spades'])
         seen = []
         count = 0
         history = []
@@ -24,10 +24,13 @@ class NeuralPlayer:
                 # Return as tuple for compatibility
                 return (card, hand[0] if card != hand[0] else hand[1])
         # Fallback to rule-based if not found
-        return self.teacher.choose_discard(hand, dealer_is_self)
+        return self.teacher.select_crib_cards(hand, dealer_is_self)
+    
+    def select_card_to_play(self, hand, table, crib, count):
+        return self.play_pegging(hand, count, history_since_reset=table)
 
     def play_pegging(self, playable, count, history_since_reset):
-        starter = Card('S', 5)  # dummy starter for encoding
+        starter = Card(rank=Deck.RANKS['five'], suit=Deck.SUITS['spades'])
         seen = []
         x = encode_state(playable, starter, seen, count, history_since_reset)
         x = torch.tensor(x, dtype=torch.float32).unsqueeze(0)

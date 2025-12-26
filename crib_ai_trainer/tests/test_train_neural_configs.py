@@ -6,6 +6,7 @@ import pytest
 from crib_ai_trainer.training.trainer import Trainer, TrainConfig
 from models.neural_config import NeuralNetConfig
 from scripts.train_neural_configs import FlexibleNN, load_configs
+from crib_ai_trainer.constants import RANK_VALUE
 
 TEST_MODEL_NAME = "nn_64x1"
 MODEL_PATH = os.path.join('trained_models', f'neural_{TEST_MODEL_NAME}.pt')

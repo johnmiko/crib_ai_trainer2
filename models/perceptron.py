@@ -33,7 +33,7 @@ class SimplePerceptron(nn.Module):
         return int(torch.argmax(logits, dim=-1).item())
 
     # --- Player interface ---
-    def choose_discard(self, hand, dealer_is_self):
+    def select_crib_cards(self, hand, dealer_is_self):
         # Select 2 cards to discard from hand (length 6)
         import numpy as np
         from crib_ai_trainer.features import encode_state

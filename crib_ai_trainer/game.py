@@ -3,7 +3,8 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple
 from logging import getLogger
 from cribbage.playingcards import Card, Deck
-from cribbage.scoring import score_hand, score_pegging_play, RANK_VALUE
+from cribbage.cribbagegame import score_hand, score_play as score_pegging_play
+from crib_ai_trainer.constants import RANK_VALUE
 from crib_ai_trainer.gamestate import GameState
 
 logger = getLogger(__name__)
@@ -11,7 +12,7 @@ logger = getLogger(__name__)
 @dataclass
 class PlayerInterface:
     name: str
-    def choose_discard(self, hand: List[Card], dealer_is_self: bool) -> Tuple[Card, Card]:
+    def select_crib_cards(self, hand: List[Card], dealer_is_self: bool) -> Tuple[Card, Card]:
         raise NotImplementedError
     def play_pegging(self, playable: List[Card], count: int, history_since_reset: List[Card]) -> Optional[Card]:
         raise NotImplementedError
@@ -46,8 +47,8 @@ class PlayerInterface:
 #         # players discard 2 cards each to crib
 #         self.state.crib = []
 #         # players discard 2
-#         d0 = self.p0.choose_discard(self.state.hands[0], dealer_is_self=(self.state.dealer == 0))
-#         d1 = self.p1.choose_discard(self.state.hands[1], dealer_is_self=(self.state.dealer == 1))
+#         d0 = self.p0.select_crib_cards(self.state.hands[0], dealer_is_self=(self.state.dealer == 0))
+#         d1 = self.p1.select_crib_cards(self.state.hands[1], dealer_is_self=(self.state.dealer == 1))
 #         for c in d0:
 #             self.state.hands[0].remove(c)
 #             self.state.crib.append(c)

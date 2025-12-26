@@ -1,16 +1,17 @@
+from cribbage.cribbagegame import CribbageGame
+import numpy as np
+
 def benchmark_models(player_a, player_b, num_games, seed_offset=0):
     """Run num_games of player_a vs player_b, alternating dealer. Returns (a_wins, b_wins, winrate, ci)."""
-    from crib_ai_trainer.game import CribbageGame
-    import numpy as np
     a_wins = 0
     b_wins = 0
     for i in range(num_games):
         if i % 2 == 0:
-            game = CribbageGame(player_a, player_b, seed=seed_offset + i)
-            s0, s1 = game.play_game()
+            game = CribbageGame([player_a, player_b], seed=seed_offset + i)
+            s0, s1 = game.start()
         else:
-            game = CribbageGame(player_b, player_a, seed=seed_offset + i)
-            s1, s0 = game.play_game()
+            game = CribbageGame([player_b, player_a], seed=seed_offset + i)
+            s1, s0 = game.start()
         if s0 > s1:
             a_wins += 1
         else:
