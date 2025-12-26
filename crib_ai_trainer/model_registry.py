@@ -1,5 +1,5 @@
 import torch
-from crib_ai_trainer.players.rule_based_player import RuleBasedPlayer
+from crib_ai_trainer.players.rule_based_player import RuleBasedPlayer, DifficultRuleBasedPlayer
 from crib_ai_trainer.players.neural_player import NeuralPlayer
 from models.neural_config import NeuralNetConfig
 import os
@@ -41,6 +41,8 @@ def load_best_model():
             return RuleBasedPlayer()
     elif name == "reasonable":
         return RuleBasedPlayer()
+    elif name == "difficult":
+        return DifficultRuleBasedPlayer()
     else:
         # fallback
         return RuleBasedPlayer()

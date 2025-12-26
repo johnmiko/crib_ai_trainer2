@@ -51,6 +51,8 @@ class Trainer:
     def _init_models(self) -> None:
         self.models["random"] = RandomPlayer()
         self.models["reasonable"] = RuleBasedPlayer()
+        from crib_ai_trainer.players.rule_based_player import DifficultRuleBasedPlayer
+        self.models["difficult"] = DifficultRuleBasedPlayer()
         from crib_ai_trainer.players.mcts_player import ISMCTSPlayer
         import os
         mcts_path = os.path.join('trained_models', 'is_mcts.json')

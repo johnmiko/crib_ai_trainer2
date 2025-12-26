@@ -3,7 +3,7 @@ Benchmark the 'reasonable' opponent against the 'best' model.
 Run with: .venv\Scripts\Activate.ps1; python -m scripts.benchmark_reasonable_vs_best [num_games]
 """
 import logging
-from crib_ai_trainer.players.rule_based_player import RuleBasedPlayer
+from crib_ai_trainer.players.rule_based_player import RuleBasedPlayer, DifficultRuleBasedPlayer
 from crib_ai_trainer.model_registry import load_best_model
 from crib_ai_trainer.game import CribbageGame
 
@@ -13,7 +13,27 @@ def main(num_games=100):
     logger.info(f"Benchmarking 'reasonable' opponent vs 'best' model for {num_games} games...")
 
     reasonable = RuleBasedPlayer()
+    difficult = DifficultRuleBasedPlayer()
     best_model = load_best_model()
+    # Optionally benchmark difficult as well
+    logger.info(f"Benchmarking 'difficult' opponent vs 'best' model for {num_games} games...")
+    wins_difficult = {"difficult": 0, "best": 0}
+    for i in range(num_games):
+        if i % 2 == 0:
+            p0, p1 = difficult, best_model
+        else:
+            p0, p1 = best_model, difficult
+        game = CribbageGame(p0, p1)
+        s0, s1 = game.play_game()
+        if s0 > s1:
+            winner = "difficult" if i % 2 == 0 else "best"
+        else:
+            winner = "best" if i % 2 == 0 else "difficult"
+        wins_difficult[winner] += 1
+        if (i + 1) % 10 == 0:
+            logger.info(f"Completed {i+1} games for difficult...")
+    logger.info(f"Difficult wins: {wins_difficult['difficult']} / {num_games} ({wins_difficult['difficult']/num_games:.1%})")
+    logger.info(f"Best model wins vs difficult: {wins_difficult['best']} / {num_games} ({wins_difficult['best']/num_games:.1%})")
 
     wins = {"reasonable": 0, "best": 0}
     for i in range(num_games):
