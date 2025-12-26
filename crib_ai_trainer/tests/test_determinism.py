@@ -1,10 +1,14 @@
-from crib_ai_trainer.cards import Deck
+
+import random
+from cribbage.playingcards import Deck
 
 def test_seeded_sampling_determinism():
-    d1 = Deck(seed=123)
+    random.seed(123)
+    d1 = Deck()
     d1.shuffle()
-    h1 = d1.deal(6)
-    d2 = Deck(seed=123)
+    h1 = [d1.draw() for _ in range(6)]
+    random.seed(123)
+    d2 = Deck()
     d2.shuffle()
-    h2 = d2.deal(6)
+    h2 = [d2.draw() for _ in range(6)]
     assert h1 == h2

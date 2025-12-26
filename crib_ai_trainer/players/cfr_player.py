@@ -1,8 +1,8 @@
 from __future__ import annotations
 from typing import List, Tuple, Optional, Dict
 from logging import getLogger
-from crib_ai_trainer.cards import Card
-from crib_ai_trainer.scoring import score_pegging_play, RANK_VALUE
+from cribbage.playingcards import Card
+from cribbage.scoring import score_pegging_play, RANK_VALUE
 
 logger = getLogger(__name__)
 

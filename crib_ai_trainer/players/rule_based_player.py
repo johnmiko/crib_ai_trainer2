@@ -1,6 +1,8 @@
 from typing import List, Tuple, Optional
 from logging import getLogger
 from crib_ai_trainer.cards import Card
+from cribbage.playingcards import Card
+from cribbage.scoring import score_hand, RANK_VALUE, score_pegging_play
 from crib_ai_trainer.constants import SUITES
 from crib_ai_trainer.scoring import score_hand, RANK_VALUE, score_pegging_play
 from itertools import combinations

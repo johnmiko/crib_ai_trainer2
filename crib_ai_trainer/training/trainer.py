@@ -5,7 +5,7 @@ import time
 import numpy as np
 import torch
 from logging import getLogger
-from crib_ai_trainer.game import CribbageGame
+from cribbage.cribbagegame import CribbageGame
 from crib_ai_trainer.players.random_player import RandomPlayer
 from crib_ai_trainer.players.rule_based_player import RuleBasedPlayer
 
@@ -13,7 +13,7 @@ from crib_ai_trainer.players.mcts_player import ISMCTSPlayer
 from crib_ai_trainer.features import D_TOTAL, encode_state
 from models.perceptron import SimplePerceptron, PerceptronConfig
 from models.neural_config import NeuralNetConfig
-from crib_ai_trainer.scoring import RANK_VALUE
+from cribbage.scoring import RANK_VALUE
 
 logger = getLogger(__name__)
 
@@ -126,7 +126,7 @@ class Trainer:
             if "is_mcts" in self.models and hasattr(self.models["is_mcts"], "save") and "is_mcts" in include:
                 import os
                 import shutil
-                from crib_ai_trainer.game import CribbageGame
+                from cribbage.cribbagegame import CribbageGame
                 mcts_model = self.models["is_mcts"]
                 mcts_path = self._mcts_path
                 # If the file does not exist, save the current model to create it
@@ -188,7 +188,7 @@ class Trainer:
         # If CFR, run internal training iterations to update regrets
         if name == "cfr":
             cfr = player
-            from crib_ai_trainer.cards import Card
+            from cribbage.playingcards import Card
             def legal_actions_fn(count: int):
                 playable = []
                 for r in range(1,14):
@@ -210,7 +210,7 @@ class Trainer:
             teacher = self.models["reasonable"]
             perceptron = player
             # Generate imitation data for both discard and pegging
-            from crib_ai_trainer.cards import Card
+            from cribbage.playingcards import Card
             X = []
             y = []
             for _ in range(50):

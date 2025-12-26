@@ -1,6 +1,6 @@
 import pytest
 from crib_ai_trainer.players.rule_based_player import DifficultRuleBasedPlayer
-from crib_ai_trainer.cards import Card
+from cribbage.playingcards import Card
 
 def test_difficult_choose_discard_prefers_expected_value():
     # Construct a hand where two discards yield the same max immediate score

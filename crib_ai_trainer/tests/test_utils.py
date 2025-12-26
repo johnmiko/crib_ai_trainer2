@@ -1,5 +1,5 @@
 from crib_ai_trainer.players.rule_based_player import get_possible_hands
-from crib_ai_trainer.cards import Card
+from cribbage.playingcards import Card
 import pytest
 
 

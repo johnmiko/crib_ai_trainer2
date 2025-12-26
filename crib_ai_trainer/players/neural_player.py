@@ -1,5 +1,5 @@
 import torch
-from crib_ai_trainer.cards import Card
+from cribbage.playingcards import Card
 from crib_ai_trainer.features import encode_state, D_TOTAL
 from crib_ai_trainer.players.rule_based_player import RuleBasedPlayer
 

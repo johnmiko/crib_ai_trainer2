@@ -1,8 +1,11 @@
 from itertools import combinations
 from typing import List, Tuple, Optional
 from logging import getLogger
-from crib_ai_trainer.cards import Card
+from cribbage.playingcards import Card
 from itertools import combinations
+
+
+logger = getLogger(__name__)
 
 def fill_hand(possible_hands: list[tuple[list[Card], list[Card]]]) -> list[tuple[list[Card], list[Card]]]:
     """
@@ -26,7 +29,6 @@ def fill_hand(possible_hands: list[tuple[list[Card], list[Card]]]) -> list[tuple
 
 
 
-logger = getLogger(__name__)
 
 
 def get_possible_hands(hand: list[Card]) -> list[tuple[list[Card], list[Card]]]:
