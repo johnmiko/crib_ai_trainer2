@@ -41,7 +41,7 @@ class Trainer:
         try:
             with open(self.BEST_MODEL_FILE, "r") as f:
                 name = f.read().strip()
-                if name and name in self.models:
+                if name:
                     logger.info(f"Loaded best model from file: {name}")
                     return name
         except Exception:
@@ -175,12 +175,12 @@ class Trainer:
         return False
 
     def _train_model(self, name: str) -> None:
-        logger.info(f"Training model: {name}")
         # Always train against the current best model (unless self-play)
         opponent_name = self.best_model_name if self.best_model_name != name else "reasonable"
         # If the best model is not available (e.g., just started), fallback to reasonable
         if opponent_name not in self.models:
             opponent_name = "reasonable"
+        logger.info(f"Training model: {name} vs {opponent_name}")
         player = self.models[name]
         opponent = self.models[opponent_name]
         # If CFR, run internal training iterations to update regrets
