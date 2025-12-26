@@ -1,3 +1,25 @@
+def benchmark_models(player_a, player_b, num_games, seed_offset=0):
+    """Run num_games of player_a vs player_b, alternating dealer. Returns (a_wins, b_wins, winrate, ci)."""
+    from crib_ai_trainer.game import CribbageGame
+    import numpy as np
+    a_wins = 0
+    b_wins = 0
+    for i in range(num_games):
+        if i % 2 == 0:
+            game = CribbageGame(player_a, player_b, seed=seed_offset + i)
+            s0, s1 = game.play_game()
+        else:
+            game = CribbageGame(player_b, player_a, seed=seed_offset + i)
+            s1, s0 = game.play_game()
+        if s0 > s1:
+            a_wins += 1
+        else:
+            b_wins += 1
+    n = num_games
+    winrate = a_wins / n
+    z = 1.96  # 95% CI
+    ci = z * np.sqrt(winrate * (1 - winrate) / n) if n > 0 else 0.0
+    return a_wins, b_wins, winrate, ci
 
 import os
 import sys
@@ -87,28 +109,10 @@ def main():
             # Self-play evaluation: new model vs previous version
             do_benchmark = True
             if prev_weights_loaded:
-                import numpy as np
                 logger.info(f"=== SELF-PLAY BENCHMARK: {cfg.name} (new) vs {cfg.name} (old) ===")
                 prev_player = NeuralPlayer(prev_model)
-                self_wins = 0
-                prev_wins = 0
-                benchmark_games = trainer.cfg.benchmark_games
-                for i in range(benchmark_games):
-                    if i % 2 == 0:
-                        game = CribbageGame(player, prev_player, seed=10000+i)
-                        s0, s1 = game.play_game()
-                    else:
-                        game = CribbageGame(prev_player, player, seed=10000+i)
-                        s1, s0 = game.play_game()
-                    if s0 > s1:
-                        self_wins += 1
-                    else:
-                        prev_wins += 1
-                n = benchmark_games
-                winrate = self_wins / n
-                z = 1.96  # 95% CI
-                ci = z * np.sqrt(winrate * (1 - winrate) / n) if n > 0 else 0.0
-                logger.info(f"SELF-PLAY RESULT: {cfg.name} (new) winrate: {winrate:.3f} ± {ci:.3f} vs previous version (W={self_wins}, L={prev_wins}, N={n})")
+                self_wins, prev_wins, winrate, ci = benchmark_models(player, prev_player, trainer.cfg.benchmark_games, seed_offset=10000)
+                logger.info(f"SELF-PLAY RESULT: {cfg.name} (new) winrate: {winrate:.3f} ± {ci:.3f} vs previous version (W={self_wins}, L={prev_wins}, N={trainer.cfg.benchmark_games})")
                 if winrate > 0.5:
                     try:
                         torch.save(model.state_dict(), model_path)
@@ -146,30 +150,12 @@ def main():
 
             # Benchmark new model vs current best
             print(f"Benchmarking {cfg.name} vs current best ({best_model_name})...")
-            import numpy as np
-            new_wins = 0
-            best_wins = 0
-            benchmark_games = trainer.cfg.benchmark_games
-            for i in range(benchmark_games):
-                if i % 2 == 0:
-                    game = CribbageGame(player, best_player, seed=i)
-                    s0, s1 = game.play_game()
-                else:
-                    game = CribbageGame(best_player, player, seed=i)
-                    s1, s0 = game.play_game()
-                if s0 > s1:
-                    new_wins += 1
-                else:
-                    best_wins += 1
-            n = benchmark_games
-            winrate = new_wins / n
-            z = 1.96  # 95% CI
-            ci = z * np.sqrt(winrate * (1 - winrate) / n) if n > 0 else 0.0
+            new_wins, best_wins, winrate, ci = benchmark_models(player, best_player, trainer.cfg.benchmark_games)
             print(f"{cfg.name} winrate vs {best_model_name}: {winrate:.3f} ± {ci:.3f}")
             if (winrate) > 0.5:
                 try:
                     torch.save(model.state_dict(), model_path)
-                    print(f"New model {cfg.name} outperformed best (winrate - ci = {winrate - ci:.3f} > 0.5). Saved model weights to {model_path}")
+                    print(f"New model {cfg.name} outperformed best (winrate = {winrate:.3f} > 0.5). Saved model weights to {model_path}")
                     # Update best_model.txt
                     with open(best_model_path, 'w') as f:
                         f.write(f"neural_{cfg.name}")
