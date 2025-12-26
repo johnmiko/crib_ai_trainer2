@@ -1,11 +1,10 @@
+
 from typing import List, Sequence
 from logging import getLogger
 from crib_ai_trainer.cards import Card
+from crib_ai_trainer.constants import RANK_VALUE
 
 logger = getLogger(__name__)
-
-# Utility for rank value in fifteens and runs (Ace=1)
-RANK_VALUE = {**{i: i for i in range(1, 10)}, 10: 10, 11: 10, 12: 10, 13: 10}
 
 def _sum_values(cards: Sequence[Card]) -> int:
     return sum(RANK_VALUE[c.rank] for c in cards)

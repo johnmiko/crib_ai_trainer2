@@ -1,23 +1,26 @@
-def get_possible_hands(hand: list[Card]) -> list[list[Card]]:
-    """
-    Given a 6-card hand, return a list of all possible 7-card hands by adding each remaining card in the deck.
-    """
-    if len(hand) != 6:
-        raise ValueError("Hand must have exactly 6 cards")
-    deck = [Card(suit, rank) for suit in SUITES for rank in range(1, 14)]
-    hand_set = set(hand)
-    possible_hands = []
-    for card in deck:
-        if card not in hand_set:
-            possible_hands.append(hand + [card])
-    return possible_hands
 from typing import List, Tuple, Optional
 from logging import getLogger
 from crib_ai_trainer.cards import Card
 from crib_ai_trainer.constants import SUITES
 from crib_ai_trainer.scoring import score_hand, RANK_VALUE, score_pegging_play
+from itertools import combinations
 
 logger = getLogger(__name__)
+
+
+def get_possible_hands(hand: list[Card]) -> list[tuple[list[Card], list[Card]]]:
+    """
+    Given a 6-card hand, return all possible (cards_to_keep, crib_cards) pairs,
+    where cards_to_keep is a list of 4 cards and crib_cards is the 2 cards put in the crib.
+    """
+    if len(hand) != 6:
+        raise ValueError("Hand must have exactly 6 cards")
+    all_combos = []
+    for kept in combinations(hand, 4):
+        crib = [c for c in hand if c not in kept]
+        all_combos.append((list(kept), crib))
+    return all_combos
+
 
 class RuleBasedPlayer:
     def __init__(self, name: str = "reasonable"):

@@ -33,6 +33,7 @@ class CribbageGame:
             count=0,
             history_since_reset=[],
             round_num=0,
+            round_history=[]
         )
 
     def play_game(self) -> Tuple[int, int]:
@@ -41,10 +42,8 @@ class CribbageGame:
             self.play_round()
         return self.state.scores[0], self.state.scores[1]
 
-    def play_round(self) -> None:
-        self.deck.reset()
-        self.deck.shuffle()
-        self.state.hands = [self.deck.deal(6), self.deck.deal(6)]
+    def discard_to_crib_phase(self) -> None:
+        # players discard 2 cards each to crib
         self.state.crib = []
         # players discard 2
         d0 = self.p0.choose_discard(self.state.hands[0], dealer_is_self=(self.state.dealer == 0))
@@ -55,6 +54,12 @@ class CribbageGame:
         for c in d1:
             self.state.hands[1].remove(c)
             self.state.crib.append(c)
+
+    def play_round(self) -> None:
+        self.deck.reset()
+        self.deck.shuffle()
+        self.state.hands = [self.deck.deal(6), self.deck.deal(6)]
+        self.discard_to_crib_phase()
         self.state.starter = self.deck.cut()
         self.state.played = [[], []]
         self.state.count = 0
@@ -71,6 +76,7 @@ class CribbageGame:
 
     def pegging_phase(self) -> None:
         # pegging: play cards without exceeding 31, go logic, reset on 31 or both go
+        self.state.round_history.append([])
         hands = self.state.hands
         count = 0
         history_reset: List[Card] = []
@@ -82,13 +88,13 @@ class CribbageGame:
             if playable:
                 card = (self.p0 if turn == 0 else self.p1).play_pegging(playable, count, history_reset)
                 if card is None or card not in playable:
-                    # default: play lowest legal
-                    card = sorted(playable, key=lambda c: RANK_VALUE[c.rank])[0]
+                    raise ValueError(f"Player {turn} played invalid card {card} at count {count}")
                 hands[turn].remove(card)
                 count += RANK_VALUE[card.rank]
                 points = score_pegging_play(history_reset, card, count - RANK_VALUE[card.rank])
                 self.state.scores[turn] += points
                 history_reset.append(card)
+                self.state.round_history[-1].append(card)
                 passes = [False, False]
                 if count == 31:
                     # last card bonus to current player

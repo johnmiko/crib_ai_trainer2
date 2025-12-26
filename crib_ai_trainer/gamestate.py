@@ -17,7 +17,8 @@ class GameState:
     count: int
     history_since_reset: List[Card]
     round_num: int = 0
-    # Add more fields as needed for full state
+    round_history: List[List[Card]] = field(default_factory=list)
+    # round_history: list of lists, each sublist contains cards played in that round
 
     def clone(self) -> GameState:
         return copy.deepcopy(self)
@@ -33,3 +34,19 @@ class GameState:
     def hash(self) -> str:
         s = self.serialize()
         return hashlib.sha256(s.encode('utf-8')).hexdigest()
+    
+    def __eq__(self, other):
+        if not isinstance(other, GameState):
+            return NotImplemented
+        return (
+            self.hands == other.hands and
+            self.crib == other.crib and
+            self.starter == other.starter and
+            self.played == other.played and
+            self.scores == other.scores and
+            self.dealer == other.dealer and
+            self.count == other.count and
+            self.history_since_reset == other.history_since_reset and
+            self.round_num == other.round_num and
+            self.round_history == other.round_history
+        )
