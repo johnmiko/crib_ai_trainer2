@@ -88,6 +88,7 @@ def main():
 
         # Self-play evaluation: new model vs previous version
         if prev_weights_loaded:
+            import numpy as np
             print(f"Self-play evaluation: {cfg.name} (new) vs {cfg.name} (previous)")
             prev_player = NeuralPlayer(prev_model)
             self_wins = 0
@@ -104,14 +105,25 @@ def main():
                     self_wins += 1
                 else:
                     prev_wins += 1
-            print(f"{cfg.name} (new) wins: {self_wins}, {cfg.name} (previous) wins: {prev_wins}")
-            if self_wins <= prev_wins:
-                print(f"New model {cfg.name} did not outperform its previous version. Skipping benchmark against best model.")
+            n = benchmark_games
+            winrate = self_wins / n
+            z = 1.96  # 95% CI
+            ci = z * np.sqrt(winrate * (1 - winrate) / n) if n > 0 else 0.0
+            print(f"{cfg.name} (new) winrate: {winrate:.3f} ± {ci:.3f} vs previous version")
+            if (winrate - ci) > 0.5:
+                try:
+                    torch.save(model.state_dict(), model_path)
+                    print(f"New model {cfg.name} outperformed its previous version (winrate - ci = {winrate - ci:.3f} > 0.5). Saved model weights to {model_path}")
+                except Exception as e:
+                    print(f"Could not save model weights for {cfg.name} after self-play: {e}")
+            else:
+                print(f"New model {cfg.name} did not outperform its previous version with sufficient confidence. Skipping benchmark against best model.")
                 print(f"Finished training {cfg.name}\n")
                 continue
 
         # Benchmark new model vs current best
         print(f"Benchmarking {cfg.name} vs current best ({best_model_name})...")
+        import numpy as np
         new_wins = 0
         best_wins = 0
         benchmark_games = trainer.cfg.benchmark_games
@@ -126,11 +138,15 @@ def main():
                 new_wins += 1
             else:
                 best_wins += 1
-        print(f"{cfg.name} wins: {new_wins}, {best_model_name} wins: {best_wins}")
-        if new_wins > best_wins:
+        n = benchmark_games
+        winrate = new_wins / n
+        z = 1.96  # 95% CI
+        ci = z * np.sqrt(winrate * (1 - winrate) / n) if n > 0 else 0.0
+        print(f"{cfg.name} winrate vs {best_model_name}: {winrate:.3f} ± {ci:.3f}")
+        if (winrate - ci) > 0.5:
             try:
                 torch.save(model.state_dict(), model_path)
-                print(f"New model {cfg.name} outperformed best. Saved model weights to {model_path}")
+                print(f"New model {cfg.name} outperformed best (winrate - ci = {winrate - ci:.3f} > 0.5). Saved model weights to {model_path}")
                 # Update best_model.txt
                 with open(best_model_path, 'w') as f:
                     f.write(f"neural_{cfg.name}")
@@ -138,7 +154,7 @@ def main():
             except Exception as e:
                 print(f"Could not save model weights or update best_model.txt for {cfg.name}: {e}")
         else:
-            print(f"Best model retained ({best_model_name}); {cfg.name} did not outperform best.")
+            print(f"Best model retained ({best_model_name}); {cfg.name} did not outperform best with sufficient confidence.")
         print(f"Finished training {cfg.name}\n")
 
 if __name__ == "__main__":
