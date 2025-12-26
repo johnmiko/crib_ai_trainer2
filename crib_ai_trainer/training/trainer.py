@@ -166,7 +166,7 @@ class Trainer:
 
     def _is_excluded(self, name: str) -> bool:
         # manually exclude certain models that don't need training
-        if name in ["random", "reasonable", "perceptron", "cfr"]:
+        if name in ["random", "perceptron", "cfr"]:
             return True
         if self.cfg.include_models and name not in self.cfg.include_models:
             return True

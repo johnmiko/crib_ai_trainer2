@@ -16,7 +16,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(mess
 
 def main():
     logger.info("Initializing training configuration...")
-    cfg = TrainConfig(num_training_games=100, benchmark_games=100, run_indefinitely=False)
+    cfg = TrainConfig(num_training_games=1, benchmark_games=1, run_indefinitely=False)
     logger.info("Creating Trainer instance...")
     t = Trainer(cfg)
     # Only train non-neural models
