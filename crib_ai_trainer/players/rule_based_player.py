@@ -4,7 +4,7 @@ def get_possible_hands(hand: list[Card]) -> list[list[Card]]:
     """
     if len(hand) != 6:
         raise ValueError("Hand must have exactly 6 cards")
-    deck = [Card(suit, rank) for suit in ['S', 'H', 'D', 'C'] for rank in range(1, 14)]
+    deck = [Card(suit, rank) for suit in SUITES for rank in range(1, 14)]
     hand_set = set(hand)
     possible_hands = []
     for card in deck:
@@ -14,6 +14,7 @@ def get_possible_hands(hand: list[Card]) -> list[list[Card]]:
 from typing import List, Tuple, Optional
 from logging import getLogger
 from crib_ai_trainer.cards import Card
+from crib_ai_trainer.constants import SUITES
 from crib_ai_trainer.scoring import score_hand, RANK_VALUE, score_pegging_play
 
 logger = getLogger(__name__)
@@ -65,7 +66,7 @@ class DifficultRuleBasedPlayer:
         best_discards = []
         best_score = -1
         n = len(hand)
-        deck = [Card(suit, rank) for suit in ['S', 'H', 'D', 'C'] for rank in range(1, 14)]
+        deck = [Card(suit, rank) for suit in SUITES for rank in range(1, 14)]
         hand_set = set(hand)
         for i in range(n):
             for j in range(i + 1, n):
