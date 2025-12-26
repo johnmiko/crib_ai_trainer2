@@ -1,5 +1,9 @@
+
 import os
+import sys
 import json
+# Ensure project root is in sys.path for imports
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from crib_ai_trainer.training.trainer import Trainer, TrainConfig
 from models.neural_config import NeuralNetConfig
 from crib_ai_trainer.players.neural_player import NeuralPlayer
@@ -29,7 +33,7 @@ class FlexibleNN(nn.Module):
 def main():
     config_path = os.path.join('configs', 'neural_configs.json')
     configs = load_configs(config_path)
-    trainer = Trainer(TrainConfig(num_training_games=200, benchmark_games=200, run_indefinitely=False))
+    trainer = Trainer(TrainConfig(num_training_games=400, benchmark_games=400, run_indefinitely=False))
     # Remove default 'neural' if present
     if 'neural' in trainer.models:
         del trainer.models['neural']
@@ -63,11 +67,14 @@ def main():
         if best_player is None:
             best_player = RuleBasedPlayer()
 
-        # Load previous weights for this config if available
+        # Load previous weights for this config if available (for self-play eval)
+        prev_model = FlexibleNN(cfg)
+        prev_weights_loaded = False
         if os.path.exists(model_path):
             try:
-                model.load_state_dict(torch.load(model_path))
-                print(f"Loaded previous weights from {model_path}")
+                prev_model.load_state_dict(torch.load(model_path))
+                print(f"Loaded previous weights from {model_path} for self-play evaluation")
+                prev_weights_loaded = True
             except Exception as e:
                 print(f"Could not load previous weights for {cfg.name}: {e}")
         player = NeuralPlayer(model)
@@ -78,6 +85,31 @@ def main():
         trainer.models[best_model_name] = best_player
         trainer.cfg.exclude_models = [m for m in trainer.models if m not in [cfg.name, best_model_name]]
         trainer.train()
+
+        # Self-play evaluation: new model vs previous version
+        if prev_weights_loaded:
+            print(f"Self-play evaluation: {cfg.name} (new) vs {cfg.name} (previous)")
+            prev_player = NeuralPlayer(prev_model)
+            self_wins = 0
+            prev_wins = 0
+            benchmark_games = trainer.cfg.benchmark_games
+            for i in range(benchmark_games):
+                if i % 2 == 0:
+                    game = CribbageGame(player, prev_player, seed=10000+i)
+                    s0, s1 = game.play_game()
+                else:
+                    game = CribbageGame(prev_player, player, seed=10000+i)
+                    s1, s0 = game.play_game()
+                if s0 > s1:
+                    self_wins += 1
+                else:
+                    prev_wins += 1
+            print(f"{cfg.name} (new) wins: {self_wins}, {cfg.name} (previous) wins: {prev_wins}")
+            if self_wins <= prev_wins:
+                print(f"New model {cfg.name} did not outperform its previous version. Skipping benchmark against best model.")
+                print(f"Finished training {cfg.name}\n")
+                continue
+
         # Benchmark new model vs current best
         print(f"Benchmarking {cfg.name} vs current best ({best_model_name})...")
         new_wins = 0

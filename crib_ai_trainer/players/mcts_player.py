@@ -11,21 +11,31 @@ logger = getLogger(__name__)
 class ISMCTSPlayer:
     def save(self, path: str):
         import json
-        data = {
-            'simulations': self.simulations,
-            'belief_samples': self.belief_samples
-        }
-        with open(path, 'w') as f:
-            json.dump(data, f)
+        try:
+            data = {
+                'simulations': self.simulations,
+                'belief_samples': self.belief_samples
+            }
+            with open(path, 'w') as f:
+                json.dump(data, f)
+            logger.info(f"Saved ISMCTS parameters to {path}")
+        except Exception as e:
+            logger.error(f"Failed to save ISMCTS parameters to {path}: {e}")
 
     @classmethod
     def load(cls, path: str, name: str = "is_mcts", seed: int = None):
         import json
         import os
         if os.path.exists(path):
-            with open(path, 'r') as f:
-                data = json.load(f)
-            return cls(name=name, simulations=data.get('simulations', 1000), seed=seed, belief_samples=data.get('belief_samples', 10))
+            try:
+                with open(path, 'r') as f:
+                    data = json.load(f)
+                logger.info(f"Loaded ISMCTS parameters from {path}")
+                return cls(name=name, simulations=data.get('simulations', 1000), seed=seed, belief_samples=data.get('belief_samples', 10))
+            except Exception as e:
+                logger.error(f"Failed to load ISMCTS parameters from {path}: {e}")
+        else:
+            logger.info(f"No ISMCTS parameters found at {path}, using defaults.")
         return cls(name=name, seed=seed)
     def __init__(self, name: str = "is_mcts", simulations: int = 1000, seed: int | None = None, belief_samples: int = 10):
         self.name = name

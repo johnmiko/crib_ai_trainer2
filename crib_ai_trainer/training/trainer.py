@@ -59,7 +59,16 @@ class Trainer:
         # single perceptron for both discard and pegging
         from models.perceptron_io import load_perceptron, save_perceptron
         self._save_perceptron = save_perceptron
-        self.models["perceptron"] = load_perceptron()
+        # Only load perceptron if it is the best model or is being trained or trained against
+        perceptron_needed = False
+        if self.best_model_name == "perceptron":
+            perceptron_needed = True
+        elif self.cfg.include_models and "perceptron" in self.cfg.include_models:
+            perceptron_needed = True
+        elif self.cfg.exclude_models and "perceptron" not in self.cfg.exclude_models:
+            perceptron_needed = True
+        if perceptron_needed:
+            self.models["perceptron"] = load_perceptron()
         from crib_ai_trainer.players.cfr_player import CFRPlayer
         import os
         cfr_path = os.path.join('trained_models', 'cfr.json')
@@ -111,12 +120,17 @@ class Trainer:
             # Save CFR tables if being trained
             if "cfr" in self.models and hasattr(self.models["cfr"], "save") and "cfr" in include:
                 self.models["cfr"].save(self._cfr_path)
-            # Save ISMCTS parameters if being trained, only if new model beats old
+            # Save ISMCTS parameters if being trained. Always save at least once so the file exists.
             if "is_mcts" in self.models and hasattr(self.models["is_mcts"], "save") and "is_mcts" in include:
+                import os
                 import shutil
                 from crib_ai_trainer.game import CribbageGame
                 mcts_model = self.models["is_mcts"]
                 mcts_path = self._mcts_path
+                # If the file does not exist, save the current model to create it
+                if not os.path.exists(mcts_path):
+                    mcts_model.save(mcts_path)
+                    logger.info(f"ISMCTS model parameters saved for the first time to {mcts_path}")
                 # Load old model for comparison
                 from crib_ai_trainer.players.mcts_player import ISMCTSPlayer
                 old_model = ISMCTSPlayer.load(mcts_path, name="is_mcts", seed=None)
