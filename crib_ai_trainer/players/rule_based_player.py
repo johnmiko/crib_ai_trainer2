@@ -67,8 +67,12 @@ class ReasonablePlayer:
                 best = c
         if best is not None:
             return best
-        # otherwise play lowest value
-        return sorted(playable, key=lambda c: c.value)[0] if playable else None
+        # otherwise play highest value        
+        highest_card = None
+        for c in playable:
+            if c > highest_card:
+                highest_card = c
+        return highest_card
 
 
     def select_card_to_play(self, hand: List[Card], table, crib, count: int):

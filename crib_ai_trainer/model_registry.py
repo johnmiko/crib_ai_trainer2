@@ -1,6 +1,6 @@
 import torch
 from crib_ai_trainer.players.rule_based_player import ReasonablePlayer, DifficultReasonablePlayer
-from crib_ai_trainer.players.neural_player import NeuralPlayer
+from crib_ai_trainer.players.old_neural_player import NeuralPlayer
 from models.neural_config import NeuralNetConfig
 import os
 

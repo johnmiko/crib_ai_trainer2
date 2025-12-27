@@ -54,7 +54,7 @@ def test_old_vs_new_weights(setup_and_teardown):
     new_model = FlexibleNN(cfg)
     for param in new_model.parameters():
         param.data += 0.01  # Make new weights different
-    from crib_ai_trainer.players.neural_player import NeuralPlayer
+    from crib_ai_trainer.players.old_neural_player import NeuralPlayer
     old_player = NeuralPlayer(model)
     new_player = NeuralPlayer(new_model)
     from scripts.train_neural_configs import benchmark_models

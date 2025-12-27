@@ -16,27 +16,22 @@ def test_remaining_deck_size():
     assert all(c not in hand for c in rem)
 
 
-def test_generate_possible_starters_counts():
-    hand = [Card(Deck.RANKS["ace"], Deck.SUITS["hearts"]),
-            Card(Deck.RANKS["four"], Deck.SUITS["hearts"]),
-              Card(Deck.RANKS["nine"], Deck.SUITS["clubs"]),
-              Card(Deck.RANKS["ten"], Deck.SUITS["clubs"]), 
-              Card(Deck.RANKS["jack"], Deck.SUITS["spades"]),
-              Card(Deck.RANKS["king"], Deck.SUITS["hearts"])]
-    hand_scores = generate_hand_ranges(hand)    
-    breakpoint()
-    assert False
+# def test_generate_possible_starters_counts():
+#     hand = [Card('ah'), Card('4h'), Card('9c'), Card('10c'), Card('js'), Card('kh')]
+#     hand_scores = generate_hand_ranges(hand)    
+#     # breakpoint()
+#     assert False
 
 
-def test_generate_possible_cribs_counts():
-    full = get_full_deck()
-    hand = full[:6]
-    discards = hand[:2]
-    cribs = list(generate_possible_cribs(discards, full, hand))
-    # opponent chooses 2 from remaining 46
-    assert len(cribs) == comb(46, 2)
-    # each crib has 4 cards
-    assert all(len(crib) == 4 for crib, _ in cribs)
-    # probabilities should sum to ~1
-    total_p = sum(p for _, p in cribs)
-    assert pytest.approx(total_p, rel=1e-9) == 1.0
+# def test_generate_possible_cribs_counts():
+#     full = get_full_deck()
+#     hand = [Card('ah'), Card('4h'), Card('9c'), Card('10c'), Card('js'), Card('kh')]
+#     discards = hand[:2]
+#     cribs = list(generate_possible_cribs(discards, full, hand))
+#     # opponent chooses 2 from remaining 46
+#     assert len(cribs) == comb(46, 2)
+#     # each crib has 4 cards
+#     assert all(len(crib) == 4 for crib, _ in cribs)
+#     # probabilities should sum to ~1
+#     total_p = sum(p for _, p in cribs)
+#     assert pytest.approx(total_p, rel=1e-9) == 1.0

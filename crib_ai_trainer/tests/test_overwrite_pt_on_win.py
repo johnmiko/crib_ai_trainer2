@@ -8,7 +8,7 @@ import pytest
 from crib_ai_trainer.training.trainer import Trainer, TrainConfig
 from models.neural_config import NeuralNetConfig
 from scripts.train_neural_configs import FlexibleNN
-from crib_ai_trainer.players.neural_player import NeuralPlayer
+from crib_ai_trainer.players.old_neural_player import NeuralPlayer
 
 @pytest.mark.parametrize("winrate", [0.6])
 def test_overwrite_pt_on_win(tmp_path, winrate):

@@ -76,7 +76,7 @@ class Trainer:
         cfr_path = os.path.join('trained_models', 'cfr.json')
         self._cfr_path = cfr_path
         self.models["cfr"] = CFRPlayer(iterations=500, load_path=cfr_path)
-        from crib_ai_trainer.players.neural_player import NeuralPlayer
+        from crib_ai_trainer.players.old_neural_player import NeuralPlayer
         import torch.nn as nn
         # Example config, can be loaded or set dynamically
         self.neural_config = NeuralNetConfig(
