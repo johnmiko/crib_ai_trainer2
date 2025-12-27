@@ -29,7 +29,7 @@ import json
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from crib_ai_trainer.training.trainer import Trainer, TrainConfig
 from models.neural_config import NeuralNetConfig
-from crib_ai_trainer.players.rule_based_player import RuleBasedPlayer
+from crib_ai_trainer.players.rule_based_player import ReasonablePlayer
 from crib_ai_trainer.players.neural_player import NeuralPlayer
 import torch.nn as nn
 from crib_ai_trainer.features import D_TOTAL
@@ -134,7 +134,7 @@ def main():
                 if os.path.exists(best_model_path):
                     with open(best_model_path, 'r') as f:
                         best_model_name = f.read().strip()
-                from crib_ai_trainer.players.rule_based_player import RuleBasedPlayer
+                from crib_ai_trainer.players.rule_based_player import ReasonablePlayer
                 best_player = None
                 if best_model_name.startswith('neural_'):
                     best_cfg_name = best_model_name.replace('neural_', '')
@@ -146,7 +146,7 @@ def main():
                             best_model.load_state_dict(torch.load(best_model_file))
                             best_player = NeuralPlayer(best_model)
                 if best_player is None:
-                    best_player = RuleBasedPlayer()
+                    best_player = ReasonablePlayer()
                 # ...existing code for benchmarking against best...
 
             # Benchmark new model vs current best

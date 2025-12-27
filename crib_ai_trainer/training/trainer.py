@@ -7,7 +7,7 @@ import torch
 from logging import getLogger
 from cribbage.cribbagegame import CribbageGame
 from crib_ai_trainer.players.random_player import RandomPlayer
-from crib_ai_trainer.players.rule_based_player import RuleBasedPlayer
+from crib_ai_trainer.players.rule_based_player import ReasonablePlayer
 
 from crib_ai_trainer.players.mcts_player import ISMCTSPlayer
 from crib_ai_trainer.features import D_TOTAL, encode_state
@@ -50,9 +50,9 @@ class Trainer:
 
     def _init_models(self) -> None:
         self.models["random"] = RandomPlayer()
-        self.models["reasonable"] = RuleBasedPlayer()
-        from crib_ai_trainer.players.rule_based_player import DifficultRuleBasedPlayer
-        self.models["difficult"] = DifficultRuleBasedPlayer()
+        self.models["reasonable"] = ReasonablePlayer()
+        from crib_ai_trainer.players.rule_based_player import DifficultReasonablePlayer
+        self.models["difficult"] = DifficultReasonablePlayer()
         from crib_ai_trainer.players.mcts_player import ISMCTSPlayer
         import os
         mcts_path = os.path.join('trained_models', 'is_mcts.json')

@@ -24,25 +24,13 @@ def get_possible_hands(hand: list[Card]) -> list[tuple[list[Card], list[Card]]]:
         all_combos.append((list(kept), crib))
     return all_combos
 
-def select_first_found_card_that_scores_highest_peg_points(playable, count, history_since_reset):
-    # always take points if available; else play lowest that doesn't set opponent up
-    best = None
-    best_pts = -1
-    for c in playable:
-        sequence = history_since_reset + [c]
-        pts = score_pegging_play(sequence)
-        if pts > best_pts:
-            best_pts = pts
-            best = c
-    return best
 
-
-class RuleBasedPlayer:
+class ReasonablePlayer:
     def __init__(self, name: str = "reasonable"):
         self.name = name
 
     def select_crib_cards(self, hand: List[Card], dealer_is_self: bool) -> Tuple[Card, Card]:
-        # hand is 6 cards
+        # Counts points in hand and then adds/subtracts points in crib to decide
         best_discards: List[Tuple[Card, Card]] = []
         best_score = float("-inf")
 
@@ -59,7 +47,6 @@ class RuleBasedPlayer:
 
             # if you want to actually use dealer_is_self:
             score = kept_score + crib_score if dealer_is_self else kept_score - crib_score
-
             if score > best_score:
                 best_score = score
                 best_discards = [tuple(discards)]
@@ -69,23 +56,29 @@ class RuleBasedPlayer:
         return best_discards[0]  # type: ignore
 
     def play_pegging(self, playable: List[Card], count: int, history_since_reset: List[Card]) -> Optional[Card]:
-        card = select_first_found_card_that_scores_highest_peg_points(playable, count, history_since_reset)
         # always take points if available; else play lowest that doesn't set opponent up
         best = None
         best_pts = -1
         for c in playable:
             sequence = history_since_reset + [c]
             pts = score_pegging_play(sequence)
-            if pts > best_pts:
+            if (pts > best_pts) and (c + count <= 31):
                 best_pts = pts
                 best = c
         if best is not None:
             return best
         # otherwise play lowest value
-        return sorted(playable, key=lambda c: c.rank['value'])[0] if playable else None
+        return sorted(playable, key=lambda c: c.value)[0] if playable else None
 
 
-class DifficultRuleBasedPlayer(RuleBasedPlayer):
+    def select_card_to_play(self, hand: List[Card], table, crib, count: int):
+        # table is the list of cards currently on the table
+        playable_cards = [c for c in hand if c + count <= 31]
+        if not playable_cards:
+            return None
+        return self.play_pegging(playable_cards, count, table)
+
+class DifficultReasonablePlayer(ReasonablePlayer):
     def __init__(self, name: str = "difficult"):
         super().__init__(name=name)
 
