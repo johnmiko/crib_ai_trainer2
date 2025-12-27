@@ -24,6 +24,18 @@ def get_possible_hands(hand: list[Card]) -> list[tuple[list[Card], list[Card]]]:
         all_combos.append((list(kept), crib))
     return all_combos
 
+def select_first_found_card_that_scores_highest_peg_points(playable, count, history_since_reset):
+    # always take points if available; else play lowest that doesn't set opponent up
+    best = None
+    best_pts = -1
+    for c in playable:
+        sequence = history_since_reset + [c]
+        pts = score_pegging_play(sequence)
+        if pts > best_pts:
+            best_pts = pts
+            best = c
+    return best
+
 
 class RuleBasedPlayer:
     def __init__(self, name: str = "reasonable"):
@@ -57,6 +69,7 @@ class RuleBasedPlayer:
         return best_discards[0]  # type: ignore
 
     def play_pegging(self, playable: List[Card], count: int, history_since_reset: List[Card]) -> Optional[Card]:
+        card = select_first_found_card_that_scores_highest_peg_points(playable, count, history_since_reset)
         # always take points if available; else play lowest that doesn't set opponent up
         best = None
         best_pts = -1
