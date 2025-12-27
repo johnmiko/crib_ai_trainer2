@@ -17,6 +17,13 @@ def setUp():
         round = cribbagegame.CribbageRound(game, dealer=game.players[0])
         return game, round
 
+def test_full_game():
+    players = [ReasonablePlayer(), NeuralPlayer(LinearValueModel(105), LinearValueModel(188))]
+    game = cribbagegame.CribbageGame(players=players, seed=42)
+    final_score = game.start()
+    assert 121 in final_score
+    
+
 class TestCribbageRound():    
     def test_get_crib(self, setUp):
         game, round = setUp
