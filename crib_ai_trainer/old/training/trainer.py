@@ -12,7 +12,7 @@ from crib_ai_trainer.players.rule_based_player import ReasonablePlayer
 from crib_ai_trainer.players.mcts_player import ISMCTSPlayer
 from crib_ai_trainer.features import D_TOTAL, encode_state
 from models.perceptron import SimplePerceptron, PerceptronConfig
-from models.neural_config import NeuralNetConfig
+from crib_ai_trainer.old.neural_config import NeuralNetConfig
 from crib_ai_trainer.constants import RANK_VALUE
 
 logger = getLogger(__name__)
@@ -76,7 +76,7 @@ class Trainer:
         cfr_path = os.path.join('trained_models', 'cfr.json')
         self._cfr_path = cfr_path
         self.models["cfr"] = CFRPlayer(iterations=500, load_path=cfr_path)
-        from crib_ai_trainer.players.old_neural_player import NeuralPlayer
+        from crib_ai_trainer.old.old_neural_player import NeuralPlayer
         import torch.nn as nn
         # Example config, can be loaded or set dynamically
         self.neural_config = NeuralNetConfig(
@@ -298,7 +298,7 @@ class Trainer:
             logger.info(f"Benchmark {name} vs {best}: {winrate:.2f} ± {ci:.2f}")
             # Save neural config and results for any neural config model
             if hasattr(self, 'neural_config') and (name == getattr(self.neural_config, 'name', None) or name.startswith('nn_')):
-                from models.neural_config import NeuralNetConfig
+                from crib_ai_trainer.old.neural_config import NeuralNetConfig
                 config = self.neural_config
                 results_dict = {
                     "winrate": winrate,

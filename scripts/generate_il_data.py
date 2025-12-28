@@ -165,10 +165,12 @@ def estimate_discard_value_mc_fast_from_remaining(
 
 @dataclass
 class LoggedData:
-    X_discard: List[np.ndarray] = field(default_factory=list)
-    y_discard: List[float] = field(default_factory=list)
+    # X_discard: List[np.ndarray] = field(default_factory=list)
+    # y_discard: List[float] = field(default_factory=list)
     X_pegging: List[np.ndarray] = field(default_factory=list)
     y_pegging: List[float] = field(default_factory=list)
+    X_discard_hand: List[np.ndarray] = field(default_factory=list)   # each is (15, D)
+    y_discard_label: List[int] = field(default_factory=list)         # each is 0..14
 
 
 class LoggingReasonablePlayer(ReasonablePlayer):
@@ -181,6 +183,47 @@ class LoggingReasonablePlayer(ReasonablePlayer):
         self._log = log
 
     def select_crib_cards(self, hand: List[Card], dealer_is_self: bool) -> Tuple[Card, Card]:
+        return self.select_crib_cards_classifier(hand, dealer_is_self)
+    
+    def select_crib_cards_classifier(self, hand: List[Card], dealer_is_self: bool) -> Tuple[Card, Card]:
+        hand_set = set(hand)
+        remaining = [c for c in self._full_deck if c not in hand_set]  # 46
+
+        Xs: List[np.ndarray] = []
+        ys: List[float] = []
+        discards_list: List[Tuple[Card, Card]] = []
+
+        for kept in combinations(hand, 4):
+            kept = list(kept)
+            discards = [c for c in hand if c not in kept]
+            disc_t = (discards[0], discards[1])
+
+            y = estimate_discard_value_mc_fast_from_remaining(
+                kept=kept,
+                discards=discards,
+                dealer_is_self=dealer_is_self,
+                remaining=remaining,
+                rng=self._rng,
+                n_starters=16,
+                n_opp_discards=8,
+            )
+
+            x = featurize_discard(kept, discards, dealer_is_self)  # (105,)
+            Xs.append(x)
+            ys.append(float(y))
+            discards_list.append(disc_t)
+
+        best_i = int(np.argmax(np.array(ys, dtype=np.float32)))
+
+        # log ONE example for this 6-card hand:
+        # X_hand is (15, D), label is best option index 0..14
+        X_hand = np.stack(Xs, axis=0).astype(np.float32)  # (15, D)
+        self._log.X_discard_hand.append(X_hand)
+        self._log.y_discard_label.append(best_i)
+
+        return discards_list[best_i]
+
+    def select_crib_cards_regresser(self, hand: List[Card], dealer_is_self: bool) -> Tuple[Card, Card]:
         hand_set = set(hand)
         remaining = [c for c in self._full_deck if c not in hand_set]  # 46
 
@@ -200,7 +243,11 @@ class LoggingReasonablePlayer(ReasonablePlayer):
                 n_starters=16,
                 n_opp_discards=8,
             )
-            if y < -2: 
+            if y < -8: 
+                print("unusual y:", y)
+                print("hand:", hand)
+                print("kept:", kept)
+                print("discards:", discards)
                 a = 1
 
             x = featurize_discard(kept, discards, dealer_is_self)  # or drop hand param
@@ -277,8 +324,14 @@ def generate_il_data(games, out_dir, seed) -> int:
     logger.info(f"Saving data to {out_dir}")
     os.makedirs(out_dir, exist_ok=True)
 
-    Xd = np.stack(log.X_discard).astype(np.float32) if log.X_discard else np.zeros((0, 105), np.float32)
-    yd = np.array(log.y_discard, dtype=np.float32)
+    # Xd = np.stack(log.X_discard).astype(np.float32) if log.X_discard else np.zeros((0, 105), np.float32)
+    # yd = np.array(log.y_discard, dtype=np.float32)
+    Xd = np.stack(log.X_discard_hand).astype(np.float32) if log.X_discard_hand else np.zeros((0, 15, 105), np.float32)
+    yd = np.array(log.y_discard_label, dtype=np.int64)
+    assert Xd.ndim == 3 
+    assert Xd.shape[1] == 15
+    assert yd.dtype == np.int64
+    assert yd.min() >= 0 and yd.max() < 15
 
     Xp = np.stack(log.X_pegging).astype(np.float32) if log.X_pegging else np.zeros((0, 188), np.float32)
     yp = np.array(log.y_pegging, dtype=np.float32)

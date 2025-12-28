@@ -51,7 +51,7 @@ def train_linear_models(args) -> int:
             with np.load(d_path) as d:
                 Xd = d["X"].astype(np.float32)
                 yd = d["y"].astype(np.float32)
-            print("discard X dim", Xd.shape, "y range", float(yd.min()), float(yd.mean()), float(yd.max()))
+            # print("discard X dim", Xd.shape, "y range", float(yd.min()), float(yd.mean()), float(yd.max()))
 
             with np.load(p_path) as p:
                 Xp = p["X"].astype(np.float32)

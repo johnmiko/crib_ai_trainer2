@@ -28,9 +28,9 @@ import json
 # Ensure project root is in sys.path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from crib_ai_trainer.training.trainer import Trainer, TrainConfig
-from models.neural_config import NeuralNetConfig
+from crib_ai_trainer.old.neural_config import NeuralNetConfig
 from crib_ai_trainer.players.rule_based_player import ReasonablePlayer
-from crib_ai_trainer.players.old_neural_player import NeuralPlayer
+from crib_ai_trainer.old.old_neural_player import NeuralPlayer
 import torch.nn as nn
 from crib_ai_trainer.features import D_TOTAL
 

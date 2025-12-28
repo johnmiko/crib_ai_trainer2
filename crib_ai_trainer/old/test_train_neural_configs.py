@@ -4,8 +4,8 @@ import shutil
 import torch
 import pytest
 from crib_ai_trainer.training.trainer import Trainer, TrainConfig
-from models.neural_config import NeuralNetConfig
-from scripts.train_neural_configs import FlexibleNN, load_configs
+from crib_ai_trainer.old.neural_config import NeuralNetConfig
+from crib_ai_trainer.old.train_neural_configs import FlexibleNN, load_configs
 from crib_ai_trainer.constants import RANK_VALUE
 
 TEST_MODEL_NAME = "nn_64x1"
@@ -54,10 +54,10 @@ def test_old_vs_new_weights(setup_and_teardown):
     new_model = FlexibleNN(cfg)
     for param in new_model.parameters():
         param.data += 0.01  # Make new weights different
-    from crib_ai_trainer.players.old_neural_player import NeuralPlayer
+    from crib_ai_trainer.old.old_neural_player import NeuralPlayer
     old_player = NeuralPlayer(model)
     new_player = NeuralPlayer(new_model)
-    from scripts.train_neural_configs import benchmark_models
+    from crib_ai_trainer.old.train_neural_configs import benchmark_models
     new_wins, old_wins, winrate, ci = benchmark_models(new_player, old_player, 4, seed_offset=10000)
     # If new wins, save over weights
     if new_wins > old_wins:

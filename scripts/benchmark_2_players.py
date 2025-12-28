@@ -131,6 +131,7 @@ if __name__ == "__main__":
     ap.add_argument("--models_dir", type=str, default=MODELS_DIR)
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
+    logger.info(f"models dir: {args.models_dir}")
     benchmark_2_players(args)
 
 # python scripts/benchmark_2_players.py --players neural,reasonable --games 500 --models_dir models

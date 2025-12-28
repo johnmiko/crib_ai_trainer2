@@ -1,6 +1,6 @@
 from itertools import combinations
 import numpy as np
-from typing import List
+from typing import List, Tuple
 
 from cribbage.playingcards import Card
 
@@ -149,13 +149,31 @@ class LinearValueModel:
         return m
 
 
-class NeuralPlayer:
+class NeuralRegressionPlayer:
     def __init__(self, discard_model, pegging_model, name="neural"):
         self.name = name
         self.discard_model = discard_model
         self.pegging_model = pegging_model
 
-    def select_crib_cards(self, hand, dealer_is_self):
+    def select_crib_cards(self, hand: List[Card], dealer_is_self: bool) -> Tuple[Card, Card]:
+        return self.select_crib_cards_classification(hand, dealer_is_self)
+
+    def select_crib_cards_classification(self, hand: List[Card], dealer_is_self: bool) -> Tuple[Card, Card]:
+        Xs: List[np.ndarray] = []
+        discards_list: List[Tuple[Card, Card]] = []
+
+        for kept in combinations(hand, 4):
+            kept = list(kept)
+            discards = [c for c in hand if c not in kept]
+            discards_list.append((discards[0], discards[1]))
+            Xs.append(featurize_discard(kept, discards, dealer_is_self))
+
+        X15 = np.stack(Xs, axis=0).astype(np.float32)  # (15, D)
+        scores = self.discard_model.predict_scores(X15)  # (15,)
+        best_i = int(np.argmax(scores))
+        return discards_list[best_i]
+
+    def select_crib_cards_regressor(self, hand, dealer_is_self):
         best, best_v = None, float("-inf")
         for kept in combinations(hand, 4):
             kept = list(kept)
@@ -196,7 +214,6 @@ class NeuralDiscardPlayer:
         return best
     
     def select_card_to_play(self, hand, table, crib, count):
-
         playable = [c for c in hand if c + count <= 31]
         if not playable:
             return None
@@ -223,32 +240,3 @@ class NeuralPegPlayer:
             if v > best_v:
                 best_v, best = v, c
         return best
-
-# class CustomPlayer:
-#     def __init__(self, select_crib_cards, select_card_to_play, name="neural", seed=0, **kwargs):
-#         self.name = name
-#         if neural_discard_model := kwargs.get("neural_discard_model"):
-#             self.discard_model = neural_discard_model        
-#         if neural_pegging_model := kwargs.get("neural_pegging_model"):
-#             self.pegging_model = neural_pegging_model
-#         if select_crib_cards == "neural":
-#             self.select_crib_cards = NeuralPlayer.select_crib_cards
-#         else:
-#             self.select_crib_cards = select_crib_cards
-#         if select_card_to_play == "neural":
-#             self.select_card_to_play = NeuralPlayer.select_card_to_play
-#         else:
-#             self.select_card_to_play = select_card_to_play
-
-#     def select_crib_cards(self, hand, dealer_is_self):
-#         self.select_crib_cards(hand, dealer_is_self)
-
-#     def play_pegging(self, playable, count, history_since_reset):
-#         self.play_pegging(playable, count, history_since_reset)
-
-#     def select_card_to_play(self, hand, table, crib, count):
-#         playable_cards = [c for c in hand if c + count <= 31]
-#         if not playable_cards:
-#             return None
-#         return self.play_pegging(playable_cards, count, table)
-
