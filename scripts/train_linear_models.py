@@ -13,7 +13,7 @@ import numpy as np
 
 sys.path.insert(0, ".")
 from crib_ai_trainer.constants import MODELS_DIR, TRAINING_DATA_DIR
-from crib_ai_trainer.players.neural_player import LinearValueModel
+from crib_ai_trainer.players.neural_player import LinearDiscardClassifier, LinearValueModel
 import logging
 
 logger = logging.getLogger(__name__)
@@ -36,8 +36,12 @@ def train_linear_models(args) -> int:
         )
 
     # init models
-    with np.load(discard_shards[0]) as d0:
-        discard_model = LinearValueModel(int(d0["X"].shape[1]))
+    if "classification" in args.data_dir:
+        with np.load(discard_shards[0]) as d0:
+            discard_model = LinearDiscardClassifier(int(d0["X"].shape[2]))
+    elif "regression" in args.data_dir:
+        with np.load(discard_shards[0]) as d0:
+            discard_model = LinearValueModel(int(d0["X"].shape[1]))
     with np.load(pegging_shards[0]) as p0:
         pegging_model = LinearValueModel(int(p0["X"].shape[1]))
 
@@ -47,24 +51,33 @@ def train_linear_models(args) -> int:
     for epoch in range(args.epochs):
         print(f"Epoch {epoch + 1}/{args.epochs}")
         for d_path, p_path in zip(discard_shards, pegging_shards):
-            logger.info(f"  Training on shard {d_path.name} and {p_path.name}")
+            logger.debug(f"  Training on shard {d_path.name} and {p_path.name}")
             with np.load(d_path) as d:
-                Xd = d["X"].astype(np.float32)
+                if "classification" in args.data_dir:
+                    Xd = d["X"].astype(np.int64)
+                else:
+                    Xd = d["X"].astype(np.float32)
                 yd = d["y"].astype(np.float32)
             # print("discard X dim", Xd.shape, "y range", float(yd.min()), float(yd.mean()), float(yd.max()))
 
             with np.load(p_path) as p:
                 Xp = p["X"].astype(np.float32)
                 yp = p["y"].astype(np.float32)
-
-            discard_losses = discard_model.fit_mse(
-                Xd, yd,
-                lr=args.lr,
-                epochs=1,
-                batch_size=args.batch_size,
-                l2=args.l2,
-                seed=args.seed,
+            if "classification" in args.data_dir:
+                logger.debug(f"Training discard model {discard_model}")
+                discard_losses = discard_model.fit_ce( # type: ignore
+                Xd, yd, lr=args.lr, epochs=args.epochs,
+                batch_size=args.batch_size, l2=args.l2, seed=args.seed
             )
+            else:
+                discard_losses = discard_model.fit_mse( # type: ignore
+                    Xd, yd,
+                    lr=args.lr,
+                    epochs=1,
+                    batch_size=args.batch_size,
+                    l2=args.l2,
+                    seed=args.seed,
+                )
             pegging_losses = pegging_model.fit_mse(
                 Xp, yp,
                 lr=args.lr,

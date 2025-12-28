@@ -304,8 +304,8 @@ class LoggingPlayer(BeginnerPlayer):
             pts = score_pegging_play(sequence)
             y = pts
             x = featurize_pegging(hand, history_since_reset, count, c)
-            self._log.X_pegging.append(x)
-            self._log.y_pegging.append(float(y))
+            self._log.X_pegging.append(x) # type: ignore
+            self._log.y_pegging.append(float(y)) # type: ignore
             if (pts > best_pts) and (c + count <= 31):
                 best_pts = pts
                 best = c
@@ -327,7 +327,7 @@ def play_one_game(players) -> None:
 
 
 def generate_il_data(games, out_dir, seed, strategy) -> int:
-    logger.info(f"Generating IL data for {games} games into {out_dir} using 2 reasonable players")
+    logger.info(f"Generating IL data for {games} games into {out_dir} using 2 beginner players")
     rng = np.random.default_rng(seed)
     # log = LoggedData()
     # todo - this probably needs to be dynamic
@@ -354,15 +354,32 @@ def generate_il_data(games, out_dir, seed, strategy) -> int:
     
     logger.info(f"Saving data to {out_dir}")
     os.makedirs(out_dir, exist_ok=True)
+    # check that we did not use the wrong logging structure
+    if log.X_discard:
+        x0 = log.X_discard[0]
+        if strategy == "classification":
+            assert x0.shape == (15, 105)
+        else:
+            assert x0.shape == (105,)
+    if strategy == "classification":
+        Xd = np.stack(log.X_discard).astype(np.float32) if log.X_discard else np.zeros((0, 15, 105), np.float32)
+        yd = np.array(log.y_discard, dtype=np.int64)
 
-    # Xd = np.stack(log.X_discard).astype(np.float32) if log.X_discard else np.zeros((0, 105), np.float32)
-    # yd = np.array(log.y_discard, dtype=np.float32)
-    Xd = np.stack(log.X_discard).astype(np.float32) if log.X_discard else np.zeros((0, 15, 105), np.float32)
-    yd = np.array(log.y_discard, dtype=np.int64)
-    assert Xd.ndim == 3 
-    assert Xd.shape[1] == 15
-    assert yd.dtype == np.int64
-    assert yd.min() >= 0 and yd.max() < 15
+        assert Xd.ndim == 3
+        assert Xd.shape[1] == 15
+        assert Xd.shape[2] == 105
+        assert yd.ndim == 1
+        assert yd.shape[0] == Xd.shape[0]
+        assert yd.min() >= 0 and yd.max() < 15
+
+    elif strategy == "regression":
+        Xd = np.stack(log.X_discard).astype(np.float32) if log.X_discard else np.zeros((0, 105), np.float32)
+        yd = np.array(log.y_discard, dtype=np.float32)
+
+        assert Xd.ndim == 2
+        assert Xd.shape[1] == 105
+        assert yd.ndim == 1
+        assert yd.shape[0] == Xd.shape[0]
 
     Xp = np.stack(log.X_pegging).astype(np.float32) if log.X_pegging else np.zeros((0, 188), np.float32)
     yp = np.array(log.y_pegging, dtype=np.float32)
@@ -392,7 +409,7 @@ if __name__ == "__main__":
     args = ap.parse_args()
     generate_il_data(args.games, args.out_dir, args.seed, args.strategy)
 
-# python .\scripts\generate_il_data.py
+# python .\scripts\generate_il_data.py --games 10
 #  python .\scripts\generate_il_data.py --games 2000 --out_dir "il_datasets/"
 # python .\scripts\train_linear_models.py
 # python scripts/benchmark_2_players.py --players neural,random

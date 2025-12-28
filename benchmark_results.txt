@@ -1,11 +1,18 @@
-Trained using basic discard strategy and basic pegging strategy
-neural vs reasonable after 12000.0 training games wins=45/500 winrate=0.090 (95% CI 0.068 - 0.118) avg point diff -17.88
+Trained using beginner discard strategy and beginner pegging strategy
+neural vs beginner after 12000.0 training games wins=45/500 winrate=0.090 (95% CI 0.068 - 0.118) avg point diff -17.88
 neural vs random after 12000.0 training games wins=330ish/500
-neural_discard vs reasonable after 12000.0 training games wins=72/500 winrate=0.144 (95% CI 0.116 - 0.177) avg point diff -14.14
-neural_peg vs reasonable after 12000.0 training games wins=184/500 winrate=0.368 (95% CI 0.327 - 0.411) avg point diff -2.02
+Check only discard and only pegging vs beginner
+neural_discard vs beginner after 12000.0 training games wins=72/500 winrate=0.144 (95% CI 0.116 - 0.177) avg point diff -14.14
+neural_peg vs beginner after 12000.0 training games wins=184/500 winrate=0.368 (95% CI 0.327 - 0.411) avg point diff -2.02
 
 Training using monte carle discard strategy and basic pegging strategy
-neural vs reasonable after 2000.0 training games wins=43/500 winrate=0.086 (95% CI 0.064 - 0.114) avg point diff -18.83
+neural vs beginner after 2000.0 training games wins=43/500 winrate=0.086 (95% CI 0.064 - 0.114) avg point diff -18.83
 neural vs random after 2000.0 training games wins=331/500 winrate=0.662 (95% CI 0.619 - 0.702) avg point diff 7.02
 NeuralRegressionPlayer vs random after 12000.0 training games wins=333/500 winrate=0.666 (95% CI 0.624 - 0.706) avg point diff 7.24
 NeuralRegressionPlayer vs beginner after 12000.0 training games wins=45/500 winrate=0.090 (95% CI 0.068 - 0.118) avg point diff -18.50
+
+Use classification, check how number of training games affects winrate
+NeuralClassificationPlayer vs beginner after 20 training games wins=28/500 winrate=0.056 (95% CI 0.039 - 0.080) avg point diff -21.77
+NeuralClassificationPlayer vs random after 20 training games wins=278/500 winrate=0.556 (95% CI 0.512 - 0.599) avg point diff 2.54
+NeuralClassificationPlayer vs beginner after 220 training games wins=18/500 winrate=0.036 (95% CI 0.023 - 0.056) avg point diff -21.71
+NeuralClassificationPlayer vs random after 220 training games wins=273/500 winrate=0.546 (95% CI 0.502 - 0.589) avg point diff 3.55

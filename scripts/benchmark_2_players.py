@@ -11,13 +11,15 @@ import sys
 import numpy as np
 import os
 
+from crib_ai_trainer.utils import play_multiple_games
+
 sys.path.insert(0, ".")
 
 from crib_ai_trainer.constants import MODELS_DIR, TRAINING_DATA_DIR
-from cribbage import cribbagegame
+
 from crib_ai_trainer.players.random_player import RandomPlayer
 from crib_ai_trainer.players.rule_based_player import BeginnerPlayer
-from crib_ai_trainer.players.neural_player import LinearValueModel, NeuralClassificationPlayer, NeuralRegressionPlayer
+from crib_ai_trainer.players.neural_player import LinearDiscardClassifier, LinearValueModel, NeuralClassificationPlayer, NeuralRegressionPlayer
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -39,26 +41,9 @@ def get_scores(game) -> tuple[int, int]:
     raise RuntimeError("Can't read final scores from game. Add a get_scores() mapping for your engine.")
 
 
-def play_game(p0, p1) -> tuple[int, int]:
-    game = cribbagegame.CribbageGame(players=[p0, p1])
-    final_pegging_scores = game.start()
-    return (final_pegging_scores[0], final_pegging_scores[1])
-    # return get_scores(game)
-
-
-def wilson_ci(wins: int, n: int, z: float = 1.96) -> tuple[float, float]:
-    if n == 0:
-        return (0.0, 0.0)
-    phat = wins / n
-    denom = 1 + z * z / n
-    center = (phat + z * z / (2 * n)) / denom
-    half = (z / denom) * np.sqrt((phat * (1 - phat) / n) + (z * z / (4 * n * n)))
-    return float(center - half), float(center + half)
-
 
 def benchmark_2_players(args) -> int:
-    logger.info("Loading models from %s", args.models_dir)
-    discard_model = LinearValueModel.load_npz(f"{args.models_dir}/discard_linear.npz")
+    logger.info("Loading models from %s", args.models_dir)    
     pegging_model = LinearValueModel.load_npz(f"{args.models_dir}/pegging_linear.npz")
     # print("discard |w|", float(np.linalg.norm(discard_model.w)), "b", float(discard_model.b))
     # print("pegging  |w|", float(np.linalg.norm(pegging_model.w)), "b", float(pegging_model.b))
@@ -68,12 +53,12 @@ def benchmark_2_players(args) -> int:
     # breakpoint()
     rng = np.random.default_rng(args.seed)
 
-    wins = 0
-    diffs = []
     def player_factory(name: str):
         if name == "NeuralClassificationPlayer":
+            discard_model = LinearDiscardClassifier.load_npz(f"{args.models_dir}/discard_linear.npz")
             return NeuralClassificationPlayer(discard_model, pegging_model, name=name)
         elif name == "NeuralRegressionPlayer":
+            discard_model = LinearValueModel.load_npz(f"{args.models_dir}/discard_linear.npz")
             return NeuralRegressionPlayer(discard_model, pegging_model, name=name)
         elif name == "beginner":
             return BeginnerPlayer(name=name)
@@ -94,27 +79,9 @@ def benchmark_2_players(args) -> int:
 
     p0 = player_factory(player_names[0])
     p1 = player_factory(player_names[1])
-
-
-
-    for i in range(args.games):
-        if (i % 100) == 0:
-            logger.info(f"Playing game {i}/{args.games}")
-        # Alternate seats because cribbage has dealer advantage
-        if i % 2 == 0:
-            s0, s1 = play_game(p0, p1)
-            diff = s0 - s1
-            if diff > 0:
-                wins += 1
-        else:
-            s0, s1 = play_game(p1, p0)
-            diff = s1 - s0
-            if diff > 0:
-                wins += 1
-        diffs.append(diff)
-
-    winrate = wins / args.games
-    lo, hi = wilson_ci(wins, args.games)    
+    # {"wins":wins, "diffs": diffs, "winrate": winrate, "ci_lo": lo, "ci_hi": hi} 
+    results = play_multiple_games(args.games, p0=p0, p1=p1)
+    wins, diffs, winrate, lo, hi = results["wins"], results["diffs"], results["winrate"], results["ci_lo"], results["ci_hi"]
     file_list = os.listdir(TRAINING_DATA_DIR) # todo need to be able to pass in
     logger.info(f"file_list: {file_list}")
     estimated_training_games = len(file_list) * 2000 / 2
@@ -132,6 +99,7 @@ if __name__ == "__main__":
     ap.add_argument("--games", type=int, default=500)
     ap.add_argument("--models_dir", type=str, default=MODELS_DIR)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--auto_random_benchmark", default=True)
     args = ap.parse_args()
     logger.info(f"models dir: {args.models_dir}")
     benchmark_2_players(args)

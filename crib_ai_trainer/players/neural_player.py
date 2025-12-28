@@ -48,7 +48,116 @@ def featurize_pegging(
         cand_vec,
     ])
 
+
+class LinearDiscardClassifier:
+    """
+    Scores each of 15 discard options with a linear model:
+      score_i = w·x_i + b
+    Train with softmax cross-entropy on the best option label (0..14).
+
+    Expects X shape (N, 15, D), y shape (N,)
+    """
+    def __init__(self, n_features: int):
+        self.w = np.zeros(n_features, dtype=np.float32)
+        self.b = 0.0
+
+    def predict_scores(self, X15: np.ndarray) -> np.ndarray:
+        # X15: (15, D) -> (15,)
+        return (X15 @ self.w + self.b).astype(np.float32)
+
+    def fit_ce(
+        self,
+        X: np.ndarray,
+        y: np.ndarray,
+        *,
+        lr: float = 0.05,
+        epochs: int = 10,
+        batch_size: int = 256,
+        l2: float = 0.0,
+        seed: int = 0,
+        shuffle: bool = True,
+    ) -> List[float]:
+        if X.ndim != 3:
+            raise ValueError(f"X must be 3D (N,15,D), got {X.shape}")
+        if X.shape[1] != 15:
+            raise ValueError(f"X must have 15 options, got {X.shape}")
+        if y.ndim != 1:
+            raise ValueError(f"y must be 1D (N,), got {y.shape}")
+        if X.shape[0] != y.shape[0]:
+            raise ValueError(f"X and y must share N, got {X.shape[0]} and {y.shape[0]}")
+        if X.shape[2] != self.w.shape[0]:
+            raise ValueError(f"X has D={X.shape[2]} but model expects {self.w.shape[0]}")
+
+        rng = np.random.default_rng(seed)
+        N = X.shape[0]
+        X = X.astype(np.float32, copy=False)
+        y = y.astype(np.int64, copy=False)
+
+        losses: List[float] = []
+
+        for _ in range(epochs):
+            idx = np.arange(N)
+            if shuffle:
+                rng.shuffle(idx)
+
+            epoch_loss = 0.0
+            n_seen = 0
+
+            for start in range(0, N, batch_size):
+                batch_idx = idx[start:start + batch_size]
+                Xb = X[batch_idx]  # (B,15,D)
+                yb = y[batch_idx]  # (B,)
+
+                # scores: (B,15)
+                scores = np.tensordot(Xb, self.w, axes=([2], [0])) + self.b
+
+                # stable softmax
+                scores = scores - scores.max(axis=1, keepdims=True)
+                exp_scores = np.exp(scores)
+                probs = exp_scores / exp_scores.sum(axis=1, keepdims=True)  # (B,15)
+
+                # CE loss
+                p_true = probs[np.arange(len(batch_idx)), yb]
+                batch_loss = float(-np.mean(np.log(p_true + 1e-12)))
+                epoch_loss += batch_loss * len(batch_idx)
+                n_seen += len(batch_idx)
+
+                # gradient wrt scores: probs - one_hot(y)
+                grad_scores = probs
+                grad_scores[np.arange(len(batch_idx)), yb] -= 1.0
+                grad_scores /= float(len(batch_idx))  # mean
+
+                # grad_w: sum over options and batch
+                # (B,15,D) weighted by (B,15) -> (D,)
+                grad_w = np.tensordot(grad_scores, Xb, axes=([0, 1], [0, 1])).astype(np.float32)
+                grad_b = float(np.sum(grad_scores))
+
+                if l2 > 0.0:
+                    grad_w += 2.0 * l2 * self.w
+
+                self.w -= lr * grad_w
+                self.b -= lr * grad_b
+
+            losses.append(epoch_loss / max(1, n_seen))
+
+        return losses
+
+    def save_npz(self, path: str) -> None:
+        np.savez(path, w=self.w, b=np.array([self.b], dtype=np.float32))
+
+    @classmethod
+    def load_npz(cls, path: str) -> "LinearDiscardClassifier":
+        data = np.load(path)
+        w = data["w"].astype(np.float32)
+        b = float(data["b"].reshape(-1)[0])
+        m = cls(int(w.shape[0]))
+        m.w = w
+        m.b = b
+        return m
+
+
 class LinearValueModel:
+    # used for regression
     def __init__(self, n_features):
         self.w = np.zeros(n_features, dtype=np.float32)
         self.b = 0.0
