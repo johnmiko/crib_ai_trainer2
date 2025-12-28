@@ -26,7 +26,7 @@ from crib_ai_trainer.constants import TRAINING_DATA_DIR
 import argparse
 from itertools import combinations
 from dataclasses import dataclass, field
-from typing import List, Tuple, Optional
+from typing import Any, List, Tuple, Optional
 
 import numpy as np
 
@@ -162,20 +162,24 @@ def estimate_discard_value_mc_fast_from_remaining(
 
     return total / float(k_starters)
 
+
+class LoggedData:
+    pass
+
 @dataclass
-class LoggedRegressionPegData:
+class LoggedRegressionPegData(LoggedData):
     X_pegging: List[np.ndarray] = field(default_factory=list)
     y_pegging: List[float] = field(default_factory=list)
 
 @dataclass
-class LoggedRegressionDiscardData:
+class LoggedRegressionDiscardData(LoggedData):
     X_discard: List[np.ndarray] = field(default_factory=list)
     y_discard: List[float] = field(default_factory=list)
 
 @dataclass
-class LoggedClassificationDiscardData:
-    X_discard_hand: List[np.ndarray] = field(default_factory=list)   # each is (15, D)
-    y_discard_label: List[int] = field(default_factory=list)         # each is 0..14
+class LoggedClassificationDiscardData(LoggedData):
+    X_discard: List[np.ndarray] = field(default_factory=list)   # each is (15, D)
+    y_discard: List[int] = field(default_factory=list)         # each is 0..14
 
 @dataclass
 class LoggedRegPegRegDiscardData(LoggedRegressionPegData, LoggedRegressionDiscardData):
@@ -186,17 +190,25 @@ class LoggedRegPegClasDiscardData(LoggedRegressionPegData, LoggedClassificationD
     pass
 
 
-class LoggingBeginnerPlayer(BeginnerPlayer):
+class LoggingPlayer(BeginnerPlayer):
     """Wrap BeginnerPlayer so we can collect training data while it plays."""
 
-    def __init__(self, name: str, log: LoggedData, seed: int = 0):
+    def __init__(self, name: str, log: LoggedData, discard_strategy, pegging_strategy, seed: int = 0, ):
         super().__init__(name=name)
         self._rng = random.Random(seed)
         self._full_deck = get_full_deck()
         self._log = log
+        if discard_strategy == "classification":
+            self._discard_strategy = self.select_crib_cards_classifier
+        elif discard_strategy == "regression":
+            self._discard_strategy = self.select_crib_cards_regresser
+        else:
+            raise ValueError(f"Unknown discard_strategy: {discard_strategy}")        
+        self._pegging_strategy = pegging_strategy # not implemented yet
 
     def select_crib_cards(self, hand: List[Card], dealer_is_self: bool) -> Tuple[Card, Card]:
-        return self.select_crib_cards_classifier(hand, dealer_is_self)
+        # return self.select_crib_cards_classifier(hand, dealer_is_self)
+        return self._discard_strategy(hand, dealer_is_self)
     
     def select_crib_cards_classifier(self, hand: List[Card], dealer_is_self: bool) -> Tuple[Card, Card]:
         hand_set = set(hand)
@@ -231,8 +243,8 @@ class LoggingBeginnerPlayer(BeginnerPlayer):
         # log ONE example for this 6-card hand:
         # X_hand is (15, D), label is best option index 0..14
         X_hand = np.stack(Xs, axis=0).astype(np.float32)  # (15, D)
-        self._log.X_discard_hand.append(X_hand)
-        self._log.y_discard_label.append(best_i)
+        self._log.X_discard.append(X_hand)
+        self._log.y_discard.append(best_i)
 
         return discards_list[best_i]
 
@@ -314,18 +326,24 @@ def play_one_game(players) -> None:
     final_pegging_score = game.start()
 
 
-def generate_il_data(games, out_dir, seed) -> int:
+def generate_il_data(games, out_dir, seed, strategy) -> int:
     logger.info(f"Generating IL data for {games} games into {out_dir} using 2 reasonable players")
     rng = np.random.default_rng(seed)
-    log = LoggedData()
-
-    # Two logging reasonable players self-play
-    p1 = LoggingBeginnerPlayer("teacher1", log)
-    p2 = LoggingBeginnerPlayer("teacher2", log)
+    # log = LoggedData()
+    # todo - this probably needs to be dynamic
+    if strategy == "classification":
+        log = LoggedRegPegClasDiscardData()
+        p1 = LoggingPlayer("teacher1", log, discard_strategy="classification", pegging_strategy="regression")
+        p2 = LoggingPlayer("teacher2", log, discard_strategy="classification", pegging_strategy="regression")
+    elif strategy == "regression":  
+        log = LoggedRegPegRegDiscardData()
+        p1 = LoggingPlayer("teacher1", log, discard_strategy="regression", pegging_strategy="regression")
+        p2 = LoggingPlayer("teacher2", log, discard_strategy="regression", pegging_strategy="regression")
+    
 
     for i in range(games):
         if i % 100 == 0:
-            logger.info(f"Playing game {i}/{games}")
+            logger.info(f"Playing games {i} - {i + 100}/{games}")
         # If your engine uses RNG/Deck seeding, set it here.
         # Some engines read global RNG; we at least randomize player order sometimes.
         if (i % 2) == 1:
@@ -339,8 +357,8 @@ def generate_il_data(games, out_dir, seed) -> int:
 
     # Xd = np.stack(log.X_discard).astype(np.float32) if log.X_discard else np.zeros((0, 105), np.float32)
     # yd = np.array(log.y_discard, dtype=np.float32)
-    Xd = np.stack(log.X_discard_hand).astype(np.float32) if log.X_discard_hand else np.zeros((0, 15, 105), np.float32)
-    yd = np.array(log.y_discard_label, dtype=np.int64)
+    Xd = np.stack(log.X_discard).astype(np.float32) if log.X_discard else np.zeros((0, 15, 105), np.float32)
+    yd = np.array(log.y_discard, dtype=np.int64)
     assert Xd.ndim == 3 
     assert Xd.shape[1] == 15
     assert yd.dtype == np.int64
@@ -370,9 +388,11 @@ if __name__ == "__main__":
     default_out_dir = TRAINING_DATA_DIR
     ap.add_argument("--out_dir", type=str, default=default_out_dir)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--strategy", type=str, default="classification")
     args = ap.parse_args()
-    generate_il_data(args.games, args.out_dir, args.seed)
+    generate_il_data(args.games, args.out_dir, args.seed, args.strategy)
 
+# python .\scripts\generate_il_data.py
 #  python .\scripts\generate_il_data.py --games 2000 --out_dir "il_datasets/"
 # python .\scripts\train_linear_models.py
 # python scripts/benchmark_2_players.py --players neural,random

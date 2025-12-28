@@ -13,11 +13,11 @@ import os
 
 sys.path.insert(0, ".")
 
-from crib_ai_trainer.constants import MODELS_DIR
+from crib_ai_trainer.constants import MODELS_DIR, TRAINING_DATA_DIR
 from cribbage import cribbagegame
 from crib_ai_trainer.players.random_player import RandomPlayer
-from crib_ai_trainer.players.rule_based_player import BeginnerPlayer, basic_pegging_strategy
-from crib_ai_trainer.players.neural_player import LinearValueModel, NeuralDiscardPlayer, NeuralPegPlayer, NeuralPlayer
+from crib_ai_trainer.players.rule_based_player import BeginnerPlayer
+from crib_ai_trainer.players.neural_player import LinearValueModel, NeuralClassificationPlayer, NeuralRegressionPlayer
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -71,14 +71,15 @@ def benchmark_2_players(args) -> int:
     wins = 0
     diffs = []
     def player_factory(name: str):
-        if name == "neural":
-            return NeuralPlayer(discard_model, pegging_model, name="neural")
-        elif name == "reasonable":
-            return BeginnerPlayer(name="reasonable")
+        if name == "NeuralClassificationPlayer":
+            return NeuralClassificationPlayer(discard_model, pegging_model, name=name)
+        elif name == "NeuralRegressionPlayer":
+            return NeuralRegressionPlayer(discard_model, pegging_model, name=name)
+        elif name == "beginner":
+            return BeginnerPlayer(name=name)
         elif name == "random":            
-            return RandomPlayer(name="random", seed=args.seed)
-        else:
-            raise ValueError(f"Unknown player type: {name}")
+            return RandomPlayer(name=name, seed=args.seed)
+        raise ValueError(f"Unknown player type: {name}")
     
     player_names = args.players.split(",")
     if len(player_names) != 2:
@@ -114,7 +115,8 @@ def benchmark_2_players(args) -> int:
 
     winrate = wins / args.games
     lo, hi = wilson_ci(wins, args.games)    
-    file_list = os.listdir("il_datasets")
+    file_list = os.listdir(TRAINING_DATA_DIR) # todo need to be able to pass in
+    logger.info(f"file_list: {file_list}")
     estimated_training_games = len(file_list) * 2000 / 2
     avg_diff = float(np.mean(diffs)) if diffs else 0.0
     output_str = f"{player_names[0]} vs {player_names[1]} after {estimated_training_games} training games wins={wins}/{args.games} winrate={winrate:.3f} (95% CI {lo:.3f} - {hi:.3f}) avg point diff {avg_diff:.2f}\n"
@@ -134,5 +136,7 @@ if __name__ == "__main__":
     logger.info(f"models dir: {args.models_dir}")
     benchmark_2_players(args)
 
-# python scripts/benchmark_2_players.py --players neural,reasonable --games 500 --models_dir models
-# python scripts/benchmark_2_players.py --players neural,random --games 500 --models_dir models
+# python scripts/benchmark_2_players.py --players NeuralClassificationPlayer,beginner --games 500
+# python scripts/benchmark_2_players.py --players NeuralClassificationPlayer,random --games 500
+# python scripts/benchmark_2_players.py --players NeuralRegressionPlayer,random --games 500
+# python scripts/benchmark_2_players.py --players NeuralRegressionPlayer,beginner --games 500
