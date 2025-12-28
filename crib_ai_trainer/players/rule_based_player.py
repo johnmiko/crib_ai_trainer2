@@ -116,7 +116,7 @@ from typing import Iterable, List, Tuple
 
 
 def get_full_deck() -> List["Card"]:
-    return list(Deck().cards)
+    return [Card(f"{r}{s}") for r in Deck.RANKS for s in Deck.SUITS]
 
 
 def remaining_deck(full_deck: List["Card"], exclude: Iterable["Card"]) -> List["Card"]:

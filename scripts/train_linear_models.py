@@ -12,23 +12,14 @@ import argparse
 import numpy as np
 
 sys.path.insert(0, ".")
+from crib_ai_trainer.constants import MODELS_DIR, TRAINING_DATA_DIR
 from crib_ai_trainer.players.neural_player import LinearValueModel
 import logging
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
-def main() -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--data_dir", type=str, default="data")
-    ap.add_argument("--out_dir", type=str, default="models")
-    ap.add_argument("--lr", type=float, default=0.05)
-    ap.add_argument("--epochs", type=int, default=20)
-    ap.add_argument("--batch_size", type=int, default=8192)
-    ap.add_argument("--l2", type=float, default=0.0)
-    ap.add_argument("--seed", type=int, default=0)
-    args = ap.parse_args()
-
+def train_linear_models(args) -> int:
     data_dir = Path(args.data_dir)
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -101,7 +92,16 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    main()
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--data_dir", type=str, default=TRAINING_DATA_DIR)
+    ap.add_argument("--out_dir", type=str, default=MODELS_DIR)
+    ap.add_argument("--lr", type=float, default=0.05)
+    ap.add_argument("--epochs", type=int, default=20)
+    ap.add_argument("--batch_size", type=int, default=8192)
+    ap.add_argument("--l2", type=float, default=0.0)
+    ap.add_argument("--seed", type=int, default=0)
+    args = ap.parse_args()
+    train_linear_models(args)
 
 # python .\scripts\train_linear_models.py --data_dir "il_datasets/" --out_dir models --epochs 20
 # train over the whole dataset 20 times

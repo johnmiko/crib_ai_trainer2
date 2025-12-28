@@ -19,6 +19,8 @@ import sys
 
 from cribbage.cribbagegame import score_hand, score_play as score_pegging_play
 
+from crib_ai_trainer.constants import TRAINING_DATA_DIR
+
 sys.path.insert(0, ".")
 
 import argparse
@@ -55,34 +57,110 @@ def estimate_discard_value_mc(
     n_starters: int = 16,
     n_opp_discards: int = 8,
 ) -> float:
-    remaining = [c for c in full_deck if c not in hand]
-    # estimate the potential crib value using monte carlo
+    # remaining cards (46)
+    hand_set = set(hand)
+    remaining: List[Card] = [c for c in full_deck if c not in hand_set]
+    n = len(remaining)
+    if n == 0:
+        return 0.0
+
+    k_starters = min(n_starters, n)
+
+    # sample starter indices without copying big lists repeatedly
+    # if k_starters is small, randint loop is fine; if large, sample indices once.
+    starter_idxs = rng.sample(range(n), k=k_starters)
+
+    kept_plus = list(kept) + [None]  # type: ignore
+    crib_cards = [discards[0], discards[1], None, None, None]  # 2 discards + 2 opp + starter
 
     total = 0.0
-    trials = 0
+    for si in starter_idxs:
+        starter = remaining[si]
 
-    # sample starter cards
-    for starter in rng.sample(remaining, k=min(n_starters, len(remaining))):
-        # hand value with starter
-        hand_pts = score_hand(kept + [starter], is_crib=False)
+        # hand pts with starter
+        kept_plus[-1] = starter
+        hand_pts = score_hand(kept_plus, is_crib=False)
 
-        # expected crib value by sampling opponent discards
+        # crib EV: sample opponent discards excluding starter, without building rem2
         crib_total = 0.0
-        crib_trials = 0
-        rem2 = [c for c in remaining if c != starter]
-
         for _ in range(n_opp_discards):
-            opp = rng.sample(rem2, k=2)
-            crib_pts = score_hand(discards + opp + [starter], is_crib=True)
-            crib_total += crib_pts
-            crib_trials += 1
+            # choose two distinct indices not equal to si
+            i = rng.randrange(n)
+            while i == si:
+                i = rng.randrange(n)
 
-        crib_ev = crib_total / max(1, crib_trials)
+            j = rng.randrange(n - 1)
+            # map j into [0..n-1] excluding i
+            if j >= i:
+                j += 1
+            while j == si:
+                j = rng.randrange(n - 1)
+                if j >= i:
+                    j += 1
+
+            opp1 = remaining[i]
+            opp2 = remaining[j]
+
+            crib_cards[2] = opp1
+            crib_cards[3] = opp2
+            crib_cards[4] = starter
+            crib_total += score_hand(crib_cards, is_crib=True)
+
+        crib_ev = crib_total / float(n_opp_discards) if n_opp_discards > 0 else 0.0
 
         total += hand_pts + (crib_ev if dealer_is_self else -crib_ev)
-        trials += 1
 
-    return total / max(1, trials)
+    return total / float(k_starters)
+
+def estimate_discard_value_mc_fast_from_remaining(
+    kept: List[Card],
+    discards: List[Card],
+    dealer_is_self: bool,
+    remaining: List[Card],
+    rng: random.Random,
+    n_starters: int = 16,
+    n_opp_discards: int = 8,
+) -> float:
+    n = len(remaining)
+    if n == 0:
+        return 0.0
+
+    k_starters = min(n_starters, n)
+    starter_idxs = rng.sample(range(n), k=k_starters)
+
+    kept_plus = list(kept) + [None]  # type: ignore
+    crib_cards = [discards[0], discards[1], None, None, None]  # type: ignore
+
+    total = 0.0
+    for si in starter_idxs:
+        starter = remaining[si]
+
+        kept_plus[-1] = starter
+        hand_pts = score_hand(kept_plus, is_crib=False)
+
+        crib_total = 0.0
+        for _ in range(n_opp_discards):
+            i = rng.randrange(n)
+            while i == si:
+                i = rng.randrange(n)
+
+            j = rng.randrange(n - 1)
+            if j >= i:
+                j += 1
+            while j == si:
+                j = rng.randrange(n - 1)
+                if j >= i:
+                    j += 1
+
+            crib_cards[2] = remaining[i]
+            crib_cards[3] = remaining[j]
+            crib_cards[4] = starter
+            crib_total += score_hand(crib_cards, is_crib=True)
+
+        crib_ev = crib_total / float(n_opp_discards) if n_opp_discards else 0.0
+        total += hand_pts + (crib_ev if dealer_is_self else -crib_ev)
+
+    return total / float(k_starters)
 
 
 @dataclass
@@ -96,13 +174,15 @@ class LoggedData:
 class LoggingReasonablePlayer(ReasonablePlayer):
     """Wrap ReasonablePlayer so we can collect training data while it plays."""
 
-    def __init__(self, name: str, log: LoggedData):
+    def __init__(self, name: str, log: LoggedData, seed: int = 0):
         super().__init__(name=name)
+        self._rng = random.Random(seed)
+        self._full_deck = get_full_deck()
         self._log = log
 
     def select_crib_cards(self, hand: List[Card], dealer_is_self: bool) -> Tuple[Card, Card]:
-        full_deck = get_full_deck()
-        rng = random.Random(0)  # ideally: self._rng seeded per game, not constant 0
+        hand_set = set(hand)
+        remaining = [c for c in self._full_deck if c not in hand_set]  # 46
 
         best_y = float("-inf")
         best_discards: List[Tuple[Card, Card]] = []
@@ -110,21 +190,18 @@ class LoggingReasonablePlayer(ReasonablePlayer):
         for kept in combinations(hand, 4):
             kept = list(kept)
             discards = [c for c in hand if c not in kept]
-            assert len(discards) == 2
 
-            # y already includes: avg(hand_pts_with_starter +/- crib_ev)
-            y = estimate_discard_value_mc(
-                hand=hand,
+            y = estimate_discard_value_mc_fast_from_remaining(
                 kept=kept,
                 discards=discards,
                 dealer_is_self=dealer_is_self,
-                full_deck=full_deck,
-                rng=rng,
+                remaining=remaining,
+                rng=self._rng,
                 n_starters=16,
                 n_opp_discards=8,
             )
 
-            x = featurize_discard(hand, kept, discards, dealer_is_self)
+            x = featurize_discard(kept, discards, dealer_is_self)  # or drop hand param
             self._log.X_discard.append(x)
             self._log.y_discard.append(float(y))
 
@@ -134,9 +211,7 @@ class LoggingReasonablePlayer(ReasonablePlayer):
             elif y == best_y:
                 best_discards.append(tuple(discards))
 
-        # optionally break ties randomly:
-        # return rng.choice(best_discards)
-        return best_discards[0]  # deterministic
+        return best_discards[0]
 
     def select_card_to_play(self, hand: List[Card], table, crib, count: int):
         # table is the list of cards currently on the table
@@ -224,7 +299,8 @@ def generate_il_data(games, out_dir, seed) -> int:
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--games", type=int, default=2000)
-    ap.add_argument("--out_dir", type=str, default="/scripts/il_datasets/")
+    default_out_dir = TRAINING_DATA_DIR
+    ap.add_argument("--out_dir", type=str, default=default_out_dir)
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
     generate_il_data(args.games, args.out_dir, args.seed)

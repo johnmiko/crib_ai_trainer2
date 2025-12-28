@@ -9,6 +9,9 @@ from __future__ import annotations
 import argparse
 import sys
 import numpy as np
+import os
+
+from crib_ai_trainer.constants import MODELS_DIR
 
 sys.path.insert(0, ".")
 
@@ -55,18 +58,12 @@ def wilson_ci(wins: int, n: int, z: float = 1.96) -> tuple[float, float]:
     return float(center - half), float(center + half)
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--players", type=str, default="neural,reasonable")
-    ap.add_argument("--games", type=int, default=500)
-    ap.add_argument("--models_dir", type=str, default="models")
-    ap.add_argument("--seed", type=int, default=0)
-    args = ap.parse_args()
+def benchmark_2_players(args) -> int:
     logger.info("Loading models from %s", args.models_dir)
     discard_model = LinearValueModel.load_npz(f"{args.models_dir}/discard_linear.npz")
     pegging_model = LinearValueModel.load_npz(f"{args.models_dir}/pegging_linear.npz")
-    print("discard |w|", float(np.linalg.norm(discard_model.w)), "b", float(discard_model.b))
-    print("pegging  |w|", float(np.linalg.norm(pegging_model.w)), "b", float(pegging_model.b))
+    # print("discard |w|", float(np.linalg.norm(discard_model.w)), "b", float(discard_model.b))
+    # print("pegging  |w|", float(np.linalg.norm(pegging_model.w)), "b", float(pegging_model.b))
     # discard and pegging weights after 4000 games
     # discard |w| 3.507629156112671 b 1.5574564933776855
     # pegging  |w| 1.011649489402771 b 0.2532176971435547
@@ -118,8 +115,7 @@ def main() -> int:
         diffs.append(diff)
 
     winrate = wins / args.games
-    lo, hi = wilson_ci(wins, args.games)
-    import os
+    lo, hi = wilson_ci(wins, args.games)    
     file_list = os.listdir("il_datasets")
     estimated_training_games = len(file_list) * 2000 / 2
     avg_diff = float(np.mean(diffs)) if diffs else 0.0
@@ -131,7 +127,13 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    main()
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--players", type=str, default="neural,reasonable")
+    ap.add_argument("--games", type=int, default=500)
+    ap.add_argument("--models_dir", type=str, default=MODELS_DIR)
+    ap.add_argument("--seed", type=int, default=0)
+    args = ap.parse_args()
+    benchmark_2_players(args)
 
 # python scripts/benchmark_2_players.py --players neural,reasonable --games 500 --models_dir models
 # python scripts/benchmark_2_players.py --players neural,random --games 500 --models_dir models

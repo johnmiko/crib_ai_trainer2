@@ -18,3 +18,4 @@ trained_models/
 !trained_models/**/*.npz__pycache__/
 *.pyc
 to do.txt
+.env
