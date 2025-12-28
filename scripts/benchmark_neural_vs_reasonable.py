@@ -61,10 +61,13 @@ def main() -> int:
     ap.add_argument("--models_dir", type=str, default="models")
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
-
+    logger.info("Loading models from %s", args.models_dir)
     discard_model = LinearValueModel.load_npz(f"{args.models_dir}/discard_linear.npz")
     pegging_model = LinearValueModel.load_npz(f"{args.models_dir}/pegging_linear.npz")
 
+    print("discard |w|", float(np.linalg.norm(discard_model.w)), "b", float(discard_model.b))
+    print("pegging  |w|", float(np.linalg.norm(pegging_model.w)), "b", float(pegging_model.b))
+    breakpoint()
     rng = np.random.default_rng(args.seed)
 
     wins = 0
@@ -75,15 +78,15 @@ def main() -> int:
         # Alternate seats because cribbage has dealer advantage
         if i % 2 == 0:
             p0 = NeuralPlayer(discard_model, pegging_model, name="neural")
-            p1 = NeuralPlayer(discard_model, pegging_model, name="neural")
-            # p1 = ReasonablePlayer(name="reasonable")
+            # p1 = NeuralPlayer(discard_model, pegging_model, name="neural")
+            p1 = ReasonablePlayer(name="reasonable")
             s0, s1 = play_game(p0, p1)
             diff = s0 - s1
             if diff > 0:
                 wins += 1
         else:
-            # p0 = ReasonablePlayer(name="reasonable")
-            p0 = NeuralPlayer(discard_model, pegging_model, name="neural")
+            p0 = ReasonablePlayer(name="reasonable")
+            # p0 = NeuralPlayer(discard_model, pegging_model, name="neural")
             p1 = NeuralPlayer(discard_model, pegging_model, name="neural")
             s0, s1 = play_game(p0, p1)
             diff = s1 - s0

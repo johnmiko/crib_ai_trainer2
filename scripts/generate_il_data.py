@@ -113,7 +113,7 @@ def main() -> int:
 
     for i in range(args.games):
         if i % 100 == 0:
-            logger.info(f"Playing game {i+1}/{args.games}")
+            logger.info(f"Playing game {i}/{args.games}")
         # If your engine uses RNG/Deck seeding, set it here.
         # Some engines read global RNG; we at least randomize player order sometimes.
         if (i % 2) == 1:
