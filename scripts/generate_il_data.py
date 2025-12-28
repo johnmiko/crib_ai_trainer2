@@ -162,15 +162,28 @@ def estimate_discard_value_mc_fast_from_remaining(
 
     return total / float(k_starters)
 
-
 @dataclass
-class LoggedData:
-    # X_discard: List[np.ndarray] = field(default_factory=list)
-    # y_discard: List[float] = field(default_factory=list)
+class LoggedRegressionPegData:
     X_pegging: List[np.ndarray] = field(default_factory=list)
     y_pegging: List[float] = field(default_factory=list)
+
+@dataclass
+class LoggedRegressionDiscardData:
+    X_discard: List[np.ndarray] = field(default_factory=list)
+    y_discard: List[float] = field(default_factory=list)
+
+@dataclass
+class LoggedClassificationDiscardData:
     X_discard_hand: List[np.ndarray] = field(default_factory=list)   # each is (15, D)
     y_discard_label: List[int] = field(default_factory=list)         # each is 0..14
+
+@dataclass
+class LoggedRegPegRegDiscardData(LoggedRegressionPegData, LoggedRegressionDiscardData):
+    pass
+
+@dataclass
+class LoggedRegPegClasDiscardData(LoggedRegressionPegData, LoggedClassificationDiscardData):
+    pass
 
 
 class LoggingReasonablePlayer(ReasonablePlayer):

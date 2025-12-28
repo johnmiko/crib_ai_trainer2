@@ -5,7 +5,7 @@ from typing import List, Tuple
 from cribbage.playingcards import Card
 
 from crib_ai_trainer.features import multi_hot_cards
-from crib_ai_trainer.players.rule_based_player import basic_crib_strategy, basic_pegging_strategy
+from crib_ai_trainer.players.rule_based_player import ReasonablePlayer, basic_crib_strategy, basic_pegging_strategy
 
 def featurize_discard(
     kept: List[Card],
@@ -148,8 +148,43 @@ class LinearValueModel:
         m.b = b
         return m
 
+def regression_pegging_strategy(pegging_model, hand, table, crib, count):
+    playable = [c for c in hand if c + count <= 31]
+    if not playable:
+        return None
+    best, best_v = None, float("-inf")
+    for c in playable:
+        x = featurize_pegging(hand, table, count, c)  # np array
+        v = float(pegging_model.predict(x))
+        if v > best_v:
+            best_v, best = v, c
+    return best
 
 class NeuralRegressionPlayer:
+    def __init__(self, discard_model, pegging_model, name="neural"):
+        self.name = name
+        self.discard_model = discard_model
+        self.pegging_model = pegging_model
+
+    def select_crib_cards(self, hand: List[Card], dealer_is_self: bool) -> Tuple[Card, Card]:
+        return self.select_crib_cards_regressor(hand, dealer_is_self) # type: ignore
+
+    def select_crib_cards_regressor(self, hand, dealer_is_self):
+        best, best_v = None, float("-inf")
+        for kept in combinations(hand, 4):
+            kept = list(kept)
+            discards = [c for c in hand if c not in kept]
+            x = featurize_discard(kept, discards, dealer_is_self)  # np array
+            v = float(self.discard_model.predict(x))
+            if v > best_v:
+                best_v, best = v, tuple(discards)
+        return best
+
+    def select_card_to_play(self, hand, table, crib, count):
+        best = regression_pegging_strategy(self.pegging_model, hand, table, crib, count)
+        return best
+
+class NeuralClassificationPlayer:
     def __init__(self, discard_model, pegging_model, name="neural"):
         self.name = name
         self.discard_model = discard_model
@@ -173,30 +208,11 @@ class NeuralRegressionPlayer:
         best_i = int(np.argmax(scores))
         return discards_list[best_i]
 
-    def select_crib_cards_regressor(self, hand, dealer_is_self):
-        best, best_v = None, float("-inf")
-        for kept in combinations(hand, 4):
-            kept = list(kept)
-            discards = [c for c in hand if c not in kept]
-            x = featurize_discard(kept, discards, dealer_is_self)  # np array
-            v = float(self.discard_model.predict(x))
-            if v > best_v:
-                best_v, best = v, tuple(discards)
-        return best
-
     def select_card_to_play(self, hand, table, crib, count):
-        playable = [c for c in hand if c + count <= 31]
-        if not playable:
-            return None
-        best, best_v = None, float("-inf")
-        for c in playable:
-            x = featurize_pegging(hand, table, count, c)  # np array
-            v = float(self.pegging_model.predict(x))
-            if v > best_v:
-                best_v, best = v, c
+        best = regression_pegging_strategy(self.pegging_model, hand, table, crib, count)
         return best
 
-class NeuralDiscardPlayer:
+class NeuralDiscardPlayer(ReasonablePlayer):
     def __init__(self, discard_model, pegging_model, name="neural"):
         self.name = name
         self.discard_model = discard_model
@@ -213,21 +229,12 @@ class NeuralDiscardPlayer:
                 best_v, best = v, tuple(discards)
         return best
     
-    def select_card_to_play(self, hand, table, crib, count):
-        playable = [c for c in hand if c + count <= 31]
-        if not playable:
-            return None
-        return basic_pegging_strategy(playable, count, table)
 
-class NeuralPegPlayer:
+class NeuralPegPlayer(ReasonablePlayer):
     def __init__(self, discard_model, pegging_model, name="neural"):
         self.name = name
         self.discard_model = discard_model
         self.pegging_model = pegging_model
-
-    def select_crib_cards(self, hand, dealer_is_self):
-        return basic_crib_strategy(hand, dealer_is_self)
-
 
     def select_card_to_play(self, hand, table, crib, count):
         playable = [c for c in hand if c + count <= 31]
