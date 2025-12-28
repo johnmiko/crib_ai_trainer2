@@ -5,19 +5,19 @@ from typing import List
 from cribbage.playingcards import Card
 
 from crib_ai_trainer.features import multi_hot_cards
+from crib_ai_trainer.players.rule_based_player import basic_crib_strategy, basic_pegging_strategy
 
 def featurize_discard(
-    hand: List[Card],
     kept: List[Card],
     discards: List[Card],
     dealer_is_self: bool,
 ) -> np.ndarray:
-    hand_vec = multi_hot_cards(hand)          # (52,)
+    disc_vec = multi_hot_cards(discards)    # (52,)
     kept_vec = multi_hot_cards(kept)          # (52,)
     dealer_vec = np.array([1.0 if dealer_is_self else 0.0], dtype=np.float32)
 
     return np.concatenate([
-        hand_vec,
+        disc_vec,
         kept_vec,
         dealer_vec,
     ])
@@ -160,7 +160,7 @@ class NeuralPlayer:
         for kept in combinations(hand, 4):
             kept = list(kept)
             discards = [c for c in hand if c not in kept]
-            x = featurize_discard(hand, kept, discards, dealer_is_self)  # np array
+            x = featurize_discard(kept, discards, dealer_is_self)  # np array
             v = float(self.discard_model.predict(x))
             if v > best_v:
                 best_v, best = v, tuple(discards)
@@ -177,3 +177,78 @@ class NeuralPlayer:
             if v > best_v:
                 best_v, best = v, c
         return best
+
+class NeuralDiscardPlayer:
+    def __init__(self, discard_model, pegging_model, name="neural"):
+        self.name = name
+        self.discard_model = discard_model
+        self.pegging_model = pegging_model
+
+    def select_crib_cards(self, hand, dealer_is_self):
+        best, best_v = None, float("-inf")
+        for kept in combinations(hand, 4):
+            kept = list(kept)
+            discards = [c for c in hand if c not in kept]
+            x = featurize_discard(kept, discards, dealer_is_self)  # np array
+            v = float(self.discard_model.predict(x))
+            if v > best_v:
+                best_v, best = v, tuple(discards)
+        return best
+    
+    def select_card_to_play(self, hand, table, crib, count):
+
+        playable = [c for c in hand if c + count <= 31]
+        if not playable:
+            return None
+        return basic_pegging_strategy(playable, count, table)
+
+class NeuralPegPlayer:
+    def __init__(self, discard_model, pegging_model, name="neural"):
+        self.name = name
+        self.discard_model = discard_model
+        self.pegging_model = pegging_model
+
+    def select_crib_cards(self, hand, dealer_is_self):
+        return basic_crib_strategy(hand, dealer_is_self)
+
+
+    def select_card_to_play(self, hand, table, crib, count):
+        playable = [c for c in hand if c + count <= 31]
+        if not playable:
+            return None
+        best, best_v = None, float("-inf")
+        for c in playable:
+            x = featurize_pegging(hand, table, count, c)  # np array
+            v = float(self.pegging_model.predict(x))
+            if v > best_v:
+                best_v, best = v, c
+        return best
+
+# class CustomPlayer:
+#     def __init__(self, select_crib_cards, select_card_to_play, name="neural", seed=0, **kwargs):
+#         self.name = name
+#         if neural_discard_model := kwargs.get("neural_discard_model"):
+#             self.discard_model = neural_discard_model        
+#         if neural_pegging_model := kwargs.get("neural_pegging_model"):
+#             self.pegging_model = neural_pegging_model
+#         if select_crib_cards == "neural":
+#             self.select_crib_cards = NeuralPlayer.select_crib_cards
+#         else:
+#             self.select_crib_cards = select_crib_cards
+#         if select_card_to_play == "neural":
+#             self.select_card_to_play = NeuralPlayer.select_card_to_play
+#         else:
+#             self.select_card_to_play = select_card_to_play
+
+#     def select_crib_cards(self, hand, dealer_is_self):
+#         self.select_crib_cards(hand, dealer_is_self)
+
+#     def play_pegging(self, playable, count, history_since_reset):
+#         self.play_pegging(playable, count, history_since_reset)
+
+#     def select_card_to_play(self, hand, table, crib, count):
+#         playable_cards = [c for c in hand if c + count <= 31]
+#         if not playable_cards:
+#             return None
+#         return self.play_pegging(playable_cards, count, table)
+

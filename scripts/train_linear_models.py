@@ -13,7 +13,10 @@ import numpy as np
 
 sys.path.insert(0, ".")
 from crib_ai_trainer.players.neural_player import LinearValueModel
+import logging
 
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 def main() -> int:
     ap = argparse.ArgumentParser()
@@ -53,6 +56,7 @@ def main() -> int:
     for epoch in range(args.epochs):
         print(f"Epoch {epoch + 1}/{args.epochs}")
         for d_path, p_path in zip(discard_shards, pegging_shards):
+            logger.info(f"  Training on shard {d_path.name} and {p_path.name}")
             with np.load(d_path) as d:
                 Xd = d["X"].astype(np.float32)
                 yd = d["y"].astype(np.float32)
@@ -97,7 +101,7 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()
 
 # python .\scripts\train_linear_models.py --data_dir "il_datasets/" --out_dir models --epochs 20
 # train over the whole dataset 20 times
