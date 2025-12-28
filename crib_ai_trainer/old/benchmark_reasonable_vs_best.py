@@ -3,7 +3,7 @@ Benchmark the 'reasonable' opponent against the 'best' model.
 Run with: .venv\Scripts\Activate.ps1; python -m scripts.benchmark_reasonable_vs_best [num_games]
 """
 import logging
-from crib_ai_trainer.players.rule_based_player import ReasonablePlayer, DifficultReasonablePlayer
+from crib_ai_trainer.players.rule_based_player import BeginnerPlayer, DifficultPlayer
 from crib_ai_trainer.model_registry import load_best_model
 from crib_ai_trainer.game import CribbageGame
 
@@ -12,8 +12,8 @@ def main(num_games=100):
     logger = logging.getLogger(__name__)
     logger.info(f"Benchmarking 'reasonable' opponent vs 'best' model for {num_games} games...")
 
-    reasonable = ReasonablePlayer()
-    difficult = DifficultReasonablePlayer()
+    reasonable = BeginnerPlayer()
+    difficult = DifficultPlayer()
     best_model = load_best_model()
     # Optionally benchmark difficult as well
     logger.info(f"Benchmarking 'difficult' opponent vs 'best' model for {num_games} games...")

@@ -7,18 +7,18 @@ from cribbage.player import RandomPlayer
 from cribbage.playingcards import Card, Deck
 
 from crib_ai_trainer.players.neural_player import LinearValueModel, NeuralPlayer
-from crib_ai_trainer.players.rule_based_player import ReasonablePlayer
+from crib_ai_trainer.players.rule_based_player import BeginnerPlayer
 
 
 @pytest.fixture
 def setUp():
-        players = [ReasonablePlayer(), NeuralPlayer(LinearValueModel(105), LinearValueModel(188))]
+        players = [BeginnerPlayer(), NeuralPlayer(LinearValueModel(105), LinearValueModel(188))]
         game = cribbagegame.CribbageGame(players=players)
         round = cribbagegame.CribbageRound(game, dealer=game.players[0])
         return game, round
 
 def test_full_game():
-    players = [ReasonablePlayer(), NeuralPlayer(LinearValueModel(105), LinearValueModel(188))]
+    players = [BeginnerPlayer(), NeuralPlayer(LinearValueModel(105), LinearValueModel(188))]
     game = cribbagegame.CribbageGame(players=players, seed=42)
     final_score = game.start()
     assert 121 in final_score

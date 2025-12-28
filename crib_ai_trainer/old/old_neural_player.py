@@ -1,12 +1,12 @@
 import torch
 from cribbage.playingcards import Card, Deck
 from crib_ai_trainer.features import encode_state, D_TOTAL
-from crib_ai_trainer.players.rule_based_player import ReasonablePlayer
+from crib_ai_trainer.players.rule_based_player import BeginnerPlayer
 
 class NeuralPlayer:
     def __init__(self, model):
         self.model = model
-        self.teacher = ReasonablePlayer()  # fallback for invalid actions
+        self.teacher = BeginnerPlayer()  # fallback for invalid actions
 
     def select_crib_cards(self, hand, dealer_is_self):
         starter = Card(rank=Deck.RANKS['five'], suit=Deck.SUITS['spades'])

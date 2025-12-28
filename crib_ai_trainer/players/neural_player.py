@@ -5,7 +5,7 @@ from typing import List, Tuple
 from cribbage.playingcards import Card
 
 from crib_ai_trainer.features import multi_hot_cards
-from crib_ai_trainer.players.rule_based_player import ReasonablePlayer, basic_crib_strategy, basic_pegging_strategy
+from crib_ai_trainer.players.rule_based_player import BeginnerPlayer, basic_crib_strategy, basic_pegging_strategy
 
 def featurize_discard(
     kept: List[Card],
@@ -212,7 +212,7 @@ class NeuralClassificationPlayer:
         best = regression_pegging_strategy(self.pegging_model, hand, table, crib, count)
         return best
 
-class NeuralDiscardPlayer(ReasonablePlayer):
+class NeuralDiscardPlayer(BeginnerPlayer):
     def __init__(self, discard_model, pegging_model, name="neural"):
         self.name = name
         self.discard_model = discard_model
@@ -230,7 +230,7 @@ class NeuralDiscardPlayer(ReasonablePlayer):
         return best
     
 
-class NeuralPegPlayer(ReasonablePlayer):
+class NeuralPegPlayer(BeginnerPlayer):
     def __init__(self, discard_model, pegging_model, name="neural"):
         self.name = name
         self.discard_model = discard_model

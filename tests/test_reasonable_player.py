@@ -1,11 +1,11 @@
 import pytest
 
-from crib_ai_trainer.players.rule_based_player import ReasonablePlayer
+from crib_ai_trainer.players.rule_based_player import BeginnerPlayer
 from cribbage.playingcards import Card, build_hand
 
 @pytest.fixture
 def player():    
-    return ReasonablePlayer()
+    return BeginnerPlayer()
 
 def test_select_crib_cards(player): 
     hand = build_hand(["ah","ad","2h","2d","ac","as"])

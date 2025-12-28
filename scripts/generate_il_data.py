@@ -33,7 +33,7 @@ import numpy as np
 from cribbage import cribbagegame
 from cribbage.playingcards import Card
 
-from crib_ai_trainer.players.rule_based_player import ReasonablePlayer, get_full_deck
+from crib_ai_trainer.players.rule_based_player import BeginnerPlayer, get_full_deck
 from crib_ai_trainer.players.neural_player import featurize_discard, featurize_pegging
 
 from cribbage.cribbagegame import score_hand, score_play
@@ -186,8 +186,8 @@ class LoggedRegPegClasDiscardData(LoggedRegressionPegData, LoggedClassificationD
     pass
 
 
-class LoggingReasonablePlayer(ReasonablePlayer):
-    """Wrap ReasonablePlayer so we can collect training data while it plays."""
+class LoggingBeginnerPlayer(BeginnerPlayer):
+    """Wrap BeginnerPlayer so we can collect training data while it plays."""
 
     def __init__(self, name: str, log: LoggedData, seed: int = 0):
         super().__init__(name=name)
@@ -320,8 +320,8 @@ def generate_il_data(games, out_dir, seed) -> int:
     log = LoggedData()
 
     # Two logging reasonable players self-play
-    p1 = LoggingReasonablePlayer("teacher1", log)
-    p2 = LoggingReasonablePlayer("teacher2", log)
+    p1 = LoggingBeginnerPlayer("teacher1", log)
+    p2 = LoggingBeginnerPlayer("teacher2", log)
 
     for i in range(games):
         if i % 100 == 0:

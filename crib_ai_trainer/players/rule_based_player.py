@@ -70,8 +70,8 @@ def basic_crib_strategy(hand: List[Card], dealer_is_self: bool) -> Tuple[Card, C
     return best_discards[0]  # type: ignore
 
 
-class ReasonablePlayer:
-    def __init__(self, name: str = "reasonable"):
+class BeginnerPlayer:
+    def __init__(self, name: str = "beginner"):
         self.name = name
 
     def select_crib_cards(self, hand: List[Card], dealer_is_self: bool) -> Tuple[Card, Card]:
@@ -87,7 +87,7 @@ class ReasonablePlayer:
             return None
         return self.play_pegging(playable_cards, count, table)
 
-class DifficultReasonablePlayer(ReasonablePlayer):
+class DifficultPlayer(BeginnerPlayer):
     def __init__(self, name: str = "difficult"):
         super().__init__(name=name)
 

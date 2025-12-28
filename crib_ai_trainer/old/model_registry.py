@@ -1,5 +1,5 @@
 import torch
-from crib_ai_trainer.players.rule_based_player import ReasonablePlayer, DifficultReasonablePlayer
+from crib_ai_trainer.players.rule_based_player import BeginnerPlayer, DifficultPlayer
 from crib_ai_trainer.old.old_neural_player import NeuralPlayer
 from crib_ai_trainer.old.neural_config import NeuralNetConfig
 import os
@@ -8,7 +8,7 @@ def load_best_model():
     """Load the best model (neural or rule-based) as a PlayerInterface."""
     best_file = os.path.join("trained_models", "best_model.txt")
     if not os.path.exists(best_file):
-        return ReasonablePlayer()
+        return BeginnerPlayer()
     with open(best_file, "r") as f:
         name = f.read().strip()
     if name.startswith("neural_"):
@@ -38,14 +38,14 @@ def load_best_model():
             model.eval()
             return NeuralPlayer(model)
         else:
-            return ReasonablePlayer()
+            return BeginnerPlayer()
     elif name == "reasonable":
-        return ReasonablePlayer()
+        return BeginnerPlayer()
     elif name == "difficult":
-        return DifficultReasonablePlayer()
+        return DifficultPlayer()
     else:
         # fallback
-        return ReasonablePlayer()
+        return BeginnerPlayer()
 import os
 import json
 import subprocess

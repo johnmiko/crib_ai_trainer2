@@ -16,7 +16,7 @@ sys.path.insert(0, ".")
 from crib_ai_trainer.constants import MODELS_DIR
 from cribbage import cribbagegame
 from crib_ai_trainer.players.random_player import RandomPlayer
-from crib_ai_trainer.players.rule_based_player import ReasonablePlayer, basic_pegging_strategy
+from crib_ai_trainer.players.rule_based_player import BeginnerPlayer, basic_pegging_strategy
 from crib_ai_trainer.players.neural_player import LinearValueModel, NeuralDiscardPlayer, NeuralPegPlayer, NeuralPlayer
 import logging
 
@@ -74,7 +74,7 @@ def benchmark_2_players(args) -> int:
         if name == "neural":
             return NeuralPlayer(discard_model, pegging_model, name="neural")
         elif name == "reasonable":
-            return ReasonablePlayer(name="reasonable")
+            return BeginnerPlayer(name="reasonable")
         elif name == "random":            
             return RandomPlayer(name="random", seed=args.seed)
         else:
