@@ -19,10 +19,10 @@ import sys
 
 from cribbage.cribbagegame import score_hand, score_play as score_pegging_play
 
-from crib_ai_trainer.constants import TRAINING_DATA_DIR
+
 
 sys.path.insert(0, ".")
-
+from crib_ai_trainer.constants import TRAINING_DATA_DIR
 import argparse
 from itertools import combinations
 from dataclasses import dataclass, field
@@ -200,6 +200,8 @@ class LoggingReasonablePlayer(ReasonablePlayer):
                 n_starters=16,
                 n_opp_discards=8,
             )
+            if y < -2: 
+                a = 1
 
             x = featurize_discard(kept, discards, dealer_is_self)  # or drop hand param
             self._log.X_discard.append(x)
@@ -306,5 +308,6 @@ if __name__ == "__main__":
     generate_il_data(args.games, args.out_dir, args.seed)
 
 #  python .\scripts\generate_il_data.py --games 2000 --out_dir "il_datasets/"
-# python .\scripts\train_linear_models.py --data_dir "il_datasets/" --out_dir models --epochs 20
-# python scripts/benchmark_2_players.py --players neural,reasonable --games 500 --models_dir models
+# python .\scripts\train_linear_models.py
+# python scripts/benchmark_2_players.py --players neural,random
+# python scripts/benchmark_2_players.py --players neural,reasonable

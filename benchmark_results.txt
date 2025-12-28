@@ -1,5 +1,9 @@
 Trained using basic discard strategy and basic pegging strategy
 neural vs reasonable after 12000.0 training games wins=45/500 winrate=0.090 (95% CI 0.068 - 0.118) avg point diff -17.88
-neural vs random after 12000.0 training games wins=76/500 winrate=0.152 (95% CI 0.123 - 0.186) avg point diff -13.50
+neural vs random after 12000.0 training games wins=330ish/500
 neural_discard vs reasonable after 12000.0 training games wins=72/500 winrate=0.144 (95% CI 0.116 - 0.177) avg point diff -14.14
 neural_peg vs reasonable after 12000.0 training games wins=184/500 winrate=0.368 (95% CI 0.327 - 0.411) avg point diff -2.02
+
+Training using monte carle discard strategy and basic pegging strategy
+neural vs reasonable after 2000.0 training games wins=43/500 winrate=0.086 (95% CI 0.064 - 0.114) avg point diff -18.83
+neural vs random after 2000.0 training games wins=331/500 winrate=0.662 (95% CI 0.619 - 0.702) avg point diff 7.02

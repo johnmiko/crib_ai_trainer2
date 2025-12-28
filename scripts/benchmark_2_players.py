@@ -11,11 +11,9 @@ import sys
 import numpy as np
 import os
 
-from crib_ai_trainer.constants import MODELS_DIR
-
 sys.path.insert(0, ".")
 
-
+from crib_ai_trainer.constants import MODELS_DIR
 from cribbage import cribbagegame
 from crib_ai_trainer.players.random_player import RandomPlayer
 from crib_ai_trainer.players.rule_based_player import ReasonablePlayer, basic_pegging_strategy

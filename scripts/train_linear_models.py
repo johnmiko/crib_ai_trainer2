@@ -1,7 +1,7 @@
 """Train LinearValueModel models from sharded datasets.
 
 Usage:
-  python scripts/train_linear_models.py --data_dir il_datasets --out_dir models --epochs 20
+  python scripts/train_linear_models.py --data_dir il_datasets --models_dir models --epochs 20
 """
 
 from __future__ import annotations
@@ -21,9 +21,9 @@ logging.basicConfig(level=logging.INFO)
 
 def train_linear_models(args) -> int:
     data_dir = Path(args.data_dir)
-    out_dir = Path(args.out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-
+    models_dir = Path(args.models_dir)
+    models_dir.mkdir(parents=True, exist_ok=True)
+    logger.info(f"Loading training data from {data_dir}")
     discard_shards = sorted(data_dir.glob("discard_*.npz"))
     pegging_shards = sorted(data_dir.glob("pegging_*.npz"))
     if not discard_shards:
@@ -51,6 +51,7 @@ def train_linear_models(args) -> int:
             with np.load(d_path) as d:
                 Xd = d["X"].astype(np.float32)
                 yd = d["y"].astype(np.float32)
+            print("discard X dim", Xd.shape, "y range", float(yd.min()), float(yd.mean()), float(yd.max()))
 
             with np.load(p_path) as p:
                 Xp = p["X"].astype(np.float32)
@@ -76,8 +77,8 @@ def train_linear_models(args) -> int:
             last_discard_loss = float(discard_losses[-1]) if discard_losses else last_discard_loss
             last_pegging_loss = float(pegging_losses[-1]) if pegging_losses else last_pegging_loss
 
-    discard_path = out_dir / "discard_linear.npz"
-    pegging_path = out_dir / "pegging_linear.npz"
+    discard_path = models_dir / "discard_linear.npz"
+    pegging_path = models_dir / "pegging_linear.npz"
     discard_model.save_npz(str(discard_path))
     pegging_model.save_npz(str(pegging_path))
     # “last loss” = the mean squared error (MSE) from the final training step that ran.
@@ -94,7 +95,7 @@ def train_linear_models(args) -> int:
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--data_dir", type=str, default=TRAINING_DATA_DIR)
-    ap.add_argument("--out_dir", type=str, default=MODELS_DIR)
+    ap.add_argument("--models_dir", type=str, default=MODELS_DIR)
     ap.add_argument("--lr", type=float, default=0.05)
     ap.add_argument("--epochs", type=int, default=20)
     ap.add_argument("--batch_size", type=int, default=8192)
@@ -103,5 +104,5 @@ if __name__ == "__main__":
     args = ap.parse_args()
     train_linear_models(args)
 
-# python .\scripts\train_linear_models.py --data_dir "il_datasets/" --out_dir models --epochs 20
+# python .\scripts\train_linear_models.py --data_dir "il_datasets/" --models_dir models --epochs 20
 # train over the whole dataset 20 times
