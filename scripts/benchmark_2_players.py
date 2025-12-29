@@ -11,13 +11,11 @@ import sys
 import numpy as np
 import os
 
-from crib_ai_trainer.utils import play_multiple_games
-
 sys.path.insert(0, ".")
-
+from crib_ai_trainer.utils import play_multiple_games
 from crib_ai_trainer.constants import MODELS_DIR, TRAINING_DATA_DIR
 
-from crib_ai_trainer.players.random_player import RandomPlayer
+from cribbage.players.random_player import RandomPlayer
 from cribbage.players.rule_based_player import BeginnerPlayer
 from crib_ai_trainer.players.neural_player import LinearDiscardClassifier, LinearValueModel, NeuralClassificationPlayer, NeuralRegressionPlayer
 import logging

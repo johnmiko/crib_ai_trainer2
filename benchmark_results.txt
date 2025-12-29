@@ -16,3 +16,6 @@ NeuralClassificationPlayer vs beginner after 20 training games wins=28/500 winra
 NeuralClassificationPlayer vs random after 20 training games wins=278/500 winrate=0.556 (95% CI 0.512 - 0.599) avg point diff 2.54
 NeuralClassificationPlayer vs beginner after 220 training games wins=18/500 winrate=0.036 (95% CI 0.023 - 0.056) avg point diff -21.71
 NeuralClassificationPlayer vs random after 220 training games wins=273/500 winrate=0.546 (95% CI 0.502 - 0.589) avg point diff 3.55
+NeuralClassificationPlayer vs beginner after 2000.0 training games wins=6/500 winrate=0.012 (95% CI 0.006 - 0.026) avg point diff -37.34
+NeuralClassificationPlayer vs random after 2000.0 training games wins=319/500 winrate=0.638 (95% CI 0.595 - 0.679) avg point diff 8.95
+beginner vs random after 0.0 training games wins=499/500 winrate=0.998 (95% CI 0.989 - 1.000) avg point diff 45.26

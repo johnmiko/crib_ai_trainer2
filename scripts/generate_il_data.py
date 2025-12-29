@@ -190,6 +190,7 @@ class LoggedRegPegClasDiscardData(LoggedRegressionPegData, LoggedClassificationD
     pass
 
 
+
 class LoggingPlayer(BeginnerPlayer):
     """Wrap BeginnerPlayer so we can collect training data while it plays."""
 
@@ -321,7 +322,7 @@ class LoggingPlayer(BeginnerPlayer):
 
 
 def play_one_game(players) -> None:
-    game = cribbagegame.CribbageGame(players=players)
+    game = cribbagegame.CribbageGame(players=players, copy_players=False)
     # Some engines have game.play(), some run rounds internally.
     final_pegging_score = game.start()
 
@@ -353,6 +354,7 @@ def generate_il_data(games, out_dir, seed, strategy) -> int:
         play_one_game(players)
     
     logger.info(f"Saving data to {out_dir}")
+
     os.makedirs(out_dir, exist_ok=True)
     # check that we did not use the wrong logging structure
     if log.X_discard:
@@ -401,7 +403,8 @@ def generate_il_data(games, out_dir, seed, strategy) -> int:
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--games", type=int, default=2000)
+    # ap.add_argument("--games", type=int, default=2000)
+    ap.add_argument("--games", type=int, default=200)
     default_out_dir = TRAINING_DATA_DIR
     ap.add_argument("--out_dir", type=str, default=default_out_dir)
     ap.add_argument("--seed", type=int, default=0)
