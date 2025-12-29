@@ -29,7 +29,7 @@ import json
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from crib_ai_trainer.training.trainer import Trainer, TrainConfig
 from crib_ai_trainer.old.neural_config import NeuralNetConfig
-from crib_ai_trainer.players.rule_based_player import BeginnerPlayer
+from cribbage.players.rule_based_player import BeginnerPlayer
 from crib_ai_trainer.old.old_neural_player import NeuralPlayer
 import torch.nn as nn
 from crib_ai_trainer.features import D_TOTAL
@@ -134,7 +134,7 @@ def main():
                 if os.path.exists(best_model_path):
                     with open(best_model_path, 'r') as f:
                         best_model_name = f.read().strip()
-                from crib_ai_trainer.players.rule_based_player import BeginnerPlayer
+                from cribbage.players.rule_based_player import BeginnerPlayer
                 best_player = None
                 if best_model_name.startswith('neural_'):
                     best_cfg_name = best_model_name.replace('neural_', '')

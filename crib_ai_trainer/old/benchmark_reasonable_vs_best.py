@@ -3,7 +3,7 @@ Benchmark the 'reasonable' opponent against the 'best' model.
 Run with: .venv\Scripts\Activate.ps1; python -m scripts.benchmark_reasonable_vs_best [num_games]
 """
 import logging
-from crib_ai_trainer.players.rule_based_player import BeginnerPlayer, DifficultPlayer
+from cribbage.players.rule_based_player import BeginnerPlayer, DifficultPlayer
 from crib_ai_trainer.model_registry import load_best_model
 from crib_ai_trainer.game import CribbageGame
 

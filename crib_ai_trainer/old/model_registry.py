@@ -1,5 +1,5 @@
 import torch
-from crib_ai_trainer.players.rule_based_player import BeginnerPlayer, DifficultPlayer
+from cribbage.players.rule_based_player import BeginnerPlayer, DifficultPlayer
 from crib_ai_trainer.old.old_neural_player import NeuralPlayer
 from crib_ai_trainer.old.neural_config import NeuralNetConfig
 import os

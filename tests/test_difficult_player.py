@@ -1,7 +1,7 @@
 # test_difficult_player.py
 import pytest
 
-from crib_ai_trainer.players.rule_based_player import DifficultPlayer, generate_hand_ranges, get_full_deck, remaining_deck
+from cribbage.players.rule_based_player import DifficultPlayer, generate_hand_ranges, get_full_deck, remaining_deck
 from cribbage.playingcards import Deck, Card
 from itertools import combinations
 from math import comb

@@ -3,7 +3,7 @@ import sqlite3
 import itertools
 
 from crib_ai_trainer.old.scoring_old import score_hand
-from crib_ai_trainer.players.rule_based_player import get_full_deck
+from cribbage.players.rule_based_player import get_full_deck
 
 # You said this exists already:
 # from your_module import get_full_deck, score_hand

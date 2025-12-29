@@ -18,7 +18,7 @@ sys.path.insert(0, ".")
 from crib_ai_trainer.constants import MODELS_DIR, TRAINING_DATA_DIR
 
 from crib_ai_trainer.players.random_player import RandomPlayer
-from crib_ai_trainer.players.rule_based_player import BeginnerPlayer
+from cribbage.players.rule_based_player import BeginnerPlayer
 from crib_ai_trainer.players.neural_player import LinearDiscardClassifier, LinearValueModel, NeuralClassificationPlayer, NeuralRegressionPlayer
 import logging
 

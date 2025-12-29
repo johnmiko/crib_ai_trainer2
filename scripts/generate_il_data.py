@@ -18,7 +18,7 @@ from pathlib import Path
 import sys
 
 from cribbage.cribbagegame import score_hand, score_play as score_pegging_play
-
+from cribbage.players.rule_based_player import get_full_deck
 
 
 sys.path.insert(0, ".")
@@ -33,7 +33,7 @@ import numpy as np
 from cribbage import cribbagegame
 from cribbage.playingcards import Card
 
-from crib_ai_trainer.players.rule_based_player import BeginnerPlayer, get_full_deck
+from cribbage.players.rule_based_player import BeginnerPlayer
 from crib_ai_trainer.players.neural_player import featurize_discard, featurize_pegging
 
 from cribbage.cribbagegame import score_hand, score_play
@@ -243,8 +243,8 @@ class LoggingPlayer(BeginnerPlayer):
         # log ONE example for this 6-card hand:
         # X_hand is (15, D), label is best option index 0..14
         X_hand = np.stack(Xs, axis=0).astype(np.float32)  # (15, D)
-        self._log.X_discard.append(X_hand)
-        self._log.y_discard.append(best_i)
+        self._log.X_discard.append(X_hand) # type: ignore
+        self._log.y_discard.append(best_i) # type: ignore
 
         return discards_list[best_i]
 
@@ -409,7 +409,7 @@ if __name__ == "__main__":
     args = ap.parse_args()
     generate_il_data(args.games, args.out_dir, args.seed, args.strategy)
 
-# python .\scripts\generate_il_data.py --games 10
+# python .\scripts\generate_il_data.py --games 20
 #  python .\scripts\generate_il_data.py --games 2000 --out_dir "il_datasets/"
 # python .\scripts\train_linear_models.py
 # python scripts/benchmark_2_players.py --players neural,random

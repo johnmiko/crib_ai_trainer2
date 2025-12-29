@@ -1,7 +1,7 @@
 import logging
 from crib_ai_trainer.players.random_player import RandomPlayer
 from crib_ai_trainer.players.play_first_card_player import PlayFirstCardPlayer
-from crib_ai_trainer.players.rule_based_player import BeginnerPlayer
+from cribbage.players.rule_based_player import BeginnerPlayer
 from crib_ai_trainer.utils import play_multiple_games
 from cribbage.cribbagegame import CribbageGame
 

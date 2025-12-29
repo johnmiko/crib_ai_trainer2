@@ -1,7 +1,7 @@
 import torch
 from cribbage.playingcards import Card, Deck
 from crib_ai_trainer.features import encode_state, D_TOTAL
-from crib_ai_trainer.players.rule_based_player import BeginnerPlayer
+from cribbage.players.rule_based_player import BeginnerPlayer
 
 class NeuralPlayer:
     def __init__(self, model):
