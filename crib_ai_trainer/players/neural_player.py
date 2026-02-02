@@ -3,9 +3,10 @@ import numpy as np
 from typing import List, Tuple
 
 from cribbage.playingcards import Card
+from cribbage.players.beginner_player import BeginnerPlayer
 
 from crib_ai_trainer.features import multi_hot_cards
-from cribbage.players.rule_based_player import BeginnerPlayer, basic_crib_strategy, basic_pegging_strategy
+
 
 def featurize_discard(
     kept: List[Card],

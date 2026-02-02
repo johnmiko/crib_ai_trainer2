@@ -81,7 +81,7 @@ def score_hand(hand: Sequence[Card], starter: Card, is_crib: bool) -> int:
 
 # Pegging scoring utilities
 
-def score_pegging_play(sequence_since_reset: List[Card], new_card: Card, count: int) -> int:
+def score_play(sequence_since_reset: List[Card], new_card: Card, count: int) -> int:
     # returns points for playing new_card (pairs, runs, 15/31, last card handled by caller)
     points = 0
     new_count = count + RANK_VALUE[new_card.rank]

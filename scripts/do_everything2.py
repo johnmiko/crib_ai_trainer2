@@ -20,7 +20,7 @@ if __name__ == "__main__":
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--data_dir", type=str, default=TRAINING_DATA_DIR)
     ap.add_argument("--epochs", type=int, default=20)
-    ap.add_argument("--players", type=str, default="neural,random")
+    ap.add_argument("--players", type=str, default="neural,medium")
     ap.add_argument("--benchmark_games", type=int, default=500)
     ap.add_argument("--models_dir", type=str, default=MODELS_DIR)
     args = ap.parse_args()

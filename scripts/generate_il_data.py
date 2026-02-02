@@ -17,7 +17,7 @@ import os
 from pathlib import Path
 import sys
 
-from cribbage.cribbagegame import score_hand, score_play as score_pegging_play
+from cribbage.cribbagegame import score_hand, score_play as score_play
 from cribbage.players.rule_based_player import get_full_deck
 
 
@@ -32,8 +32,10 @@ import numpy as np
 
 from cribbage import cribbagegame
 from cribbage.playingcards import Card
+from cribbage.strategies.pegging_strategies import medium_pegging_strategy_scores, get_highest_rank_card
 
-from cribbage.players.rule_based_player import BeginnerPlayer
+from cribbage.players.beginner_player import BeginnerPlayer
+from cribbage.players.medium_player import MediumPlayer
 from crib_ai_trainer.players.neural_player import featurize_discard, featurize_pegging
 
 from cribbage.cribbagegame import score_hand, score_play
@@ -191,7 +193,7 @@ class LoggedRegPegClasDiscardData(LoggedRegressionPegData, LoggedClassificationD
 
 
 
-class LoggingPlayer(BeginnerPlayer):
+class LoggingBeginnerPlayer(BeginnerPlayer):
     """Wrap BeginnerPlayer so we can collect training data while it plays."""
 
     def __init__(self, name: str, log: LoggedData, discard_strategy, pegging_strategy, seed: int = 0, ):
@@ -302,7 +304,7 @@ class LoggingPlayer(BeginnerPlayer):
         history_since_reset = table
         for c in playable:
             sequence = history_since_reset + [c]
-            pts = score_pegging_play(sequence)
+            pts = score_play(sequence)
             y = pts
             x = featurize_pegging(hand, history_since_reset, count, c)
             self._log.X_pegging.append(x) # type: ignore
@@ -321,6 +323,105 @@ class LoggingPlayer(BeginnerPlayer):
     
 
 
+class LoggingMediumPlayer(MediumPlayer):
+    # def __init__(self, name: str = "medium"):
+    #     super().__init__(name=name)
+
+    def __init__(self, name: str, log: LoggedData, discard_strategy, pegging_strategy, seed: int = 0, ):
+        super().__init__(name=name)
+        self._rng = random.Random(seed)
+        self._full_deck = get_full_deck()
+        self._log = log
+        if discard_strategy == "classification":
+            self._discard_strategy = self.select_crib_cards_classifier
+        elif discard_strategy == "regression":
+            self._discard_strategy = self.select_crib_cards_regresser
+        else:
+            raise ValueError(f"Unknown discard_strategy: {discard_strategy}")        
+        self._pegging_strategy = self.play_pegging # not implemented yet
+
+    def play_pegging(self, playable: List[Card], count: int, history_since_reset: List[Card], game_state=None) -> Optional[Card]:
+        have_playable_cards = False
+        for c in playable:
+            new_count = count + c.get_value()
+            if new_count < 31:
+                have_playable_cards = True
+                break
+        if not have_playable_cards:
+            return None  # No playable cards
+        scores = medium_pegging_strategy_scores(playable, count, history_since_reset)
+        for card, score in scores.items():
+            y = score
+            x = featurize_pegging(playable, history_since_reset, count, card)
+            self._log.X_pegging.append(x) # type: ignore
+            self._log.y_pegging.append(float(y)) # type: ignore
+        max_v = max(scores.values())
+        highest_scoring_cards_list = [k for k, v in scores.items() if v == max_v]
+        highest_scoring_card = get_highest_rank_card(highest_scoring_cards_list)
+        return highest_scoring_card
+    
+    def select_crib_cards_classifier(self, hand, dealer_is_self, your_score=None, opponent_score=None) -> Tuple[Card, Card]:                
+    # don't analyze crib, just calculate min value of the crib and use that
+        full_deck = get_full_deck()
+        hand_score_cache = {}
+        crib_score_cache = {}        
+        hand_results = process_dealt_hand_only_exact([hand, full_deck, hand_score_cache])
+        df_hand = pd.DataFrame(hand_results, columns=["hand_key","min_hand_score","max_hand_score","avg_hand_score"])
+        crib_results = calc_crib_min_only_given_6_cards(hand)
+        df_crib = pd.DataFrame(crib_results, columns=["hand_key","crib_key","min_crib_score","avg_crib_score"])
+        df3 = pd.merge(df_hand, df_crib, on=["hand_key"])        
+        df3["avg_total_score"] = df3["avg_hand_score"] + (df3["avg_crib_score"] if dealer_is_self else -df3["avg_crib_score"])
+        df3["min_total_score"] = df3["min_hand_score"] + (df3["min_crib_score"] if dealer_is_self else -df3["min_crib_score"])
+        best_discards_str = df3.loc[df3["avg_total_score"] == df3["avg_total_score"].max()]["crib_key"].values[0]
+        best_discards = best_discards_str.lower().replace("t", "10").split("|")
+        best_discards_cards = build_hand(best_discards)
+        Xs: List[np.ndarray] = []
+        ys: List[float] = []
+        discards_list: List[Tuple[Card, Card]] = []
+        for i, row in df3.iterrows():
+            kept = row["hand_key"]
+            discards = row["crib_key"]            
+            disc_t = (discards[0], discards[1])
+            y = row["avg_total_score"]
+            x = featurize_discard(kept, discards, dealer_is_self)  # (105,)
+            Xs.append(x)
+            ys.append(float(y))
+            discards_list.append(disc_t)
+                    # log ONE example for this 6-card hand:
+        # X_hand is (15, D), label is best option index 0..14
+        X_hand = np.stack(Xs, axis=0).astype(np.float32)  # (15, D)
+        self._log.X_discard.append(X_hand) # type: ignore
+        best_i = int(np.argmax(np.array(ys, dtype=np.float32)))
+        self._log.y_discard.append(best_i) # type: ignore
+
+        return tuple(best_discards_cards)
+       
+
+    def select_crib_cards_regresser(self, hand, dealer_is_self, your_score=None, opponent_score=None) -> Tuple[Card, Card]:                
+    # don't analyze crib, just calculate min value of the crib and use that
+        full_deck = get_full_deck()
+        hand_score_cache = {}
+        crib_score_cache = {}        
+        hand_results = process_dealt_hand_only_exact([hand, full_deck, hand_score_cache])
+        df_hand = pd.DataFrame(hand_results, columns=["hand_key","min_hand_score","max_hand_score","avg_hand_score"])
+        crib_results = calc_crib_min_only_given_6_cards(hand)
+        df_crib = pd.DataFrame(crib_results, columns=["hand_key","crib_key","min_crib_score","avg_crib_score"])
+        df3 = pd.merge(df_hand, df_crib, on=["hand_key"])        
+        df3["avg_total_score"] = df3["avg_hand_score"] + (df3["avg_crib_score"] if dealer_is_self else -df3["avg_crib_score"])
+        df3["min_total_score"] = df3["min_hand_score"] + (df3["min_crib_score"] if dealer_is_self else -df3["min_crib_score"])
+
+        for i, row in df3.iterrows():
+            y = row["avg_total_score"]
+            x = featurize_discard(row["hand_key"], row["crib_key"], dealer_is_self)  # or drop hand param
+            self._log.X_discard.append(x)
+            self._log.y_discard.append(float(y))
+
+        best_discards_str = df3.loc[df3["avg_total_score"] == df3["avg_total_score"].max()]["crib_key"].values[0]
+        best_discards = best_discards_str.lower().replace("t", "10").split("|")
+        best_discards_cards = build_hand(best_discards)        
+        return tuple(best_discards_cards)
+
+
 def play_one_game(players) -> None:
     game = cribbagegame.CribbageGame(players=players, copy_players=False)
     # Some engines have game.play(), some run rounds internally.
@@ -328,18 +429,18 @@ def play_one_game(players) -> None:
 
 
 def generate_il_data(games, out_dir, seed, strategy) -> int:
-    logger.info(f"Generating IL data for {games} games into {out_dir} using 2 beginner players")
+    logger.info(f"Generating IL data for {games} games into {out_dir} using 2 medium players")
     rng = np.random.default_rng(seed)
     # log = LoggedData()
     # todo - this probably needs to be dynamic
     if strategy == "classification":
         log = LoggedRegPegClasDiscardData()
-        p1 = LoggingPlayer("teacher1", log, discard_strategy="classification", pegging_strategy="regression")
-        p2 = LoggingPlayer("teacher2", log, discard_strategy="classification", pegging_strategy="regression")
+        p1 = LoggingMediumPlayer("teacher1", log, discard_strategy="classification", pegging_strategy="regression")
+        p2 = LoggingMediumPlayer("teacher2", log, discard_strategy="classification", pegging_strategy="regression")
     elif strategy == "regression":  
         log = LoggedRegPegRegDiscardData()
-        p1 = LoggingPlayer("teacher1", log, discard_strategy="regression", pegging_strategy="regression")
-        p2 = LoggingPlayer("teacher2", log, discard_strategy="regression", pegging_strategy="regression")
+        p1 = LoggingMediumPlayer("teacher1", log, discard_strategy="regression", pegging_strategy="regression")
+        p2 = LoggingMediumPlayer("teacher2", log, discard_strategy="regression", pegging_strategy="regression")
     
 
     for i in range(games):

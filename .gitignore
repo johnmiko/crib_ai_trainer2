@@ -19,3 +19,5 @@ trained_models/
 *.pyc
 to do.txt
 .env
+crib_cache.db
+scripts/temp_db_script_thing.py

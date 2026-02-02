@@ -5,7 +5,7 @@ import random
 from logging import getLogger
 from cribbage.playingcards import Card, Deck
 from cribbage.playingcards import Deck
-from cribbage.cribbagegame import score_play as score_pegging_play
+from cribbage.cribbagegame import score_play as score_play
 
 SUITS = Deck.SUITS
 RANKS = Deck.RANKS
@@ -104,7 +104,7 @@ class ISMCTSPlayer:
 
     def _simulate_play(self, card: Card, count: int, history: List[Card], opp_hand: Optional[List[Card]]) -> float:
         # rollout: immediate points + heuristic future pegging potential
-        pts = score_pegging_play(history, card, count)
+        pts = score_play(history, card, count)
         new_count = count + card.rank['value']
         # heuristic: prefer keeping count <= 21 to avoid opponent 10 to 31
         future_val = -max(0, new_count - 21) * 0.05

@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import List, Tuple, Optional, Dict
 from logging import getLogger
 from cribbage.playingcards import Card
-from cribbage.cribbagegame import score_play as score_pegging_play, RANK_VALUE
+from cribbage.cribbagegame import score_play as score_play, RANK_VALUE
 
 logger = getLogger(__name__)
 
@@ -87,7 +87,7 @@ class CFRPlayer:
                     # evaluate utilities (immediate points)
                     utils = []
                     for i, c in enumerate(actions):
-                        u = score_pegging_play(hist, c, count)
+                        u = score_play(hist, c, count)
                         utils.append(u)
                     # current strategy from regrets
                     strat = self._regret_match(self.regrets_pegging[key])

@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple
 from logging import getLogger
 from cribbage.playingcards import Card, Deck
-from cribbage.cribbagegame import score_hand, score_play as score_pegging_play
+from cribbage.cribbagegame import score_hand, score_play as score_play
 from crib_ai_trainer.constants import RANK_VALUE
 from crib_ai_trainer.gamestate import GameState
 
@@ -92,7 +92,7 @@ class PlayerInterface:
 #                     raise ValueError(f"Player {turn} played invalid card {card} at count {count}")
 #                 hands[turn].remove(card)
 #                 count += RANK_VALUE[card.rank]
-#                 points = score_pegging_play(history_reset, card, count - RANK_VALUE[card.rank])
+#                 points = score_play(history_reset, card, count - RANK_VALUE[card.rank])
 #                 self.state.scores[turn] += points
 #                 history_reset.append(card)
 #                 self.state.round_history[-1].append(card)

@@ -1,0 +1,127 @@
+{
+  "games": 10,
+  "pairs": [
+    {
+      "a": "Perceptron",
+      "b": "SimpleFrequency",
+      "a_wins": 3,
+      "b_wins": 6,
+      "ties": 1,
+      "avg_diff": -1.0
+    },
+    {
+      "a": "Perceptron",
+      "b": "TableQ",
+      "a_wins": 4,
+      "b_wins": 5,
+      "ties": 1,
+      "avg_diff": 0.6
+    },
+    {
+      "a": "Perceptron",
+      "b": "RuleBased",
+      "a_wins": 7,
+      "b_wins": 2,
+      "ties": 1,
+      "avg_diff": 2.6
+    },
+    {
+      "a": "SimpleFrequency",
+      "b": "TableQ",
+      "a_wins": 3,
+      "b_wins": 4,
+      "ties": 3,
+      "avg_diff": 0.1
+    },
+    {
+      "a": "SimpleFrequency",
+      "b": "RuleBased",
+      "a_wins": 5,
+      "b_wins": 2,
+      "ties": 3,
+      "avg_diff": 0.7
+    },
+    {
+      "a": "TableQ",
+      "b": "RuleBased",
+      "a_wins": 4,
+      "b_wins": 6,
+      "ties": 0,
+      "avg_diff": -0.8
+    }
+  ],
+  "totals": {
+    "Perceptron": {
+      "wins": 14,
+      "losses": 13,
+      "ties": 3,
+      "point_diff": 22.0,
+      "win_pct": 51.85185185185185
+    },
+    "SimpleFrequency": {
+      "wins": 14,
+      "losses": 9,
+      "ties": 7,
+      "point_diff": 18.0,
+      "win_pct": 60.86956521739131
+    },
+    "TableQ": {
+      "wins": 13,
+      "losses": 13,
+      "ties": 4,
+      "point_diff": -15.0,
+      "win_pct": 50.0
+    },
+    "RuleBased": {
+      "wins": 10,
+      "losses": 16,
+      "ties": 4,
+      "point_diff": -25.0,
+      "win_pct": 38.46153846153847
+    }
+  },
+  "ranking": [
+    {
+      "name": "SimpleFrequency",
+      "win_pct": 60.86956521739131,
+      "point_diff": 18.0,
+      "wins": 14,
+      "losses": 9,
+      "ties": 7
+    },
+    {
+      "name": "Perceptron",
+      "win_pct": 51.85185185185185,
+      "point_diff": 22.0,
+      "wins": 14,
+      "losses": 13,
+      "ties": 3
+    },
+    {
+      "name": "TableQ",
+      "win_pct": 50.0,
+      "point_diff": -15.0,
+      "wins": 13,
+      "losses": 13,
+      "ties": 4
+    },
+    {
+      "name": "RuleBased",
+      "win_pct": 38.46153846153847,
+      "point_diff": -25.0,
+      "wins": 10,
+      "losses": 16,
+      "ties": 4
+    }
+  ],
+  "deprioritize": [
+    {
+      "name": "RuleBased",
+      "win_pct": 38.46153846153847,
+      "point_diff": -25.0,
+      "wins": 10,
+      "losses": 16,
+      "ties": 4
+    }
+  ]
+}
