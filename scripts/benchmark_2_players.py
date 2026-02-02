@@ -12,11 +12,12 @@ import numpy as np
 import os
 
 sys.path.insert(0, ".")
-from crib_ai_trainer.utils import play_multiple_games
+from cribbage.utils import play_multiple_games
 from crib_ai_trainer.constants import MODELS_DIR, TRAINING_DATA_DIR
 
 from cribbage.players.random_player import RandomPlayer
-from cribbage.players.rule_based_player import BeginnerPlayer
+from cribbage.players.medium_player import MediumPlayer
+from cribbage.players.beginner_player import BeginnerPlayer
 from crib_ai_trainer.players.neural_player import LinearDiscardClassifier, LinearValueModel, NeuralClassificationPlayer, NeuralRegressionPlayer
 import logging
 
@@ -62,6 +63,8 @@ def benchmark_2_players(args) -> int:
             return BeginnerPlayer(name=name)
         elif name == "random":            
             return RandomPlayer(name=name, seed=args.seed)
+        elif name == "medium":
+            return MediumPlayer(name=name)
         raise ValueError(f"Unknown player type: {name}")
     
     player_names = args.players.split(",")
@@ -84,7 +87,7 @@ def benchmark_2_players(args) -> int:
     logger.info(f"file_list: {file_list}")
     estimated_training_games = len(file_list) * 2000 / 2
     avg_diff = float(np.mean(diffs)) if diffs else 0.0
-    output_str = f"{player_names[0]} vs {player_names[1]} after {estimated_training_games} training games wins={wins}/{args.games} winrate={winrate:.3f} (95% CI {lo:.3f} - {hi:.3f}) avg point diff {avg_diff:.2f}\n"
+    output_str = f"{player_names[0]} vs {player_names[1]} after {estimated_training_games} training games wins={wins}/{args.games} winrate={winrate*100:.3f} (95% CI {lo*100:.3f} - {hi*100:.3f}) avg point diff {avg_diff:.2f}\n"
     with open("benchmark_results.txt", "a") as f:
         f.write(output_str)
     print(output_str)
@@ -93,7 +96,7 @@ def benchmark_2_players(args) -> int:
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--players", type=str, default="neural,reasonable")
+    ap.add_argument("--players", type=str, default="NeuralClassificationPlayer,beginner")
     ap.add_argument("--games", type=int, default=500)
     ap.add_argument("--models_dir", type=str, default=MODELS_DIR)
     ap.add_argument("--seed", type=int, default=0)
@@ -102,7 +105,8 @@ if __name__ == "__main__":
     logger.info(f"models dir: {args.models_dir}")
     benchmark_2_players(args)
 
+# python scripts/benchmark_2_players.py 
+# python scripts/benchmark_2_players.py --players NeuralClassificationPlayer,medium --games 500
 # python scripts/benchmark_2_players.py --players NeuralClassificationPlayer,beginner --games 500
-# python scripts/benchmark_2_players.py --players NeuralClassificationPlayer,random --games 500
 # python scripts/benchmark_2_players.py --players NeuralRegressionPlayer,random --games 500
-# python scripts/benchmark_2_players.py --players NeuralRegressionPlayer,beginner --games 500
+# python scripts/benchmark_2_players.py --players NeuralRegressionPlayer,medium --games 500

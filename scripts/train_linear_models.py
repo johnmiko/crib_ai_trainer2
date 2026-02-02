@@ -117,5 +117,6 @@ if __name__ == "__main__":
     args = ap.parse_args()
     train_linear_models(args)
 
+# python .\scripts\train_linear_models.py
 # python .\scripts\train_linear_models.py --data_dir "il_datasets/" --models_dir models --epochs 20
 # train over the whole dataset 20 times

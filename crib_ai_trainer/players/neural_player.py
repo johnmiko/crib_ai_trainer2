@@ -34,10 +34,12 @@ def featurize_pegging(
     table: List[Card],
     count: int,
     candidate: Card,
+    known_cards: List[Card]
 ) -> np.ndarray:
     hand_vec = multi_hot_cards(hand)           # (52,)
     table_vec = multi_hot_cards(table)         # (52,)
     count_vec = one_hot_count(count)           # (32,)
+    known_vec = multi_hot_cards(known_cards)  # (52,)
 
     cand_vec = np.zeros(52, dtype=np.float32)
     cand_vec[candidate.to_index()] = 1.0
@@ -264,7 +266,7 @@ def regression_pegging_strategy(pegging_model, hand, table, crib, count):
         return None
     best, best_v = None, float("-inf")
     for c in playable:
-        x = featurize_pegging(hand, table, count, c)  # np array
+        x = featurize_pegging(hand, table, count, c, known_cards=[])  # np array
         v = float(pegging_model.predict(x))
         if v > best_v:
             best_v, best = v, c
@@ -276,10 +278,10 @@ class NeuralRegressionPlayer:
         self.discard_model = discard_model
         self.pegging_model = pegging_model
 
-    def select_crib_cards(self, hand: List[Card], dealer_is_self: bool) -> Tuple[Card, Card]:
-        return self.select_crib_cards_regressor(hand, dealer_is_self) # type: ignore
+    def select_crib_cards(self, hand: List[Card], dealer_is_self: bool, your_score=None, opponent_score=None) -> Tuple[Card, Card]:
+        return self.select_crib_cards_regressor(hand, dealer_is_self, your_score, opponent_score) # type: ignore
 
-    def select_crib_cards_regressor(self, hand, dealer_is_self):
+    def select_crib_cards_regressor(self, hand, dealer_is_self, your_score=None, opponent_score=None) -> Tuple[Card, Card]:
         best, best_v = None, float("-inf")
         for kept in combinations(hand, 4):
             kept = list(kept)
@@ -300,10 +302,11 @@ class NeuralClassificationPlayer:
         self.discard_model = discard_model
         self.pegging_model = pegging_model
 
-    def select_crib_cards(self, hand: List[Card], dealer_is_self: bool) -> Tuple[Card, Card]:
-        return self.select_crib_cards_classification(hand, dealer_is_self)
+    def select_crib_cards(self, hand: List[Card], dealer_is_self: bool, your_score=None, opponent_score=None) -> Tuple[Card, Card]:
+        return self.select_crib_cards_classification(hand, dealer_is_self, your_score, opponent_score) # type: ignore
 
-    def select_crib_cards_classification(self, hand: List[Card], dealer_is_self: bool) -> Tuple[Card, Card]:
+
+    def select_crib_cards_classification(self, hand: List[Card], dealer_is_self: bool, your_score=None, opponent_score=None) -> Tuple[Card, Card]:
         Xs: List[np.ndarray] = []
         discards_list: List[Tuple[Card, Card]] = []
 

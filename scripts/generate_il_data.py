@@ -29,10 +29,14 @@ from dataclasses import dataclass, field
 from typing import Any, List, Tuple, Optional
 
 import numpy as np
+import pandas as pd
 
 from cribbage import cribbagegame
-from cribbage.playingcards import Card
+from cribbage.playingcards import Card, build_hand
 from cribbage.strategies.pegging_strategies import medium_pegging_strategy_scores, get_highest_rank_card
+from cribbage.strategies.hand_strategies import process_dealt_hand_only_exact
+from cribbage.strategies.crib_strategies import calc_crib_min_only_given_6_cards
+from cribbage.database import normalize_hand_to_str
 
 from cribbage.players.beginner_player import BeginnerPlayer
 from cribbage.players.medium_player import MediumPlayer
@@ -324,8 +328,7 @@ class LoggingBeginnerPlayer(BeginnerPlayer):
 
 
 class LoggingMediumPlayer(MediumPlayer):
-    # def __init__(self, name: str = "medium"):
-    #     super().__init__(name=name)
+    """Wrap MediumPlayer so we can collect training data while it plays."""
 
     def __init__(self, name: str, log: LoggedData, discard_strategy, pegging_strategy, seed: int = 0, ):
         super().__init__(name=name)
@@ -333,35 +336,52 @@ class LoggingMediumPlayer(MediumPlayer):
         self._full_deck = get_full_deck()
         self._log = log
         if discard_strategy == "classification":
-            self._discard_strategy = self.select_crib_cards_classifier
+            self._discard_strategy_mode = "classification"
         elif discard_strategy == "regression":
-            self._discard_strategy = self.select_crib_cards_regresser
+            self._discard_strategy_mode = "regression"
         else:
             raise ValueError(f"Unknown discard_strategy: {discard_strategy}")        
-        self._pegging_strategy = self.play_pegging # not implemented yet
+        self._pegging_strategy = pegging_strategy
+
+    def select_crib_cards(self, hand: List[Card], dealer_is_self: bool, your_score=None, opponent_score=None) -> Tuple[Card, Card]:
+        """Override to log training data."""
+        if self._discard_strategy_mode == "classification":
+            return self.select_crib_cards_classifier(hand, dealer_is_self)
+        else:
+            return self.select_crib_cards_regresser(hand, dealer_is_self)
 
     def play_pegging(self, playable: List[Card], count: int, history_since_reset: List[Card], game_state=None) -> Optional[Card]:
+        """Override to log training data."""
+        if not playable:
+            return None
+        
+        # Check if any cards are actually playable
         have_playable_cards = False
         for c in playable:
             new_count = count + c.get_value()
-            if new_count < 31:
+            if new_count <= 31:
                 have_playable_cards = True
                 break
+        
         if not have_playable_cards:
-            return None  # No playable cards
+            return None
+        
         scores = medium_pegging_strategy_scores(playable, count, history_since_reset)
+        
+        # Log all playable options
         for card, score in scores.items():
             y = score
-            x = featurize_pegging(playable, history_since_reset, count, card)
+            x = featurize_pegging(playable, history_since_reset, count, card, )
             self._log.X_pegging.append(x) # type: ignore
             self._log.y_pegging.append(float(y)) # type: ignore
+        
         max_v = max(scores.values())
         highest_scoring_cards_list = [k for k, v in scores.items() if v == max_v]
         highest_scoring_card = get_highest_rank_card(highest_scoring_cards_list)
         return highest_scoring_card
     
     def select_crib_cards_classifier(self, hand, dealer_is_self, your_score=None, opponent_score=None) -> Tuple[Card, Card]:                
-    # don't analyze crib, just calculate min value of the crib and use that
+        # don't analyze crib, just calculate min value of the crib and use that
         full_deck = get_full_deck()
         hand_score_cache = {}
         crib_score_cache = {}        
@@ -375,19 +395,31 @@ class LoggingMediumPlayer(MediumPlayer):
         best_discards_str = df3.loc[df3["avg_total_score"] == df3["avg_total_score"].max()]["crib_key"].values[0]
         best_discards = best_discards_str.lower().replace("t", "10").split("|")
         best_discards_cards = build_hand(best_discards)
+        
         Xs: List[np.ndarray] = []
         ys: List[float] = []
         discards_list: List[Tuple[Card, Card]] = []
-        for i, row in df3.iterrows():
-            kept = row["hand_key"]
-            discards = row["crib_key"]            
-            disc_t = (discards[0], discards[1])
-            y = row["avg_total_score"]
-            x = featurize_discard(kept, discards, dealer_is_self)  # (105,)
+        
+        # Iterate through actual card combinations to get Card objects for featurization
+        for kept in combinations(hand, 4):
+            kept_list = list(kept)
+            discards_list_temp = [c for c in hand if c not in kept_list]
+            
+            # Find matching row in df3 by converting cards to string keys
+            hand_key = normalize_hand_to_str(kept_list)
+            crib_key = normalize_hand_to_str(discards_list_temp)
+            
+            row = df3[(df3["hand_key"] == hand_key) & (df3["crib_key"] == crib_key)]
+            if len(row) == 0:
+                continue
+            
+            y = row["avg_total_score"].values[0]
+            x = featurize_discard(kept_list, discards_list_temp, dealer_is_self)  # (105,)
             Xs.append(x)
             ys.append(float(y))
-            discards_list.append(disc_t)
-                    # log ONE example for this 6-card hand:
+            discards_list.append((discards_list_temp[0], discards_list_temp[1]))
+        
+        # log ONE example for this 6-card hand:
         # X_hand is (15, D), label is best option index 0..14
         X_hand = np.stack(Xs, axis=0).astype(np.float32)  # (15, D)
         self._log.X_discard.append(X_hand) # type: ignore
@@ -398,7 +430,7 @@ class LoggingMediumPlayer(MediumPlayer):
        
 
     def select_crib_cards_regresser(self, hand, dealer_is_self, your_score=None, opponent_score=None) -> Tuple[Card, Card]:                
-    # don't analyze crib, just calculate min value of the crib and use that
+        # don't analyze crib, just calculate min value of the crib and use that
         full_deck = get_full_deck()
         hand_score_cache = {}
         crib_score_cache = {}        
@@ -410,9 +442,21 @@ class LoggingMediumPlayer(MediumPlayer):
         df3["avg_total_score"] = df3["avg_hand_score"] + (df3["avg_crib_score"] if dealer_is_self else -df3["avg_crib_score"])
         df3["min_total_score"] = df3["min_hand_score"] + (df3["min_crib_score"] if dealer_is_self else -df3["min_crib_score"])
 
-        for i, row in df3.iterrows():
-            y = row["avg_total_score"]
-            x = featurize_discard(row["hand_key"], row["crib_key"], dealer_is_self)  # or drop hand param
+        # Iterate through actual card combinations to get Card objects for featurization
+        for kept in combinations(hand, 4):
+            kept_list = list(kept)
+            discards_list = [c for c in hand if c not in kept_list]
+            
+            # Find matching row in df3 by converting cards to string keys
+            hand_key = normalize_hand_to_str(kept_list)
+            crib_key = normalize_hand_to_str(discards_list)
+            
+            row = df3[(df3["hand_key"] == hand_key) & (df3["crib_key"] == crib_key)]
+            if len(row) == 0:
+                continue
+            
+            y = row["avg_total_score"].values[0]
+            x = featurize_discard(kept_list, discards_list, dealer_is_self)
             self._log.X_discard.append(x)
             self._log.y_discard.append(float(y))
 
@@ -516,5 +560,5 @@ if __name__ == "__main__":
 # python .\scripts\generate_il_data.py --games 20
 #  python .\scripts\generate_il_data.py --games 2000 --out_dir "il_datasets/"
 # python .\scripts\train_linear_models.py
-# python scripts/benchmark_2_players.py --players neural,random
-# python scripts/benchmark_2_players.py --players neural,reasonable
+# python scripts/benchmark_2_players.py --players neural,beginner
+# python scripts/benchmark_2_players.py --players neural,beginner
