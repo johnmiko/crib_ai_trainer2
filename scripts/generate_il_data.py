@@ -294,8 +294,11 @@ class LoggingBeginnerPlayer(BeginnerPlayer):
 
         return best_discards[0]
 
-    def select_card_to_play(self, hand: List[Card], table, crib, count: int):
-        # table is the list of cards currently on the table
+    def select_card_to_play(self, hand: List[Card], table, crib, count: int, game_state):
+        # table is the list of cards currently on the table (current sequence since last reset)
+        # Note: Ideally known_cards should include hand + table + past_table_cards + starter_card,
+        # but we only have access to hand + table here. The game engine would need to be modified
+        # to pass past_table_cards and starter_card for complete information.
         playable = [c for c in hand if c + count <= 31]
         if not playable:
             return None        
@@ -310,7 +313,9 @@ class LoggingBeginnerPlayer(BeginnerPlayer):
             sequence = history_since_reset + [c]
             pts = score_play(sequence)
             y = pts
-            x = featurize_pegging(hand, history_since_reset, count, c)
+            # Known cards: hand + current table sequence
+            # TODO: Enhance to include past_table_cards + starter_card when available
+            x = featurize_pegging(hand, history_since_reset, count, c, known_cards=game_state.known_cards)
             self._log.X_pegging.append(x) # type: ignore
             self._log.y_pegging.append(float(y)) # type: ignore
             if (pts > best_pts) and (c + count <= 31):
@@ -346,11 +351,11 @@ class LoggingMediumPlayer(MediumPlayer):
     def select_crib_cards(self, hand: List[Card], dealer_is_self: bool, your_score=None, opponent_score=None) -> Tuple[Card, Card]:
         """Override to log training data."""
         if self._discard_strategy_mode == "classification":
-            return self.select_crib_cards_classifier(hand, dealer_is_self)
+            return self.select_crib_cards_classifier(hand, dealer_is_self, game_state)
         else:
-            return self.select_crib_cards_regresser(hand, dealer_is_self)
+            return self.select_crib_cards_regresser(hand, dealer_is_self, game_state)
 
-    def play_pegging(self, playable: List[Card], count: int, history_since_reset: List[Card], game_state=None) -> Optional[Card]:
+    def play_pegging(self, playable: List[Card], count: int, history_since_reset: List[Card], game_state) -> Optional[Card]:
         """Override to log training data."""
         if not playable:
             return None
@@ -371,7 +376,10 @@ class LoggingMediumPlayer(MediumPlayer):
         # Log all playable options
         for card, score in scores.items():
             y = score
-            x = featurize_pegging(playable, history_since_reset, count, card, )
+            # Known cards: playable hand + current table sequence
+            # TODO: Enhance to include past_table_cards + starter_card when available
+            known = playable + history_since_reset
+            x = featurize_pegging(playable, history_since_reset, count, card, known_cards=known)
             self._log.X_pegging.append(x) # type: ignore
             self._log.y_pegging.append(float(y)) # type: ignore
         

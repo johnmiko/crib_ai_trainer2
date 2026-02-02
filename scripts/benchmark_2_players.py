@@ -87,7 +87,7 @@ def benchmark_2_players(args) -> int:
     logger.info(f"file_list: {file_list}")
     estimated_training_games = len(file_list) * 2000 / 2
     avg_diff = float(np.mean(diffs)) if diffs else 0.0
-    output_str = f"{player_names[0]} vs {player_names[1]} after {estimated_training_games} training games wins={wins}/{args.games} winrate={winrate*100:.3f} (95% CI {lo*100:.3f} - {hi*100:.3f}) avg point diff {avg_diff:.2f}\n"
+    output_str = f"{player_names[0]} vs {player_names[1]} after {estimated_training_games} training games wins={wins}/{args.games} winrate={winrate*100:.1f}% (95% CI {lo*100:.1f}% - {hi*100:.1f})% avg point diff {avg_diff:.2f}\n"
     with open("benchmark_results.txt", "a") as f:
         f.write(output_str)
     print(output_str)

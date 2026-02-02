@@ -7,7 +7,7 @@ def test_featurize_discard():
     hand = get_random_hand()
     kept = hand[:4]
     discards = [c for c in hand if c not in kept]
-    x = featurize_discard(hand, kept, discards, True)
+    x = featurize_discard(kept, discards, True)
     assert x.shape == (105,)   # 52 + 52 + 1
 
 def test_featurize_pegging():
@@ -16,5 +16,5 @@ def test_featurize_pegging():
     count = 15
     c = hand[0]
 
-    y = featurize_pegging(hand, table, count, c)
-    assert y.shape == (188,)   # 52 + 52 + 32 + 52
+    y = featurize_pegging(hand, table, count, c, known_cards=[])
+    assert y.shape == (240,)   # 52(hand) + 52(table) + 32(count) + 52(cand) + 52(known)

@@ -34,8 +34,11 @@ def featurize_pegging(
     table: List[Card],
     count: int,
     candidate: Card,
-    known_cards: List[Card]
+    known_cards: List[Card] = None,
 ) -> np.ndarray:
+    if known_cards is None:
+        known_cards = []
+    
     hand_vec = multi_hot_cards(hand)           # (52,)
     table_vec = multi_hot_cards(table)         # (52,)
     count_vec = one_hot_count(count)           # (32,)
@@ -49,6 +52,7 @@ def featurize_pegging(
         table_vec,
         count_vec,
         cand_vec,
+        known_vec
     ])
 
 
@@ -260,13 +264,20 @@ class LinearValueModel:
         m.b = b
         return m
 
-def regression_pegging_strategy(pegging_model, hand, table, crib, count):
+def regression_pegging_strategy(pegging_model, hand, table, crib, count, past_table_cards=None, starter_card=None):
+    if past_table_cards is None:
+        past_table_cards = []
+    
     playable = [c for c in hand if c + count <= 31]
     if not playable:
         return None
     best, best_v = None, float("-inf")
     for c in playable:
-        x = featurize_pegging(hand, table, count, c, known_cards=[])  # np array
+        # Known cards include: hand, current table sequence, past table cards, and starter
+        known = hand + table + past_table_cards
+        if starter_card is not None:
+            known = known + [starter_card]
+        x = featurize_pegging(hand, table, count, c, known_cards=known)  # np array
         v = float(pegging_model.predict(x))
         if v > best_v:
             best_v, best = v, c
@@ -286,7 +297,7 @@ class NeuralRegressionPlayer:
         for kept in combinations(hand, 4):
             kept = list(kept)
             discards = [c for c in hand if c not in kept]
-            x = featurize_discard(kept, discards, dealer_is_self)  # np array
+            x = featurize_discard(kept, discards, dealer_is_self, known_cards=hand)  # np array
             v = float(self.discard_model.predict(x))
             if v > best_v:
                 best_v, best = v, tuple(discards)
@@ -349,13 +360,20 @@ class NeuralPegPlayer(BeginnerPlayer):
         self.discard_model = discard_model
         self.pegging_model = pegging_model
 
-    def select_card_to_play(self, hand, table, crib, count):
+    def select_card_to_play(self, hand, table, crib, count, past_table_cards=None, starter_card=None):
+        if past_table_cards is None:
+            past_table_cards = []
+        
         playable = [c for c in hand if c + count <= 31]
         if not playable:
             return None
         best, best_v = None, float("-inf")
         for c in playable:
-            x = featurize_pegging(hand, table, count, c)  # np array
+            # Known cards include: hand, current table sequence, past table cards, and starter
+            known = hand + table + past_table_cards
+            if starter_card is not None:
+                known = known + [starter_card]
+            x = featurize_pegging(hand, table, count, c, known_cards=known)  # np array
             v = float(self.pegging_model.predict(x))
             if v > best_v:
                 best_v, best = v, c
