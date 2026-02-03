@@ -1,15 +1,15 @@
 {
-  "updated_at_utc": "2026-02-03T18:19:47.161169+00:00",
+  "updated_at_utc": "2026-02-03T18:25:13.132623+00:00",
   "strategy": "regression",
-  "cumulative_games": 12020,
+  "cumulative_games": 14020,
   "discard": {
-    "file": "discard_12020.npz",
+    "file": "discard_14020.npz",
     "X_shape": [
-      528060,
+      529350,
       105
     ],
     "y_shape": [
-      528060
+      529350
     ],
     "features": {
       "discard_features": "52 multi-hot discards",
@@ -20,13 +20,13 @@
     "label": "avg_total_score for each option"
   },
   "pegging": {
-    "file": "pegging_12020.npz",
+    "file": "pegging_14020.npz",
     "X_shape": [
-      338679,
+      339528,
       240
     ],
     "y_shape": [
-      338679
+      339528
     ],
     "features": {
       "hand": "52 multi-hot",
