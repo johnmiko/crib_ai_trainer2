@@ -8,7 +8,31 @@ sys.path.insert(0, ".")
 import argparse
 from pathlib import Path
 
-from crib_ai_trainer.constants import MODELS_DIR, TRAINING_DATA_DIR
+from crib_ai_trainer.constants import (
+    MODELS_DIR,
+    TRAINING_DATA_DIR,
+    DEFAULT_DATASET_VERSION,
+    DEFAULT_DATASET_RUN_ID,
+    DEFAULT_MODEL_VERSION,
+    DEFAULT_MODEL_RUN_ID,
+    DEFAULT_STRATEGY,
+    DEFAULT_DISCARD_LOSS,
+    DEFAULT_PEGGING_FEATURE_SET,
+    DEFAULT_GAMES_PER_LOOP,
+    DEFAULT_LOOPS,
+    DEFAULT_EPOCHS,
+    DEFAULT_BENCHMARK_GAMES,
+    DEFAULT_LR,
+    DEFAULT_BATCH_SIZE,
+    DEFAULT_L2,
+    DEFAULT_MAX_SHARDS,
+    DEFAULT_FALLBACK_PLAYER,
+    DEFAULT_RANK_PAIRS_PER_HAND,
+    DEFAULT_EVAL_SAMPLES,
+    DEFAULT_MODEL_TAG,
+    DEFAULT_SEED,
+    DEFAULT_USE_RANDOM_SEED,
+)
 from scripts.benchmark_2_players import benchmark_2_players
 from scripts.generate_il_data import generate_il_data, _resolve_output_dir
 from scripts.train_linear_models import train_linear_models, _resolve_models_dir
@@ -16,40 +40,41 @@ from scripts.train_linear_models import train_linear_models, _resolve_models_dir
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--games", type=int, default=2000, help="Games per loop")
+    ap.add_argument("--games", type=int, default=DEFAULT_GAMES_PER_LOOP, help="Games per loop")
     ap.add_argument(
         "--loops",
         type=int,
-        default=1,
+        default=DEFAULT_LOOPS,
         help="Number of generate->train->benchmark cycles. Use -1 to loop forever.",
     )
     ap.add_argument("--training_dir", type=str, default=TRAINING_DATA_DIR)
-    ap.add_argument("--dataset_version", type=str, default="discard_v2")
-    ap.add_argument("--dataset_run_id", type=str, default=None)
-    ap.add_argument("--strategy", type=str, default="regression")
+    ap.add_argument("--dataset_version", type=str, default=DEFAULT_DATASET_VERSION)
+    ap.add_argument("--dataset_run_id", type=str, default=DEFAULT_DATASET_RUN_ID or None)
+    ap.add_argument("--strategy", type=str, default=DEFAULT_STRATEGY)
     ap.add_argument(
         "--pegging_feature_set",
         type=str,
-        default="full",
+        default=DEFAULT_PEGGING_FEATURE_SET,
         choices=["basic", "full"],
     )
-    ap.add_argument("--seed", type=int, default=None)
+    default_seed = None if DEFAULT_USE_RANDOM_SEED else DEFAULT_SEED
+    ap.add_argument("--seed", type=int, default=default_seed)
     ap.add_argument("--data_dir", type=str, default=None)
-    ap.add_argument("--epochs", type=int, default=5)
+    ap.add_argument("--epochs", type=int, default=DEFAULT_EPOCHS)
     ap.add_argument("--players", type=str, default="NeuralRegressionPlayer,beginner")
-    ap.add_argument("--benchmark_games", type=int, default=200)
+    ap.add_argument("--benchmark_games", type=int, default=DEFAULT_BENCHMARK_GAMES)
     ap.add_argument("--models_dir", type=str, default=MODELS_DIR)
-    ap.add_argument("--model_version", type=str, default="discard_v2")
-    ap.add_argument("--model_run_id", type=str, default=None)
-    ap.add_argument("--discard_loss", type=str, default="regression", choices=["classification", "regression", "ranking"])
-    ap.add_argument("--lr", type=float, default=0.00005)
-    ap.add_argument("--batch_size", type=int, default=2048)
-    ap.add_argument("--l2", type=float, default=0.001)
-    ap.add_argument("--max_shards", type=int, default=None)
-    ap.add_argument("--fallback_player", type=str, default="beginner")
-    ap.add_argument("--rank_pairs_per_hand", type=int, default=20)
-    ap.add_argument("--eval_samples", type=int, default=2048)
-    ap.add_argument("--model_tag", type=str, default=None)
+    ap.add_argument("--model_version", type=str, default=DEFAULT_MODEL_VERSION)
+    ap.add_argument("--model_run_id", type=str, default=DEFAULT_MODEL_RUN_ID or None)
+    ap.add_argument("--discard_loss", type=str, default=DEFAULT_DISCARD_LOSS, choices=["classification", "regression", "ranking"])
+    ap.add_argument("--lr", type=float, default=DEFAULT_LR)
+    ap.add_argument("--batch_size", type=int, default=DEFAULT_BATCH_SIZE)
+    ap.add_argument("--l2", type=float, default=DEFAULT_L2)
+    ap.add_argument("--max_shards", type=int, default=(DEFAULT_MAX_SHARDS or None))
+    ap.add_argument("--fallback_player", type=str, default=DEFAULT_FALLBACK_PLAYER)
+    ap.add_argument("--rank_pairs_per_hand", type=int, default=DEFAULT_RANK_PAIRS_PER_HAND)
+    ap.add_argument("--eval_samples", type=int, default=DEFAULT_EVAL_SAMPLES)
+    ap.add_argument("--model_tag", type=str, default=DEFAULT_MODEL_TAG or None)
     args = ap.parse_args()
 
     if args.data_dir is None:
@@ -117,4 +142,3 @@ if __name__ == "__main__":
 
 # python .\scripts\do_everything2.py
 # python .\scripts\do_everything2.py --games 2000 --loops -1 --dataset_version "discard_v3" --model_version "discard_v3" --strategy regression --discard_loss regression --benchmark_games 200
-

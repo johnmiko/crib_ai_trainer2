@@ -13,7 +13,16 @@ import os
 
 sys.path.insert(0, ".")
 from cribbage.utils import play_multiple_games
-from crib_ai_trainer.constants import MODELS_DIR, TRAINING_DATA_DIR
+from crib_ai_trainer.constants import (
+    MODELS_DIR,
+    TRAINING_DATA_DIR,
+    DEFAULT_BENCHMARK_PLAYERS,
+    DEFAULT_BENCHMARK_GAMES,
+    DEFAULT_MAX_SHARDS,
+    DEFAULT_SEED,
+    DEFAULT_FALLBACK_PLAYER,
+    DEFAULT_MODEL_TAG,
+)
 
 from cribbage.players.random_player import RandomPlayer
 from cribbage.players.medium_player import MediumPlayer
@@ -150,14 +159,14 @@ def benchmark_2_players(
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--players", type=str, default="NeuralRegressionPlayer,beginner")
-    ap.add_argument("--games", type=int, default=500)
+    ap.add_argument("--players", type=str, default=DEFAULT_BENCHMARK_PLAYERS)
+    ap.add_argument("--games", type=int, default=DEFAULT_BENCHMARK_GAMES)
     ap.add_argument("--models_dir", type=str, default=MODELS_DIR)
     ap.add_argument("--data_dir", type=str, default=TRAINING_DATA_DIR)
-    ap.add_argument("--max_shards", type=int, default=None)
-    ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--fallback_player", type=str, default="beginner")
-    ap.add_argument("--model_tag", type=str, default=None)
+    ap.add_argument("--max_shards", type=int, default=(DEFAULT_MAX_SHARDS or None))
+    ap.add_argument("--seed", type=int, default=DEFAULT_SEED)
+    ap.add_argument("--fallback_player", type=str, default=DEFAULT_FALLBACK_PLAYER)
+    ap.add_argument("--model_tag", type=str, default=DEFAULT_MODEL_TAG or None)
     ap.add_argument("--auto_mixed_benchmarks", action="store_true", default=True)
     ap.add_argument(
         "--no_auto_mixed_benchmarks",
@@ -188,5 +197,4 @@ if __name__ == "__main__":
 # .\.venv\Scripts\python.exe .\scripts\train_linear_models.py --data_dir "il_datasets\discard_v3\001" --models_dir "models" --model_version "discard_v3" --run_id 002 --discard_loss regression --epochs 5 --eval_samples 2048 --lr 0.00005 --l2 0.001 --batch_size 2048
 
 # .\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py --players NeuralRegressionPlayer,beginner --games 200 --models_dir "models\discard_v3\001" --data_dir "il_datasets\discard_v3\001"
-
 

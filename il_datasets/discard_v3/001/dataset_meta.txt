@@ -1,13 +1,13 @@
-updated_at_utc: 2026-02-03T20:52:00.072672+00:00
+updated_at_utc: 2026-02-03T21:08:57.289433+00:00
 dataset_version: discard_v3
 run_id: 001
 strategy: regression
-cumulative_games: 2414
-seed: 401064277
+cumulative_games: 4614
+seed: 2493620
 
-discard_file: discard_2414.npz
-discard_X_shape: [540, 158]
-discard_y_shape: [540]
+discard_file: discard_4614.npz
+discard_X_shape: [52500, 158]
+discard_y_shape: [52500]
 discard_features:
   - 52 multi-hot discards
   - 52 multi-hot kept
@@ -16,9 +16,9 @@ discard_features:
   - total_dim: 158
 discard_label: avg_total_score for each option
 
-pegging_file: pegging_2414.npz
-pegging_X_shape: [344, 369]
-pegging_y_shape: [344]
+pegging_file: pegging_4614.npz
+pegging_X_shape: [33687, 369]
+pegging_y_shape: [33687]
 pegging_features:
   - 52 multi-hot
   - 52 multi-hot

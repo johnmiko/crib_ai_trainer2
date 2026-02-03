@@ -1,18 +1,18 @@
 {
-  "updated_at_utc": "2026-02-03T20:52:00.072672+00:00",
+  "updated_at_utc": "2026-02-03T21:08:57.289433+00:00",
   "dataset_version": "discard_v3",
   "run_id": "001",
   "strategy": "regression",
-  "cumulative_games": 2414,
-  "seed": 401064277,
+  "cumulative_games": 4614,
+  "seed": 2493620,
   "discard": {
-    "file": "discard_2414.npz",
+    "file": "discard_4614.npz",
     "X_shape": [
-      540,
+      52500,
       158
     ],
     "y_shape": [
-      540
+      52500
     ],
     "features": {
       "discard_features": "52 multi-hot discards",
@@ -24,13 +24,13 @@
     "label": "avg_total_score for each option"
   },
   "pegging": {
-    "file": "pegging_2414.npz",
+    "file": "pegging_4614.npz",
     "X_shape": [
-      344,
+      33687,
       369
     ],
     "y_shape": [
-      344
+      33687
     ],
     "features": {
       "hand": "52 multi-hot",

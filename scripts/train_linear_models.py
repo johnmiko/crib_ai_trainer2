@@ -15,7 +15,21 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, ".")
-from crib_ai_trainer.constants import MODELS_DIR, TRAINING_DATA_DIR
+from crib_ai_trainer.constants import (
+    MODELS_DIR,
+    TRAINING_DATA_DIR,
+    DEFAULT_MODEL_VERSION,
+    DEFAULT_MODEL_RUN_ID,
+    DEFAULT_DISCARD_LOSS,
+    DEFAULT_LR,
+    DEFAULT_EPOCHS,
+    DEFAULT_BATCH_SIZE,
+    DEFAULT_L2,
+    DEFAULT_SEED,
+    DEFAULT_EVAL_SAMPLES,
+    DEFAULT_MAX_SHARDS,
+    DEFAULT_RANK_PAIRS_PER_HAND,
+)
 from crib_ai_trainer.players.neural_player import LinearDiscardClassifier, LinearValueModel
 import logging
 
@@ -282,21 +296,20 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--data_dir", type=str, default=TRAINING_DATA_DIR)
     ap.add_argument("--models_dir", type=str, default=MODELS_DIR)
-    ap.add_argument("--model_version", type=str, default="discard_v1")
-    ap.add_argument("--run_id", type=str, default=None, help="Run id folder (e.g., 001). Omit to auto-increment.")
-    ap.add_argument("--discard_loss", type=str, default=None, choices=["classification", "regression", "ranking"])
-    ap.add_argument("--lr", type=float, default=0.0005)
-    ap.add_argument("--epochs", type=int, default=2)
-    ap.add_argument("--batch_size", type=int, default=1024)
-    ap.add_argument("--l2", type=float, default=0.001)
-    ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--eval_samples", type=int, default=2048)
-    ap.add_argument("--max_shards", type=int, default=None)
-    ap.add_argument("--rank_pairs_per_hand", type=int, default=20)
+    ap.add_argument("--model_version", type=str, default=DEFAULT_MODEL_VERSION)
+    ap.add_argument("--run_id", type=str, default=DEFAULT_MODEL_RUN_ID or None, help="Run id folder (e.g., 001). Omit to auto-increment.")
+    ap.add_argument("--discard_loss", type=str, default=DEFAULT_DISCARD_LOSS, choices=["classification", "regression", "ranking"])
+    ap.add_argument("--lr", type=float, default=DEFAULT_LR)
+    ap.add_argument("--epochs", type=int, default=DEFAULT_EPOCHS)
+    ap.add_argument("--batch_size", type=int, default=DEFAULT_BATCH_SIZE)
+    ap.add_argument("--l2", type=float, default=DEFAULT_L2)
+    ap.add_argument("--seed", type=int, default=DEFAULT_SEED)
+    ap.add_argument("--eval_samples", type=int, default=DEFAULT_EVAL_SAMPLES)
+    ap.add_argument("--max_shards", type=int, default=(DEFAULT_MAX_SHARDS or None))
+    ap.add_argument("--rank_pairs_per_hand", type=int, default=DEFAULT_RANK_PAIRS_PER_HAND)
     args = ap.parse_args()
     args.models_dir = _resolve_models_dir(args.models_dir, args.model_version, args.run_id)
     train_linear_models(args)
 
 # python .\scripts\train_linear_models.py
 # .\.venv\Scripts\python.exe .\scripts\train_linear_models.py --data_dir "il_datasets/discard_v3/001" --models_dir "models" --model_version "discard_v3" --discard_loss regression --epochs 5 --eval_samples 2048 --lr 0.00005 --batch_size 2048 --l2 0.001
-

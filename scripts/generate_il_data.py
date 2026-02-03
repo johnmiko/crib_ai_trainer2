@@ -22,7 +22,16 @@ from cribbage.players.rule_based_player import get_full_deck
 
 
 sys.path.insert(0, ".")
-from crib_ai_trainer.constants import TRAINING_DATA_DIR
+from crib_ai_trainer.constants import (
+    TRAINING_DATA_DIR,
+    DEFAULT_DATASET_VERSION,
+    DEFAULT_DATASET_RUN_ID,
+    DEFAULT_STRATEGY,
+    DEFAULT_PEGGING_FEATURE_SET,
+    DEFAULT_GAMES_PER_LOOP,
+    DEFAULT_SEED,
+    DEFAULT_USE_RANDOM_SEED,
+)
 import argparse
 from itertools import combinations
 from dataclasses import dataclass, field
@@ -926,14 +935,19 @@ def generate_il_data(games, out_dir, seed, strategy, pegging_feature_set: str = 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     # ap.add_argument("--games", type=int, default=2000)
-    ap.add_argument("--games", type=int, default=200, help="Number of games to simulate. Use -1 to run forever.")
+    ap.add_argument(
+        "--games",
+        type=int,
+        default=DEFAULT_GAMES_PER_LOOP,
+        help="Number of games to simulate. Use -1 to run forever.",
+    )
     default_out_dir = TRAINING_DATA_DIR
     ap.add_argument("--out_dir", type=str, default=default_out_dir)
-    ap.add_argument("--dataset_version", type=str, default="discard_v1")
+    ap.add_argument("--dataset_version", type=str, default=DEFAULT_DATASET_VERSION)
     ap.add_argument(
         "--run_id",
         type=str,
-        default=None,
+        default=DEFAULT_DATASET_RUN_ID or None,
         help="Run id folder (e.g., 001). Omit to append to latest run unless --new_run is set.",
     )
     ap.add_argument(
@@ -941,12 +955,13 @@ if __name__ == "__main__":
         action="store_true",
         help="Create a new run folder even if one already exists for this dataset_version.",
     )
-    ap.add_argument("--seed", type=int, default=None, help="Random seed. Omit to use a random seed.")
-    ap.add_argument("--strategy", type=str, default="classification")
+    default_seed = None if DEFAULT_USE_RANDOM_SEED else DEFAULT_SEED
+    ap.add_argument("--seed", type=int, default=default_seed, help="Random seed. Omit to use a random seed.")
+    ap.add_argument("--strategy", type=str, default=DEFAULT_STRATEGY)
     ap.add_argument(
         "--pegging_feature_set",
         type=str,
-        default="full",
+        default=DEFAULT_PEGGING_FEATURE_SET,
         choices=["basic", "full"],
         help="Which pegging feature set to use.",
     )
