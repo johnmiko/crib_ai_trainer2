@@ -40,7 +40,7 @@ from cribbage.database import normalize_hand_to_str
 
 from cribbage.players.beginner_player import BeginnerPlayer
 from cribbage.players.medium_player import MediumPlayer
-from crib_ai_trainer.players.neural_player import featurize_discard, featurize_pegging, DISCARD_FEATURE_DIM
+from crib_ai_trainer.players.neural_player import featurize_discard, featurize_pegging, DISCARD_FEATURE_DIM, PEGGING_FEATURE_DIM
 
 from cribbage.cribbagegame import score_hand, score_play
 
@@ -327,10 +327,19 @@ class LoggingBeginnerPlayer(BeginnerPlayer):
         history_since_reset = table
         for c in playable:
             sequence = history_since_reset + [c]
-            pts = score_play(sequence)
+            pts, _ = score_play(sequence)
             y = pts
             # Known cards: from player_state (includes hand, table, past cards, starter)
-            x = featurize_pegging(hand, history_since_reset, count, c, known_cards=player_state.known_cards)
+            x = featurize_pegging(
+                hand,
+                history_since_reset,
+                count,
+                c,
+                known_cards=player_state.known_cards,
+                opponent_known_hand=player_state.opponent_known_hand,
+                all_played_cards=round_state.all_played_cards,
+                player_score=player_state.score,
+            )
             self._log.X_pegging.append(x) # type: ignore
             self._log.y_pegging.append(float(y)) # type: ignore
             if (pts > best_pts) and (c + count <= 31):
@@ -385,9 +394,12 @@ class LoggingMediumPlayer(MediumPlayer):
         playable_cards = [c for c in player_state.hand if c.get_value() + round_state.count <= 31]
         if not playable_cards:
             return None
-        # Pass known_cards to play_pegging via instance variable
+        # Pass known_cards to play_pegging via instance variables
         self._current_known_cards = player_state.known_cards
         self._current_hand = list(player_state.hand)
+        self._current_opponent_known_hand = list(player_state.opponent_known_hand)
+        self._current_all_played_cards = list(round_state.all_played_cards)
+        self._current_player_score = int(player_state.score)
         return self.play_pegging(playable_cards, round_state.count, round_state.table_cards)
     
     def play_pegging(self, playable: List[Card], count: int, history_since_reset: List[Card]) -> Optional[Card]:
@@ -411,12 +423,24 @@ class LoggingMediumPlayer(MediumPlayer):
         # Get known_cards from instance variable (set in select_card_to_play)
         known_cards = getattr(self, '_current_known_cards', [])
         full_hand = getattr(self, '_current_hand', playable)
+        opp_known = getattr(self, "_current_opponent_known_hand", [])
+        all_played = getattr(self, "_current_all_played_cards", [])
+        player_score = getattr(self, "_current_player_score", 0)
         
         # Log all playable options
         for card, score in scores.items():
             y = score
             # Known cards: from player_state (includes hand, table, past cards, starter)
-            x = featurize_pegging(full_hand, history_since_reset, count, card, known_cards=known_cards)
+            x = featurize_pegging(
+                full_hand,
+                history_since_reset,
+                count,
+                card,
+                known_cards=known_cards,
+                opponent_known_hand=opp_known,
+                all_played_cards=all_played,
+                player_score=player_score,
+            )
             self._log.X_pegging.append(x) # type: ignore
             self._log.y_pegging.append(float(y)) # type: ignore
         
@@ -597,7 +621,7 @@ def save_data(log, out_dir, cumulative_games, strategy, seed):
         assert yd.shape[0] == Xd.shape[0]
         assert yd.shape[1] == 15
 
-    Xp = np.stack(log.X_pegging).astype(np.float32) if log.X_pegging else np.zeros((0, 240), np.float32)
+    Xp = np.stack(log.X_pegging).astype(np.float32) if log.X_pegging else np.zeros((0, PEGGING_FEATURE_DIM), np.float32)
     yp = np.array(log.y_pegging, dtype=np.float32)
 
     out_path_discard = os.path.join(out_dir, f"discard_{cumulative_games}.npz")
@@ -641,7 +665,10 @@ def save_data(log, out_dir, cumulative_games, strategy, seed):
                 "count": "32 one-hot (0..31)",
                 "candidate": "52 one-hot",
                 "known_cards": "52 multi-hot",
-                "total_dim": 240,
+            "total_dim": PEGGING_FEATURE_DIM,
+            "opponent_played": "52 multi-hot",
+            "all_played": "52 multi-hot",
+            "engineered": "20 scalar pegging features (15/31 flags, runs, setups, hand sizes, go-prob, score)",
             },
             "label": "medium pegging score for the candidate card",
         },
@@ -678,6 +705,9 @@ def save_data(log, out_dir, cumulative_games, strategy, seed):
         f"  - {dataset_meta['pegging']['features']['count']}",
         f"  - {dataset_meta['pegging']['features']['candidate']}",
         f"  - {dataset_meta['pegging']['features']['known_cards']}",
+        f"  - {dataset_meta['pegging']['features']['opponent_played']}",
+        f"  - {dataset_meta['pegging']['features']['all_played']}",
+        f"  - {dataset_meta['pegging']['features']['engineered']}",
         f"  - total_dim: {dataset_meta['pegging']['features']['total_dim']}",
         f"pegging_label: {dataset_meta['pegging']['label']}",
     ]
@@ -792,3 +822,4 @@ if __name__ == "__main__":
 
 # python .\scripts\generate_il_data.py
 # python .\scripts\generate_il_data.py --games -1 --out_dir "il_datasets/medium_discard_regression" --strategy regression
+# python .\scripts\train_linear_models.py --data_dir "il_datasets\medium_discard_regression" --models_dir "models\regression" --epochs 5 --eval_samples 2048 --max_shards 2

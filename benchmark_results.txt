@@ -51,3 +51,8 @@ NeuralDiscardOnlyPlayer vs beginner after 4021 training games wins=39/200 winrat
 NeuralRegressionPlayer vs beginner after 8021 training games wins=26/200 winrate=13.0% (95% CI 9.0% - 18.4)% avg point diff -28.75
 NeuralDiscardOnlyPlayer vs beginner after 8021 training games wins=32/200 winrate=16.0% (95% CI 11.6% - 21.7)% avg point diff -22.04
 
+Add all of the scoring features to the discard training set (15s, pairs, runs, flushes, nobs)
+NeuralRegressionPlayer vs beginner after 4000 training games wins=85/200 winrate=42.5% (95% CI 35.9% - 49.4)% avg point diff -5.69
+NeuralDiscardOnlyPlayer vs beginner after 4000 training games wins=105/200 winrate=52.5% (95% CI 45.6% - 59.3)% avg point diff 0.24
+NeuralPegOnlyPlayer vs beginner after 4000 training games wins=84/200 winrate=42.0% (95% CI 35.4% - 48.9)% avg point diff -5.76
+That went well, going to add more features to pegging

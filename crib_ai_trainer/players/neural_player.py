@@ -4,6 +4,9 @@ from typing import List, Tuple
 
 from cribbage.playingcards import Card
 from cribbage.players.beginner_player import BeginnerPlayer
+from cribbage.cribbagegame import score_play
+from cribbage.scoring import HasPairTripleQuad, HasStraight_DuringPlay
+from cribbage.players.rule_based_player import get_full_deck
 
 from crib_ai_trainer.features import multi_hot_cards
 
@@ -23,6 +26,11 @@ BASE_DISCARD_FEATURE_DIM = 105
 ENGINEERED_DISCARD_FEATURE_DIM = 47
 
 DISCARD_FEATURE_DIM = BASE_DISCARD_FEATURE_DIM + ENGINEERED_DISCARD_FEATURE_DIM
+
+# Pegging features
+PEGGING_BASE_FEATURE_DIM = 240  # hand(52) + table(52) + count(32) + candidate(52) + known(52)
+PEGGING_ENGINEERED_FEATURE_DIM = 20
+PEGGING_FEATURE_DIM = PEGGING_BASE_FEATURE_DIM + 52 + 52 + PEGGING_ENGINEERED_FEATURE_DIM  # + opp_played + all_played
 
 
 def _rank_counts(cards: List[Card]) -> np.ndarray:
@@ -148,25 +156,142 @@ def featurize_pegging(
     count: int,
     candidate: Card,
     known_cards: List[Card] = None,
+    opponent_known_hand: List[Card] = None,
+    all_played_cards: List[Card] = None,
+    player_score: int | None = None,
 ) -> np.ndarray:
     if known_cards is None:
         known_cards = []
+    if opponent_known_hand is None:
+        opponent_known_hand = []
+    if all_played_cards is None:
+        all_played_cards = []
+    if player_score is None:
+        player_score = 0
     
     hand_vec = multi_hot_cards(hand)           # (52,)
     table_vec = multi_hot_cards(table)         # (52,)
     count_vec = one_hot_count(count)           # (32,)
     known_vec = multi_hot_cards(known_cards)  # (52,)
+    opp_played_vec = multi_hot_cards(opponent_known_hand)  # (52,)
+    all_played_vec = multi_hot_cards(all_played_cards)     # (52,)
 
     cand_vec = np.zeros(52, dtype=np.float32)
     cand_vec[candidate.to_index()] = 1.0
 
-    return np.concatenate([
+    # Engineered pegging features (scalars)
+    new_count = count + candidate.get_value()
+    remaining_to_31 = 31 - new_count
+    makes_15 = 1.0 if new_count == 15 else 0.0
+    makes_31 = 1.0 if new_count == 31 else 0.0
+
+    seq_after = table + [candidate]
+    immediate_points = float(score_play(seq_after)[0])
+    pair_points = float(HasPairTripleQuad().check(seq_after)[0])
+    run_length = float(HasStraight_DuringPlay().check(seq_after)[0])
+
+    # Run setup features based on last two cards after our play
+    run_setup_gap1 = 0.0
+    run_setup_gap2 = 0.0
+    run_setup_any = 0.0
+    opponent_pair_setup = 0.0
+
+    if len(seq_after) >= 1:
+        last_rank = seq_after[-1].get_rank().lower()
+        # Opponent can score a pair if they play same rank and stay <=31
+        same_rank_card = Card(f"{last_rank}h")
+        if new_count + same_rank_card.get_value() <= 31:
+            opponent_pair_setup = 1.0
+
+    if len(seq_after) >= 2:
+        r1 = RANK_TO_I[seq_after[-1].get_rank().lower()] + 1
+        r2 = RANK_TO_I[seq_after[-2].get_rank().lower()] + 1
+        gap = abs(r1 - r2)
+        if gap == 1:
+            # Opponent can play r1-1 or r2+1
+            candidates = []
+            low = min(r1, r2) - 1
+            high = max(r1, r2) + 1
+            if 1 <= low <= 13:
+                candidates.append(low)
+            if 1 <= high <= 13:
+                candidates.append(high)
+            for rv in candidates:
+                rank_str = RANKS[rv - 1]
+                c = Card(f"{rank_str}h")
+                if new_count + c.get_value() <= 31:
+                    run_setup_gap1 += 1.0
+        elif gap == 2:
+            # Opponent can play the middle rank
+            mid = min(r1, r2) + 1
+            rank_str = RANKS[mid - 1]
+            c = Card(f"{rank_str}h")
+            if new_count + c.get_value() <= 31:
+                run_setup_gap2 = 1.0
+
+    # Count how many ranks could create a run of 3+ for opponent next
+    for rv in range(1, 14):
+        rank_str = RANKS[rv - 1]
+        c = Card(f"{rank_str}h")
+        if new_count + c.get_value() > 31:
+            continue
+        run_len = HasStraight_DuringPlay().check(seq_after + [c])[0]
+        if run_len >= 3:
+            run_setup_any += 1.0
+
+    our_hand_count = float(len(hand))
+    opp_hand_count_est = float(max(0, 4 - len(opponent_known_hand)))
+    table_len = float(len(table))
+    opp_played_count = float(len(opponent_known_hand))
+    known_cards_count = float(len(known_cards))
+
+    # Opponent "go" danger: estimate if opponent has any playable card.
+    full_deck = get_full_deck()
+    known_set = set(known_cards) | set(all_played_cards) | set(hand)
+    unseen = [c for c in full_deck if c not in known_set]
+    playable_unseen = [c for c in unseen if c.get_value() <= remaining_to_31]
+    opp_can_play_prob = float(len(playable_unseen) / max(1, len(unseen)))
+    opp_playable_count = float(len(playable_unseen))
+    unseen_count = float(len(unseen))
+
+    engineered = np.array(
+        [
+            float(new_count),
+            float(remaining_to_31),
+            makes_15,
+            makes_31,
+            immediate_points,
+            pair_points,
+            run_length,
+            run_setup_gap1,
+            run_setup_gap2,
+            run_setup_any,
+            opponent_pair_setup,
+            our_hand_count,
+            opp_hand_count_est,
+            table_len,
+            opp_played_count,
+            known_cards_count,
+            float(player_score),
+            opp_can_play_prob,
+            opp_playable_count,
+            unseen_count,
+        ],
+        dtype=np.float32,
+    )
+
+    out = np.concatenate([
         hand_vec,
         table_vec,
         count_vec,
         cand_vec,
-        known_vec
+        known_vec,
+        opp_played_vec,
+        all_played_vec,
+        engineered,
     ])
+    assert out.shape[0] == PEGGING_FEATURE_DIM, f"pegging features dim {out.shape[0]} != {PEGGING_FEATURE_DIM}"
+    return out
 
 
 class LinearDiscardClassifier:
@@ -508,6 +633,9 @@ def regression_pegging_strategy(
     past_table_cards=None,
     starter_card=None,
     known_cards=None,
+    opponent_known_hand=None,
+    all_played_cards=None,
+    player_score: int = 0,
 ):
     if past_table_cards is None:
         past_table_cards = []
@@ -524,7 +652,16 @@ def regression_pegging_strategy(
                 known = known + [starter_card]
         else:
             known = known_cards
-        x = featurize_pegging(hand, table, count, c, known_cards=known)  # np array
+        x = featurize_pegging(
+            hand,
+            table,
+            count,
+            c,
+            known_cards=known,
+            opponent_known_hand=opponent_known_hand,
+            all_played_cards=all_played_cards,
+            player_score=player_score,
+        )  # np array
         v = float(pegging_model.predict(x))
         if v > best_v:
             best_v, best = v, c
@@ -559,6 +696,9 @@ class NeuralRegressionPlayer:
             crib,
             count,
             known_cards=player_state.known_cards,
+            opponent_known_hand=player_state.opponent_known_hand,
+            all_played_cards=round_state.all_played_cards,
+            player_score=player_state.score,
         )
         return best
 
@@ -592,6 +732,9 @@ class NeuralClassificationPlayer:
             crib,
             count,
             known_cards=player_state.known_cards,
+            opponent_known_hand=player_state.opponent_known_hand,
+            all_played_cards=round_state.all_played_cards,
+            player_score=player_state.score,
         )
         return best
 
@@ -675,4 +818,7 @@ class NeuralPegOnlyPlayer:
             crib,
             count,
             known_cards=player_state.known_cards,
+            opponent_known_hand=player_state.opponent_known_hand,
+            all_played_cards=round_state.all_played_cards,
+            player_score=player_state.score,
         )
