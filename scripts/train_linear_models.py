@@ -208,6 +208,32 @@ def train_linear_models(args) -> int:
         json.dump(model_meta, f, indent=2)
     logger.info(f"Saved model metadata -> {meta_path}")
 
+    # Also write a human-readable summary.
+    txt_path = models_dir / "model_meta.txt"
+    lines = [
+        f"trained_at_utc: {model_meta['trained_at_utc']}",
+        f"data_dir: {model_meta['data_dir']}",
+        f"models_dir: {model_meta['models_dir']}",
+        f"discard_loss: {model_meta['discard_loss']}",
+        f"epochs: {model_meta['epochs']}",
+        f"lr: {model_meta['lr']}",
+        f"batch_size: {model_meta['batch_size']}",
+        f"l2: {model_meta['l2']}",
+        f"seed: {model_meta['seed']}",
+        f"max_shards: {model_meta['max_shards']}",
+        f"num_shards_used: {model_meta['num_shards_used']}",
+        f"last_discard_loss: {model_meta['last_discard_loss']}",
+        f"last_pegging_loss: {model_meta['last_pegging_loss']}",
+        f"discard_model_file: {model_meta['discard_model_file']}",
+        f"pegging_model_file: {model_meta['pegging_model_file']}",
+        "eval_metrics:",
+    ]
+    for k, v in model_meta["eval_metrics"].items():
+        lines.append(f"  - {k}: {v}")
+    with open(txt_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+    logger.info(f"Saved model summary -> {txt_path}")
+
     return 0
 
 

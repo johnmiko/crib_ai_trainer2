@@ -1,0 +1,43 @@
+{
+  "updated_at_utc": "2026-02-03T18:05:15.328669+00:00",
+  "strategy": "ranking",
+  "cumulative_games": 8021,
+  "discard": {
+    "file": "discard_8021.npz",
+    "X_shape": [
+      35414,
+      15,
+      105
+    ],
+    "y_shape": [
+      35414,
+      15
+    ],
+    "features": {
+      "discard_features": "52 multi-hot discards",
+      "kept_features": "52 multi-hot kept",
+      "dealer_flag": "1 float (1.0 if dealer_is_self else 0.0)",
+      "total_dim": 105
+    },
+    "label": "avg_total_score for each option (15 values)"
+  },
+  "pegging": {
+    "file": "pegging_8021.npz",
+    "X_shape": [
+      340751,
+      240
+    ],
+    "y_shape": [
+      340751
+    ],
+    "features": {
+      "hand": "52 multi-hot",
+      "table": "52 multi-hot",
+      "count": "32 one-hot (0..31)",
+      "candidate": "52 one-hot",
+      "known_cards": "52 multi-hot",
+      "total_dim": 240
+    },
+    "label": "medium pegging score for the candidate card"
+  }
+}

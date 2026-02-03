@@ -46,3 +46,9 @@ NeuralRegressionPlayer vs beginner after 2020 training games wins=19/200 winrate
 NeuralRegressionPlayer vs beginner after 4020 training games wins=30/200 winrate=15.0% (95% CI 10.7% - 20.6)% avg point diff -25.89
 NeuralDiscardOnlyPlayer vs beginner after 4020 training games wins=39/200 winrate=19.5% (95% CI 14.6% - 25.5)% avg point diff -20.41
 NeuralPegOnlyPlayer vs beginner after 4020 training games wins=72/200 winrate=36.0% (95% CI 29.7% - 42.9)% avg point diff -8.73
+NeuralRegressionPlayer vs beginner after 4021 training games wins=19/200 winrate=9.5% (95% CI 6.2% - 14.4)% avg point diff -29.46
+NeuralDiscardOnlyPlayer vs beginner after 4021 training games wins=39/200 winrate=19.5% (95% CI 14.6% - 25.5)% avg point diff -19.80
+NeuralRegressionPlayer vs beginner after 8021 training games wins=26/200 winrate=13.0% (95% CI 9.0% - 18.4)% avg point diff -28.75
+NeuralDiscardOnlyPlayer vs beginner after 8021 training games wins=32/200 winrate=16.0% (95% CI 11.6% - 21.7)% avg point diff -22.04
+NeuralDiscardOnlyPlayer vs beginner after 20 training games wins=3/10 winrate=30.0% (95% CI 10.8% - 60.3)% avg point diff -28.80
+NeuralRegressionPlayer vs beginner after 10020 training games wins=3/10 winrate=30.0% (95% CI 10.8% - 60.3)% avg point diff -11.80

@@ -1,0 +1,19 @@
+trained_at_utc: 2026-02-03T18:05:11.703061+00:00
+data_dir: il_datasets\medium_discard_ranking
+models_dir: models\ranking
+discard_loss: ranking
+epochs: 6
+lr: 0.05
+batch_size: 8192
+l2: 0.0
+seed: 0
+max_shards: 6
+num_shards_used: 5
+last_discard_loss: 11.238688429880053
+last_pegging_loss: 0.5074386817396404
+discard_model_file: discard_linear.npz
+pegging_model_file: pegging_linear.npz
+eval_metrics:
+  - discard_ranker_avg_model_margin: 0.08974142372608185
+  - discard_ranker_avg_target_margin: 1.2696386575698853
+  - pegging_regressor_mse: 0.5143642425537109

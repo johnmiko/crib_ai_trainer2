@@ -20,6 +20,8 @@ Margin ≤ 0.1: 24.3%
 Margin ≤ 0.5: 45.5%
 Margin ≤ 1.0: 55.8%
 Interpretation
+Label margins are small (many near ties), which makes classification brittle.
+
 This confirms the same story at scale: nearly half the hands have a top‑1 vs top‑2 gap under 0.5 points, which makes strict classification a pretty brittle target even when the teacher is good.
 
 If you want, the next logical step is to train a discard model that predicts a score for each option (regression ranking) but keep the same medium‑player scoring (no Monte Carlo). That would let the model treat near‑ties as near‑ties.

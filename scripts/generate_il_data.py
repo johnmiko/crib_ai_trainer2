@@ -51,6 +51,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 import random
+import secrets
 from itertools import combinations
 import json
 from datetime import datetime, timezone
@@ -551,7 +552,7 @@ class LoggingMediumPlayer(MediumPlayer):
         return tuple(best_discards_cards)
 
 
-def save_data(log, out_dir, cumulative_games, strategy):
+def save_data(log, out_dir, cumulative_games, strategy, seed):
     """Save accumulated training data to disk."""
     os.makedirs(out_dir, exist_ok=True)
     
@@ -613,6 +614,7 @@ def save_data(log, out_dir, cumulative_games, strategy):
         "updated_at_utc": datetime.now(timezone.utc).isoformat(),
         "strategy": strategy,
         "cumulative_games": cumulative_games,
+        "seed": seed,
         "discard": {
             "file": os.path.basename(out_path_discard),
             "X_shape": list(Xd.shape),
@@ -649,6 +651,40 @@ def save_data(log, out_dir, cumulative_games, strategy):
         json.dump(dataset_meta, f, indent=2)
     logger.info(f"Saved dataset metadata -> {meta_path}")
 
+    # Also write a human-readable summary.
+    txt_path = os.path.join(out_dir, "dataset_meta.txt")
+    lines = [
+        f"updated_at_utc: {dataset_meta['updated_at_utc']}",
+        f"strategy: {dataset_meta['strategy']}",
+        f"cumulative_games: {dataset_meta['cumulative_games']}",
+        f"seed: {dataset_meta['seed']}",
+        "",
+        f"discard_file: {dataset_meta['discard']['file']}",
+        f"discard_X_shape: {dataset_meta['discard']['X_shape']}",
+        f"discard_y_shape: {dataset_meta['discard']['y_shape']}",
+        "discard_features:",
+        f"  - {dataset_meta['discard']['features']['discard_features']}",
+        f"  - {dataset_meta['discard']['features']['kept_features']}",
+        f"  - {dataset_meta['discard']['features']['dealer_flag']}",
+        f"  - total_dim: {dataset_meta['discard']['features']['total_dim']}",
+        f"discard_label: {dataset_meta['discard']['label']}",
+        "",
+        f"pegging_file: {dataset_meta['pegging']['file']}",
+        f"pegging_X_shape: {dataset_meta['pegging']['X_shape']}",
+        f"pegging_y_shape: {dataset_meta['pegging']['y_shape']}",
+        "pegging_features:",
+        f"  - {dataset_meta['pegging']['features']['hand']}",
+        f"  - {dataset_meta['pegging']['features']['table']}",
+        f"  - {dataset_meta['pegging']['features']['count']}",
+        f"  - {dataset_meta['pegging']['features']['candidate']}",
+        f"  - {dataset_meta['pegging']['features']['known_cards']}",
+        f"  - total_dim: {dataset_meta['pegging']['features']['total_dim']}",
+        f"pegging_label: {dataset_meta['pegging']['label']}",
+    ]
+    with open(txt_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+    logger.info(f"Saved dataset summary -> {txt_path}")
+
 
 def get_cumulative_game_count(out_dir):
     """Get the cumulative game count from existing files."""
@@ -672,7 +708,13 @@ def play_one_game(players) -> None:
     final_pegging_score = game.start()
 
 def generate_il_data(games, out_dir, seed, strategy) -> int:
-    logger.info(f"Generating IL data for {games} games into {out_dir} using 2 medium players")
+    if seed is None:
+        seed = secrets.randbits(32)
+        logger.info(f"No seed provided, using random seed={seed}")
+    if games < 0:
+        logger.info(f"Generating IL data forever into {out_dir} using 2 medium players")
+    else:
+        logger.info(f"Generating IL data for {games} games into {out_dir} using 2 medium players")
     rng = np.random.default_rng(seed)
     
     # Get starting cumulative count
@@ -694,9 +736,13 @@ def generate_il_data(games, out_dir, seed, strategy) -> int:
     
     games_since_save = 0
 
-    for i in range(games):
+    i = 0
+    while True:
         if i % 100 == 0:
-            logger.info(f"Playing games {i} - {i + 100}/{games}")
+            if games < 0:
+                logger.info(f"Playing games {i} - {i + 100}/∞")
+            else:
+                logger.info(f"Playing games {i} - {i + 100}/{games}")
         
         # If your engine uses RNG/Deck seeding, set it here.
         # Some engines read global RNG; we at least randomize player order sometimes.
@@ -708,10 +754,10 @@ def generate_il_data(games, out_dir, seed, strategy) -> int:
         games_since_save += 1
         
         # Save every save_interval games if total games > save_interval
-        if games > save_interval and games_since_save >= save_interval:
+        if games_since_save >= save_interval:
             cumulative_games += games_since_save
             logger.info(f"Reached {save_interval} games, saving checkpoint at {cumulative_games} total games")
-            save_data(log, out_dir, cumulative_games, strategy)
+            save_data(log, out_dir, cumulative_games, strategy, seed)
             
             # Clear the logs to save memory
             log.X_discard.clear()
@@ -720,11 +766,15 @@ def generate_il_data(games, out_dir, seed, strategy) -> int:
             log.y_pegging.clear()
             games_since_save = 0
     
+        i += 1
+        if games >= 0 and i >= games:
+            break
+
     # Save any remaining data
     if games_since_save > 0:
         cumulative_games += games_since_save
         logger.info(f"Saving final data at {cumulative_games} total games")
-        save_data(log, out_dir, cumulative_games, strategy)
+        save_data(log, out_dir, cumulative_games, strategy, seed)
     
     return 0
 
@@ -732,10 +782,10 @@ def generate_il_data(games, out_dir, seed, strategy) -> int:
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     # ap.add_argument("--games", type=int, default=2000)
-    ap.add_argument("--games", type=int, default=200)
+    ap.add_argument("--games", type=int, default=200, help="Number of games to simulate. Use -1 to run forever.")
     default_out_dir = TRAINING_DATA_DIR
     ap.add_argument("--out_dir", type=str, default=default_out_dir)
-    ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--seed", type=int, default=None, help="Random seed. Omit to use a random seed.")
     ap.add_argument("--strategy", type=str, default="classification")
     args = ap.parse_args()
     generate_il_data(args.games, args.out_dir, args.seed, args.strategy)

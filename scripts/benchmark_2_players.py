@@ -68,20 +68,28 @@ def benchmark_2_players(args) -> int:
             return MediumPlayer(name=name)
         raise ValueError(f"Unknown fallback player type: {name}")
 
+    def resolve_model_tag() -> str:
+        if args.model_tag:
+            return args.model_tag
+        # Default to models_dir basename (e.g., "ranking", "regression", "classification")
+        return os.path.basename(os.path.normpath(args.models_dir))
+
+    model_tag = resolve_model_tag()
+
     def player_factory(name: str):
         if name == "NeuralClassificationPlayer":
             discard_model = LinearDiscardClassifier.load_npz(f"{args.models_dir}/discard_linear.npz")
-            return NeuralClassificationPlayer(discard_model, pegging_model, name=name)
+            return NeuralClassificationPlayer(discard_model, pegging_model, name=f"{name}:{model_tag}")
         if name == "NeuralRegressionPlayer":
             discard_model = LinearValueModel.load_npz(f"{args.models_dir}/discard_linear.npz")
-            return NeuralRegressionPlayer(discard_model, pegging_model, name=name)
+            return NeuralRegressionPlayer(discard_model, pegging_model, name=f"{name}:{model_tag}")
         if name == "NeuralDiscardOnlyPlayer":
             discard_model = LinearDiscardClassifier.load_npz(f"{args.models_dir}/discard_linear.npz")
             fallback = base_player_factory(args.fallback_player)
-            return NeuralDiscardOnlyPlayer(discard_model, fallback, name=name)
+            return NeuralDiscardOnlyPlayer(discard_model, fallback, name=f"{name}:{model_tag}")
         if name == "NeuralPegOnlyPlayer":
             fallback = base_player_factory(args.fallback_player)
-            return NeuralPegOnlyPlayer(pegging_model, fallback, name=name)
+            return NeuralPegOnlyPlayer(pegging_model, fallback, name=f"{name}:{model_tag}")
         return base_player_factory(name)
     
     player_names = args.players.split(",")
@@ -142,6 +150,7 @@ if __name__ == "__main__":
     ap.add_argument("--max_shards", type=int, default=None)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--fallback_player", type=str, default="beginner")
+    ap.add_argument("--model_tag", type=str, default=None)
     ap.add_argument("--auto_random_benchmark", default=True)
     args = ap.parse_args()
     logger.info(f"models dir: {args.models_dir}")
