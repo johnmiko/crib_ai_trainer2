@@ -12,7 +12,9 @@ These affect all four scripts:
 - `DATASET_VERSION`, `DATASET_RUN_ID`: where new IL data is stored
 - `MODEL_VERSION`, `MODEL_RUN_ID`: where new models are stored
 - `STRATEGY` and `DISCARD_LOSS`: classification vs regression vs ranking
-- `PEGGING_FEATURE_SET`: `basic` or `full`
+- `PEGGING_FEATURE_SET`: feature set used when **generating datasets** (`basic` or `full`)
+- `DISCARD_FEATURE_SET`: feature subset used when **training/benchmarking models**
+- `PEGGING_MODEL_FEATURE_SET`: pegging feature subset used when **training/benchmarking models**
 - `GAMES_PER_LOOP`, `LOOPS`: how many games per loop and loop count
 - `EPOCHS`, `LR`, `L2`, `BATCH_SIZE`: training hyperparameters
 - `BENCHMARK_GAMES`, `BENCHMARK_PLAYERS`, `FALLBACK_PLAYER`: benchmark defaults
@@ -35,6 +37,9 @@ Run any of these without flags and they will use `.env`:
 ```powershell
 .\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py
 ```
+
+Benchmark results are also logged in structured form to:
+`C:\Users\johnm\ccode\crib_ai_trainer2\experiments.jsonl`
 
 ```powershell
 .\.venv\Scripts\python.exe .\scripts\do_everything2.py

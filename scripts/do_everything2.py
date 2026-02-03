@@ -18,6 +18,8 @@ from crib_ai_trainer.constants import (
     DEFAULT_STRATEGY,
     DEFAULT_DISCARD_LOSS,
     DEFAULT_PEGGING_FEATURE_SET,
+    DEFAULT_DISCARD_FEATURE_SET,
+    DEFAULT_PEGGING_MODEL_FEATURE_SET,
     DEFAULT_GAMES_PER_LOOP,
     DEFAULT_LOOPS,
     DEFAULT_EPOCHS,
@@ -40,7 +42,7 @@ from scripts.train_linear_models import train_linear_models, _resolve_models_dir
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--games", type=int, default=DEFAULT_GAMES_PER_LOOP, help="Games per loop")
+    ap.add_argument("--il_games", type=int, default=DEFAULT_GAMES_PER_LOOP, help="Games per loop for IL data generation")
     ap.add_argument(
         "--loops",
         type=int,
@@ -63,10 +65,19 @@ if __name__ == "__main__":
     ap.add_argument("--epochs", type=int, default=DEFAULT_EPOCHS)
     ap.add_argument("--players", type=str, default="NeuralRegressionPlayer,beginner")
     ap.add_argument("--benchmark_games", type=int, default=DEFAULT_BENCHMARK_GAMES)
+    ap.add_argument(
+        "--benchmark_mode",
+        type=str,
+        default="all",
+        choices=["all", "full"],
+        help="Benchmark all three (full/discard/pegging) or only the full model.",
+    )
     ap.add_argument("--models_dir", type=str, default=MODELS_DIR)
     ap.add_argument("--model_version", type=str, default=DEFAULT_MODEL_VERSION)
     ap.add_argument("--model_run_id", type=str, default=DEFAULT_MODEL_RUN_ID or None)
     ap.add_argument("--discard_loss", type=str, default=DEFAULT_DISCARD_LOSS, choices=["classification", "regression", "ranking"])
+    ap.add_argument("--discard_feature_set", type=str, default=DEFAULT_DISCARD_FEATURE_SET, choices=["base", "engineered_no_scores", "full"])
+    ap.add_argument("--pegging_model_feature_set", type=str, default=DEFAULT_PEGGING_MODEL_FEATURE_SET, choices=["base", "full_no_scores", "full"])
     ap.add_argument("--lr", type=float, default=DEFAULT_LR)
     ap.add_argument("--batch_size", type=int, default=DEFAULT_BATCH_SIZE)
     ap.add_argument("--l2", type=float, default=DEFAULT_L2)
@@ -104,6 +115,8 @@ if __name__ == "__main__":
         )
     args.data_dir = dataset_dir
 
+    data_pegging_feature_set = args.pegging_feature_set
+
     i = 0
     while True:
         i += 1
@@ -116,29 +129,39 @@ if __name__ == "__main__":
         print(f"next_model_version: {args.model_version}", flush=True)
         print("step: generate_il_data", flush=True)
         generate_il_data(
-            args.games,
+            args.il_games,
             dataset_dir,
             args.seed,
             args.strategy,
-            args.pegging_feature_set,
+            data_pegging_feature_set,
         )
 
         print("step: train_linear_models", flush=True)
+        args.pegging_feature_set = args.pegging_model_feature_set
         args.models_dir = _resolve_models_dir(base_models_dir, args.model_version, args.model_run_id)
         print(f"models_dir: {args.models_dir}", flush=True)
         train_linear_models(args)
 
         print("step: benchmark", flush=True)
         args.games = args.benchmark_games
+        args.benchmark_games = args.benchmark_games
+        args.discard_feature_set = args.discard_feature_set
+        args.pegging_feature_set = args.pegging_model_feature_set
         args.players = "NeuralRegressionPlayer,beginner"
         benchmark_2_players(args)
-        args.players = "NeuralDiscardOnlyPlayer,beginner"
-        benchmark_2_players(args)
-        args.players = "NeuralPegOnlyPlayer,beginner"
-        benchmark_2_players(args)
+        if args.benchmark_mode == "all":
+            args.players = "NeuralDiscardOnlyPlayer,beginner"
+            benchmark_2_players(args)
+            args.players = "NeuralPegOnlyPlayer,beginner"
+            benchmark_2_players(args)
+        args.pegging_feature_set = data_pegging_feature_set
 
         if args.loops != -1 and i >= args.loops:
             break
 
 # python .\scripts\do_everything2.py
-# python .\scripts\do_everything2.py --games 2000 --loops -1 --dataset_version "discard_v3" --model_version "discard_v3" --strategy regression --discard_loss regression --benchmark_games 200
+# below does the full feature set
+# python .\scripts\do_everything2.py --il_games 2000 --loops -1 --dataset_version "discard_v3" --model_version "discard_v3" --strategy regression --discard_loss regression --benchmark_games 1000 --benchmark_mode full
+# this does the engineered no scores feature set
+# .\.venv\Scripts\python.exe .\scripts\do_everything2.py --il_games 2000 --loops -1 --dataset_version "discard_v3" --model_version "discard_v3" --strategy regression --discard_loss regression --benchmark_games 1000 --benchmark_mode full --discard_feature_set engineered_no_scores --pegging_model_feature_set full_no_scores
+

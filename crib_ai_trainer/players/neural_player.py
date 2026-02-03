@@ -24,13 +24,17 @@ BASE_DISCARD_FEATURE_DIM = 105
 # 3 run counts (3/4/5) + 1 run max +
 # 2 flush flags (kept/discard) + 1 nobs + 2 fifteen counts +
 # 2 scores + 1 score margin + 3 endgame flags
-ENGINEERED_DISCARD_FEATURE_DIM = 53
+ENGINEERED_DISCARD_NO_SCORE_DIM = 47
+ENGINEERED_DISCARD_SCORE_DIM = 6
+ENGINEERED_DISCARD_FEATURE_DIM = ENGINEERED_DISCARD_NO_SCORE_DIM + ENGINEERED_DISCARD_SCORE_DIM
 
 DISCARD_FEATURE_DIM = BASE_DISCARD_FEATURE_DIM + ENGINEERED_DISCARD_FEATURE_DIM
 
 # Pegging features
 PEGGING_BASE_FEATURE_DIM = 240  # hand(52) + table(52) + count(32) + candidate(52) + known(52)
-PEGGING_ENGINEERED_FEATURE_DIM = 25
+PEGGING_ENGINEERED_NO_SCORE_DIM = 20
+PEGGING_ENGINEERED_SCORE_DIM = 5
+PEGGING_ENGINEERED_FEATURE_DIM = PEGGING_ENGINEERED_NO_SCORE_DIM + PEGGING_ENGINEERED_SCORE_DIM
 PEGGING_FULL_FEATURE_DIM = PEGGING_BASE_FEATURE_DIM + 52 + 52 + PEGGING_ENGINEERED_FEATURE_DIM  # + opp_played + all_played
 
 def get_pegging_feature_dim(feature_set: str) -> int:
@@ -38,6 +42,30 @@ def get_pegging_feature_dim(feature_set: str) -> int:
         return PEGGING_BASE_FEATURE_DIM
     if feature_set == "full":
         return PEGGING_FULL_FEATURE_DIM
+    if feature_set == "full_no_scores":
+        return PEGGING_BASE_FEATURE_DIM + 52 + 52 + PEGGING_ENGINEERED_NO_SCORE_DIM
+    raise ValueError(f"Unknown pegging feature_set: {feature_set}")
+
+
+def get_discard_feature_indices(feature_set: str) -> np.ndarray:
+    if feature_set == "base":
+        return np.arange(BASE_DISCARD_FEATURE_DIM, dtype=np.int64)
+    if feature_set == "engineered_no_scores":
+        end = BASE_DISCARD_FEATURE_DIM + ENGINEERED_DISCARD_NO_SCORE_DIM
+        return np.arange(end, dtype=np.int64)
+    if feature_set == "full":
+        return np.arange(DISCARD_FEATURE_DIM, dtype=np.int64)
+    raise ValueError(f"Unknown discard feature_set: {feature_set}")
+
+
+def get_pegging_feature_indices(feature_set: str) -> np.ndarray:
+    if feature_set == "base":
+        return np.arange(PEGGING_BASE_FEATURE_DIM, dtype=np.int64)
+    if feature_set == "full_no_scores":
+        end = PEGGING_BASE_FEATURE_DIM + 52 + 52 + PEGGING_ENGINEERED_NO_SCORE_DIM
+        return np.arange(end, dtype=np.int64)
+    if feature_set == "full":
+        return np.arange(PEGGING_FULL_FEATURE_DIM, dtype=np.int64)
     raise ValueError(f"Unknown pegging feature_set: {feature_set}")
 
 
@@ -330,6 +358,17 @@ def featurize_pegging(
     if feature_set == "basic":
         assert base.shape[0] == PEGGING_BASE_FEATURE_DIM, f"pegging features dim {base.shape[0]} != {PEGGING_BASE_FEATURE_DIM}"
         return base
+    if feature_set == "full_no_scores":
+        engineered_no_scores = engineered[:PEGGING_ENGINEERED_NO_SCORE_DIM]
+        out = np.concatenate([
+            base,
+            opp_played_vec,
+            all_played_vec,
+            engineered_no_scores,
+        ])
+        expected = PEGGING_BASE_FEATURE_DIM + 52 + 52 + PEGGING_ENGINEERED_NO_SCORE_DIM
+        assert out.shape[0] == expected, f"pegging features dim {out.shape[0]} != {expected}"
+        return out
     if feature_set == "full":
         out = np.concatenate([
             base,
@@ -657,6 +696,7 @@ def select_discard_with_model_with_scores(
     dealer_is_self: bool,
     player_score: int | None,
     opponent_score: int | None,
+    feature_indices: np.ndarray | None = None,
 ) -> Tuple[Card, Card]:
     if hasattr(discard_model, "predict_scores"):
         Xs: List[np.ndarray] = []
@@ -665,7 +705,10 @@ def select_discard_with_model_with_scores(
             kept = list(kept)
             discards = [c for c in hand if c not in kept]
             discards_list.append((discards[0], discards[1]))
-            Xs.append(featurize_discard(kept, discards, dealer_is_self, player_score, opponent_score))
+            x = featurize_discard(kept, discards, dealer_is_self, player_score, opponent_score)
+            if feature_indices is not None:
+                x = x[feature_indices]
+            Xs.append(x)
         X15 = np.stack(Xs, axis=0).astype(np.float32)  # (15, D)
         scores = discard_model.predict_scores(X15)  # (15,)
         best_i = int(np.argmax(scores))
@@ -676,6 +719,8 @@ def select_discard_with_model_with_scores(
         kept = list(kept)
         discards = [c for c in hand if c not in kept]
         x = featurize_discard(kept, discards, dealer_is_self, player_score, opponent_score)  # np array
+        if feature_indices is not None:
+            x = x[feature_indices]
         v = float(discard_model.predict(x))
         if v > best_v:
             best_v, best = v, tuple(discards)
@@ -695,6 +740,7 @@ def regression_pegging_strategy(
     player_score: int = 0,
     opponent_score: int = 0,
     feature_set: str = "full",
+    feature_indices: np.ndarray | None = None,
 ):
     if past_table_cards is None:
         past_table_cards = []
@@ -723,17 +769,28 @@ def regression_pegging_strategy(
             opponent_score=opponent_score,
             feature_set=feature_set,
         )  # np array
+        if feature_indices is not None:
+            x = x[feature_indices]
         v = float(pegging_model.predict(x))
         if v > best_v:
             best_v, best = v, c
     return best
 
 class NeuralRegressionPlayer:
-    def __init__(self, discard_model, pegging_model, name="neural", pegging_feature_set: str = "full"):
+    def __init__(
+        self,
+        discard_model,
+        pegging_model,
+        name="neural",
+        discard_feature_set: str = "full",
+        pegging_feature_set: str = "full",
+    ):
         self.name = name
         self.discard_model = discard_model
         self.pegging_model = pegging_model
         self.pegging_feature_set = pegging_feature_set
+        self.discard_feature_indices = get_discard_feature_indices(discard_feature_set)
+        self.pegging_feature_indices = get_pegging_feature_indices(pegging_feature_set)
 
     def select_crib_cards(self, player_state, round_state) -> Tuple[Card, Card]:
         # Extract hand and dealer info from state objects
@@ -744,7 +801,14 @@ class NeuralRegressionPlayer:
         return self.select_crib_cards_regressor(hand, dealer_is_self, your_score, opponent_score) # type: ignore
 
     def select_crib_cards_regressor(self, hand, dealer_is_self, your_score=None, opponent_score=None) -> Tuple[Card, Card]:
-        return select_discard_with_model_with_scores(self.discard_model, hand, dealer_is_self, your_score, opponent_score)
+        return select_discard_with_model_with_scores(
+            self.discard_model,
+            hand,
+            dealer_is_self,
+            your_score,
+            opponent_score,
+            self.discard_feature_indices,
+        )
 
     def select_card_to_play(self, player_state, round_state):
         hand = player_state.hand
@@ -763,15 +827,25 @@ class NeuralRegressionPlayer:
             player_score=player_state.score,
             opponent_score=player_state.opponent_score,
             feature_set=self.pegging_feature_set,
+            feature_indices=self.pegging_feature_indices,
         )
         return best
 
 class NeuralClassificationPlayer:
-    def __init__(self, discard_model, pegging_model, name="neural", pegging_feature_set: str = "full"):
+    def __init__(
+        self,
+        discard_model,
+        pegging_model,
+        name="neural",
+        discard_feature_set: str = "full",
+        pegging_feature_set: str = "full",
+    ):
         self.name = name
         self.discard_model = discard_model
         self.pegging_model = pegging_model
         self.pegging_feature_set = pegging_feature_set
+        self.discard_feature_indices = get_discard_feature_indices(discard_feature_set)
+        self.pegging_feature_indices = get_pegging_feature_indices(pegging_feature_set)
 
     def select_crib_cards(self, player_state, round_state) -> Tuple[Card, Card]:
         # Extract hand and dealer info from state objects
@@ -783,7 +857,14 @@ class NeuralClassificationPlayer:
 
 
     def select_crib_cards_classification(self, hand: List[Card], dealer_is_self: bool, your_score=None, opponent_score=None) -> Tuple[Card, Card]:
-        return select_discard_with_model_with_scores(self.discard_model, hand, dealer_is_self, your_score, opponent_score)
+        return select_discard_with_model_with_scores(
+            self.discard_model,
+            hand,
+            dealer_is_self,
+            your_score,
+            opponent_score,
+            self.discard_feature_indices,
+        )
 
     def select_card_to_play(self, player_state, round_state):
         hand = player_state.hand
@@ -802,6 +883,7 @@ class NeuralClassificationPlayer:
             player_score=player_state.score,
             opponent_score=player_state.opponent_score,
             feature_set=self.pegging_feature_set,
+            feature_indices=self.pegging_feature_indices,
         )
         return best
 
@@ -859,10 +941,11 @@ class NeuralPegPlayer(BeginnerPlayer):
 
 class NeuralDiscardOnlyPlayer:
     """Use a neural discard model, but fall back to another player's pegging."""
-    def __init__(self, discard_model, pegging_fallback, name="neural_discard_only"):
+    def __init__(self, discard_model, pegging_fallback, name="neural_discard_only", discard_feature_set: str = "full"):
         self.name = name
         self.discard_model = discard_model
         self.pegging_fallback = pegging_fallback
+        self.discard_feature_indices = get_discard_feature_indices(discard_feature_set)
 
     def select_crib_cards(self, player_state, round_state) -> Tuple[Card, Card]:
         return select_discard_with_model_with_scores(
@@ -871,6 +954,7 @@ class NeuralDiscardOnlyPlayer:
             player_state.is_dealer,
             player_state.score,
             player_state.opponent_score,
+            self.discard_feature_indices,
         )
 
     def select_card_to_play(self, player_state, round_state):
@@ -879,11 +963,18 @@ class NeuralDiscardOnlyPlayer:
 
 class NeuralPegOnlyPlayer:
     """Use a neural pegging model, but fall back to another player's discard."""
-    def __init__(self, pegging_model, discard_fallback, name="neural_peg_only", pegging_feature_set: str = "full"):
+    def __init__(
+        self,
+        pegging_model,
+        discard_fallback,
+        name="neural_peg_only",
+        pegging_feature_set: str = "full",
+    ):
         self.name = name
         self.pegging_model = pegging_model
         self.discard_fallback = discard_fallback
         self.pegging_feature_set = pegging_feature_set
+        self.pegging_feature_indices = get_pegging_feature_indices(pegging_feature_set)
 
     def select_crib_cards(self, player_state, round_state) -> Tuple[Card, Card]:
         return self.discard_fallback.select_crib_cards(player_state, round_state)
@@ -905,4 +996,5 @@ class NeuralPegOnlyPlayer:
             player_score=player_state.score,
             opponent_score=player_state.opponent_score,
             feature_set=self.pegging_feature_set,
+            feature_indices=self.pegging_feature_indices,
         )

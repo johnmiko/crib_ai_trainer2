@@ -21,6 +21,8 @@ from crib_ai_trainer.constants import (
     DEFAULT_MODEL_VERSION,
     DEFAULT_MODEL_RUN_ID,
     DEFAULT_DISCARD_LOSS,
+    DEFAULT_DISCARD_FEATURE_SET,
+    DEFAULT_PEGGING_MODEL_FEATURE_SET,
     DEFAULT_LR,
     DEFAULT_EPOCHS,
     DEFAULT_BATCH_SIZE,
@@ -30,7 +32,12 @@ from crib_ai_trainer.constants import (
     DEFAULT_MAX_SHARDS,
     DEFAULT_RANK_PAIRS_PER_HAND,
 )
-from crib_ai_trainer.players.neural_player import LinearDiscardClassifier, LinearValueModel
+from crib_ai_trainer.players.neural_player import (
+    LinearDiscardClassifier,
+    LinearValueModel,
+    get_discard_feature_indices,
+    get_pegging_feature_indices,
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -96,17 +103,17 @@ def train_linear_models(args) -> int:
         else:
             discard_mode = "regression"
 
+    discard_feature_indices = get_discard_feature_indices(args.discard_feature_set)
+    pegging_feature_indices = get_pegging_feature_indices(args.pegging_feature_set)
+
     if discard_mode == "classification":
         with np.load(discard_shards[0]) as d0:
-            discard_model = LinearDiscardClassifier(int(d0["X"].shape[2]))
+            discard_model = LinearDiscardClassifier(int(len(discard_feature_indices)))
     else:
         with np.load(discard_shards[0]) as d0:
-            if d0["X"].ndim == 3:
-                discard_model = LinearValueModel(int(d0["X"].shape[2]))
-            else:
-                discard_model = LinearValueModel(int(d0["X"].shape[1]))
+            discard_model = LinearValueModel(int(len(discard_feature_indices)))
     with np.load(pegging_shards[0]) as p0:
-        pegging_model = LinearValueModel(int(p0["X"].shape[1]))
+        pegging_model = LinearValueModel(int(len(pegging_feature_indices)))
 
     last_discard_loss = None
     last_pegging_loss = None
@@ -123,11 +130,16 @@ def train_linear_models(args) -> int:
                 else:
                     Xd = d["X"].astype(np.float32)
                     yd = d["y"].astype(np.float32)
+            if discard_mode in {"classification", "ranking"}:
+                Xd = Xd[..., discard_feature_indices]
+            else:
+                Xd = Xd[:, discard_feature_indices]
             # print("discard X dim", Xd.shape, "y range", float(yd.min()), float(yd.mean()), float(yd.max()))
 
             with np.load(p_path) as p:
                 Xp = p["X"].astype(np.float32)
                 yp = p["y"].astype(np.float32)
+            Xp = Xp[:, pegging_feature_indices]
             if discard_mode == "classification":
                 logger.debug(f"Training discard model {discard_model}")
                 discard_losses = discard_model.fit_ce( # type: ignore
@@ -198,6 +210,7 @@ def train_linear_models(args) -> int:
 
         if discard_mode == "classification":
             Xd_eval = Xd[:n_d].astype(np.float32)
+            Xd_eval = Xd_eval[..., discard_feature_indices]
             yd_eval = yd[:n_d].astype(np.int64)
             scores = np.tensordot(Xd_eval, discard_model.w, axes=([2], [0])) + discard_model.b
             preds = np.argmax(scores, axis=1)
@@ -206,6 +219,7 @@ def train_linear_models(args) -> int:
             eval_metrics["discard_classifier_top1_acc"] = acc
         elif discard_mode == "ranking":
             Xd_eval = Xd[:n_d].astype(np.float32)
+            Xd_eval = Xd_eval[..., discard_feature_indices]
             yd_eval = yd[:n_d].astype(np.float32)
             # report average margin between top-1 and top-2 for model vs target
             scores = np.tensordot(Xd_eval, discard_model.w, axes=([2], [0])) + discard_model.b
@@ -219,6 +233,7 @@ def train_linear_models(args) -> int:
             eval_metrics["discard_ranker_avg_target_margin"] = avg_target_margin
         else:
             Xd_eval = Xd[:n_d].astype(np.float32)
+            Xd_eval = Xd_eval[:, discard_feature_indices]
             yd_eval = yd[:n_d].astype(np.float32)
             pred = discard_model.predict_batch(Xd_eval)
             mse = float(np.mean((pred - yd_eval) ** 2)) if n_d > 0 else 0.0
@@ -226,6 +241,7 @@ def train_linear_models(args) -> int:
             eval_metrics["discard_regressor_mse"] = mse
 
         Xp_eval = Xp[:n_p].astype(np.float32)
+        Xp_eval = Xp_eval[:, pegging_feature_indices]
         yp_eval = yp[:n_p].astype(np.float32)
         pred_p = pegging_model.predict_batch(Xp_eval)
         mse_p = float(np.mean((pred_p - yp_eval) ** 2)) if n_p > 0 else 0.0
@@ -243,6 +259,10 @@ def train_linear_models(args) -> int:
         "data_dir": str(data_dir),
         "models_dir": str(models_dir),
         "discard_loss": discard_mode,
+        "discard_feature_set": args.discard_feature_set,
+        "pegging_feature_set": args.pegging_feature_set,
+        "discard_feature_dim": int(len(discard_feature_indices)),
+        "pegging_feature_dim": int(len(pegging_feature_indices)),
         "epochs": args.epochs,
         "lr": args.lr,
         "batch_size": args.batch_size,
@@ -270,6 +290,10 @@ def train_linear_models(args) -> int:
         f"data_dir: {model_meta['data_dir']}",
         f"models_dir: {model_meta['models_dir']}",
         f"discard_loss: {model_meta['discard_loss']}",
+        f"discard_feature_set: {model_meta['discard_feature_set']}",
+        f"pegging_feature_set: {model_meta['pegging_feature_set']}",
+        f"discard_feature_dim: {model_meta['discard_feature_dim']}",
+        f"pegging_feature_dim: {model_meta['pegging_feature_dim']}",
         f"epochs: {model_meta['epochs']}",
         f"lr: {model_meta['lr']}",
         f"batch_size: {model_meta['batch_size']}",
@@ -299,6 +323,8 @@ if __name__ == "__main__":
     ap.add_argument("--model_version", type=str, default=DEFAULT_MODEL_VERSION)
     ap.add_argument("--run_id", type=str, default=DEFAULT_MODEL_RUN_ID or None, help="Run id folder (e.g., 001). Omit to auto-increment.")
     ap.add_argument("--discard_loss", type=str, default=DEFAULT_DISCARD_LOSS, choices=["classification", "regression", "ranking"])
+    ap.add_argument("--discard_feature_set", type=str, default=DEFAULT_DISCARD_FEATURE_SET, choices=["base", "engineered_no_scores", "full"])
+    ap.add_argument("--pegging_feature_set", type=str, default=DEFAULT_PEGGING_MODEL_FEATURE_SET, choices=["base", "full_no_scores", "full"])
     ap.add_argument("--lr", type=float, default=DEFAULT_LR)
     ap.add_argument("--epochs", type=int, default=DEFAULT_EPOCHS)
     ap.add_argument("--batch_size", type=int, default=DEFAULT_BATCH_SIZE)
