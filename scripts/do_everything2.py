@@ -19,7 +19,7 @@ if __name__ == "__main__":
     ap.add_argument("--training_dir", type=str, default=TRAINING_DATA_DIR)
     ap.add_argument("--strategy", type=str, default="classification")
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--data_dir", type=str, default=TRAINING_DATA_DIR)
+    ap.add_argument("--data_dir", type=str, default=None)
     ap.add_argument("--epochs", type=int, default=20)
     ap.add_argument("--players", type=str, default="NeuralClassificationPlayer,beginner")
     ap.add_argument("--benchmark_games", type=int, default=500)
@@ -27,6 +27,8 @@ if __name__ == "__main__":
     ap.add_argument("--lr", type=float, default=0.05)
     ap.add_argument("--batch_size", type=int, default=8192)
     args = ap.parse_args()
+    if args.data_dir is None:
+        args.data_dir = args.training_dir
     generate_il_data(args.games, args.training_dir, args.seed, args.strategy) 
     train_linear_models(args)
     benchmark_2_players(args)

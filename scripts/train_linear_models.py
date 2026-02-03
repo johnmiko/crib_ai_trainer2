@@ -34,6 +34,12 @@ def train_linear_models(args) -> int:
         raise SystemExit(
             f"Shard count mismatch: {len(discard_shards)} discard vs {len(pegging_shards)} pegging"
         )
+    if args.max_shards is not None:
+        if args.max_shards <= 0:
+            raise SystemExit("--max_shards must be > 0 if provided")
+        discard_shards = discard_shards[: args.max_shards]
+        pegging_shards = pegging_shards[: args.max_shards]
+        logger.info(f"Limiting training to first {args.max_shards} shard(s)")
 
     # init models
     if "classification" in args.data_dir:
@@ -102,6 +108,40 @@ def train_linear_models(args) -> int:
     if last_pegging_loss is not None:
         print(f"  last loss={last_pegging_loss:.6f}")
 
+    if args.eval_samples > 0:
+        print(f"Running quick eval on up to {args.eval_samples} samples...")
+        eval_discard_path = discard_shards[-1]
+        eval_pegging_path = pegging_shards[-1]
+        with np.load(eval_discard_path) as d:
+            Xd = d["X"]
+            yd = d["y"]
+        with np.load(eval_pegging_path) as p:
+            Xp = p["X"]
+            yp = p["y"]
+
+        n_d = min(args.eval_samples, Xd.shape[0])
+        n_p = min(args.eval_samples, Xp.shape[0])
+
+        if "classification" in args.data_dir:
+            Xd_eval = Xd[:n_d].astype(np.float32)
+            yd_eval = yd[:n_d].astype(np.int64)
+            scores = np.tensordot(Xd_eval, discard_model.w, axes=([2], [0])) + discard_model.b
+            preds = np.argmax(scores, axis=1)
+            acc = float(np.mean(preds == yd_eval)) if n_d > 0 else 0.0
+            print(f"  discard classifier top-1 acc: {acc:.3f} on {n_d} samples")
+        else:
+            Xd_eval = Xd[:n_d].astype(np.float32)
+            yd_eval = yd[:n_d].astype(np.float32)
+            pred = discard_model.predict_batch(Xd_eval)
+            mse = float(np.mean((pred - yd_eval) ** 2)) if n_d > 0 else 0.0
+            print(f"  discard regressor MSE: {mse:.4f} on {n_d} samples")
+
+        Xp_eval = Xp[:n_p].astype(np.float32)
+        yp_eval = yp[:n_p].astype(np.float32)
+        pred_p = pegging_model.predict_batch(Xp_eval)
+        mse_p = float(np.mean((pred_p - yp_eval) ** 2)) if n_p > 0 else 0.0
+        print(f"  pegging regressor MSE: {mse_p:.4f} on {n_p} samples")
+
     return 0
 
 
@@ -114,6 +154,8 @@ if __name__ == "__main__":
     ap.add_argument("--batch_size", type=int, default=8192)
     ap.add_argument("--l2", type=float, default=0.0)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--eval_samples", type=int, default=2048)
+    ap.add_argument("--max_shards", type=int, default=None)
     args = ap.parse_args()
     train_linear_models(args)
 

@@ -372,6 +372,7 @@ class LoggingMediumPlayer(MediumPlayer):
             return None
         # Pass known_cards to play_pegging via instance variable
         self._current_known_cards = player_state.known_cards
+        self._current_hand = list(player_state.hand)
         return self.play_pegging(playable_cards, round_state.count, round_state.table_cards)
     
     def play_pegging(self, playable: List[Card], count: int, history_since_reset: List[Card]) -> Optional[Card]:
@@ -394,12 +395,13 @@ class LoggingMediumPlayer(MediumPlayer):
         
         # Get known_cards from instance variable (set in select_card_to_play)
         known_cards = getattr(self, '_current_known_cards', [])
+        full_hand = getattr(self, '_current_hand', playable)
         
         # Log all playable options
         for card, score in scores.items():
             y = score
             # Known cards: from player_state (includes hand, table, past cards, starter)
-            x = featurize_pegging(playable, history_since_reset, count, card, known_cards=known_cards)
+            x = featurize_pegging(full_hand, history_since_reset, count, card, known_cards=known_cards)
             self._log.X_pegging.append(x) # type: ignore
             self._log.y_pegging.append(float(y)) # type: ignore
         

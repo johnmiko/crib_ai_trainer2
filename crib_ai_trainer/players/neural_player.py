@@ -264,7 +264,16 @@ class LinearValueModel:
         m.b = b
         return m
 
-def regression_pegging_strategy(pegging_model, hand, table, crib, count, past_table_cards=None, starter_card=None):
+def regression_pegging_strategy(
+    pegging_model,
+    hand,
+    table,
+    crib,
+    count,
+    past_table_cards=None,
+    starter_card=None,
+    known_cards=None,
+):
     if past_table_cards is None:
         past_table_cards = []
     
@@ -273,10 +282,13 @@ def regression_pegging_strategy(pegging_model, hand, table, crib, count, past_ta
         return None
     best, best_v = None, float("-inf")
     for c in playable:
-        # Known cards include: hand, current table sequence, past table cards, and starter
-        known = hand + table + past_table_cards
-        if starter_card is not None:
-            known = known + [starter_card]
+        if known_cards is None:
+            # Known cards include: hand, current table sequence, past table cards, and starter
+            known = hand + table + past_table_cards
+            if starter_card is not None:
+                known = known + [starter_card]
+        else:
+            known = known_cards
         x = featurize_pegging(hand, table, count, c, known_cards=known)  # np array
         v = float(pegging_model.predict(x))
         if v > best_v:
@@ -302,7 +314,7 @@ class NeuralRegressionPlayer:
         for kept in combinations(hand, 4):
             kept = list(kept)
             discards = [c for c in hand if c not in kept]
-            x = featurize_discard(kept, discards, dealer_is_self, known_cards=hand)  # np array
+            x = featurize_discard(kept, discards, dealer_is_self)  # np array
             v = float(self.discard_model.predict(x))
             if v > best_v:
                 best_v, best = v, tuple(discards)
@@ -313,7 +325,14 @@ class NeuralRegressionPlayer:
         table = round_state.table_cards
         crib = round_state.crib
         count = round_state.count
-        best = regression_pegging_strategy(self.pegging_model, hand, table, crib, count)
+        best = regression_pegging_strategy(
+            self.pegging_model,
+            hand,
+            table,
+            crib,
+            count,
+            known_cards=player_state.known_cards,
+        )
         return best
 
 class NeuralClassificationPlayer:
@@ -351,7 +370,14 @@ class NeuralClassificationPlayer:
         table = round_state.table_cards
         crib = round_state.crib
         count = round_state.count
-        best = regression_pegging_strategy(self.pegging_model, hand, table, crib, count)
+        best = regression_pegging_strategy(
+            self.pegging_model,
+            hand,
+            table,
+            crib,
+            count,
+            known_cards=player_state.known_cards,
+        )
         return best
 
 class NeuralDiscardPlayer(BeginnerPlayer):
