@@ -213,8 +213,10 @@ class LoggingBeginnerPlayer(BeginnerPlayer):
             raise ValueError(f"Unknown discard_strategy: {discard_strategy}")        
         self._pegging_strategy = pegging_strategy # not implemented yet
 
-    def select_crib_cards(self, hand: List[Card], dealer_is_self: bool) -> Tuple[Card, Card]:
-        # return self.select_crib_cards_classifier(hand, dealer_is_self)
+    def select_crib_cards(self, player_state, round_state) -> Tuple[Card, Card]:
+        # Extract hand and dealer info from state objects
+        hand = player_state.hand
+        dealer_is_self = player_state.is_dealer
         return self._discard_strategy(hand, dealer_is_self)
     
     def select_crib_cards_classifier(self, hand: List[Card], dealer_is_self: bool) -> Tuple[Card, Card]:
@@ -294,11 +296,14 @@ class LoggingBeginnerPlayer(BeginnerPlayer):
 
         return best_discards[0]
 
-    def select_card_to_play(self, hand: List[Card], table, crib, count: int, game_state):
+    def select_card_to_play(self, player_state, round_state) -> Optional[Card]:
+        """Override to log training data and pass known_cards."""
+        hand = player_state.hand
+        table = round_state.table_cards
+        crib = round_state.crib
+        count = round_state.count
+        
         # table is the list of cards currently on the table (current sequence since last reset)
-        # Note: Ideally known_cards should include hand + table + past_table_cards + starter_card,
-        # but we only have access to hand + table here. The game engine would need to be modified
-        # to pass past_table_cards and starter_card for complete information.
         playable = [c for c in hand if c + count <= 31]
         if not playable:
             return None        
@@ -313,9 +318,8 @@ class LoggingBeginnerPlayer(BeginnerPlayer):
             sequence = history_since_reset + [c]
             pts = score_play(sequence)
             y = pts
-            # Known cards: hand + current table sequence
-            # TODO: Enhance to include past_table_cards + starter_card when available
-            x = featurize_pegging(hand, history_since_reset, count, c, known_cards=game_state.known_cards)
+            # Known cards: from player_state (includes hand, table, past cards, starter)
+            x = featurize_pegging(hand, history_since_reset, count, c, known_cards=player_state.known_cards)
             self._log.X_pegging.append(x) # type: ignore
             self._log.y_pegging.append(float(y)) # type: ignore
             if (pts > best_pts) and (c + count <= 31):
@@ -348,14 +352,29 @@ class LoggingMediumPlayer(MediumPlayer):
             raise ValueError(f"Unknown discard_strategy: {discard_strategy}")        
         self._pegging_strategy = pegging_strategy
 
-    def select_crib_cards(self, hand: List[Card], dealer_is_self: bool, your_score=None, opponent_score=None) -> Tuple[Card, Card]:
+    def select_crib_cards(self, player_state, round_state) -> Tuple[Card, Card]:
         """Override to log training data."""
+        # Extract hand and dealer info from state objects
+        hand = player_state.hand
+        dealer_is_self = player_state.is_dealer
+        your_score = player_state.score
+        opponent_score = None  # Not available in state, but not used by these methods
+        
         if self._discard_strategy_mode == "classification":
-            return self.select_crib_cards_classifier(hand, dealer_is_self, game_state)
+            return self.select_crib_cards_classifier(hand, dealer_is_self, your_score, opponent_score)
         else:
-            return self.select_crib_cards_regresser(hand, dealer_is_self, game_state)
+            return self.select_crib_cards_regresser(hand, dealer_is_self, your_score, opponent_score)
 
-    def play_pegging(self, playable: List[Card], count: int, history_since_reset: List[Card], game_state) -> Optional[Card]:
+    def select_card_to_play(self, player_state, round_state) -> Optional[Card]:
+        """Override to log training data and pass known_cards to play_pegging."""
+        playable_cards = [c for c in player_state.hand if c.get_value() + round_state.count <= 31]
+        if not playable_cards:
+            return None
+        # Pass known_cards to play_pegging via instance variable
+        self._current_known_cards = player_state.known_cards
+        return self.play_pegging(playable_cards, round_state.count, round_state.table_cards)
+    
+    def play_pegging(self, playable: List[Card], count: int, history_since_reset: List[Card]) -> Optional[Card]:
         """Override to log training data."""
         if not playable:
             return None
@@ -373,13 +392,14 @@ class LoggingMediumPlayer(MediumPlayer):
         
         scores = medium_pegging_strategy_scores(playable, count, history_since_reset)
         
+        # Get known_cards from instance variable (set in select_card_to_play)
+        known_cards = getattr(self, '_current_known_cards', [])
+        
         # Log all playable options
         for card, score in scores.items():
             y = score
-            # Known cards: playable hand + current table sequence
-            # TODO: Enhance to include past_table_cards + starter_card when available
-            known = playable + history_since_reset
-            x = featurize_pegging(playable, history_since_reset, count, card, known_cards=known)
+            # Known cards: from player_state (includes hand, table, past cards, starter)
+            x = featurize_pegging(playable, history_since_reset, count, card, known_cards=known_cards)
             self._log.X_pegging.append(x) # type: ignore
             self._log.y_pegging.append(float(y)) # type: ignore
         
@@ -540,12 +560,26 @@ def generate_il_data(games, out_dir, seed, strategy) -> int:
     yp = np.array(log.y_pegging, dtype=np.float32)
 
     out_dir_path = Path(out_dir)
-    existing = sorted(out_dir_path.glob("discard_*.npz"))
-    next_i = len(existing) + 1
-    out_path_discard = os.path.join(out_dir, f"discard_{next_i:05d}.npz")
-    existing = sorted(out_dir_path.glob("discard_*.npz"))
-    next_i = len(existing) + 1
-    out_path_pegging = os.path.join(out_dir, f"pegging_{next_i:05d}.npz")
+    
+    # Find cumulative game count from existing files
+    existing_discard = sorted(out_dir_path.glob("discard_*.npz"))
+    existing_pegging = sorted(out_dir_path.glob("pegging_*.npz"))
+    
+    cumulative_games = 0
+    if existing_discard:
+        # Extract numbers from filenames and find max
+        for f in existing_discard:
+            try:
+                num = int(f.stem.split('_')[1])
+                cumulative_games = max(cumulative_games, num)
+            except (ValueError, IndexError):
+                pass
+    
+    # Add current games to cumulative total
+    cumulative_games += games
+    
+    out_path_discard = os.path.join(out_dir, f"discard_{cumulative_games}.npz")
+    out_path_pegging = os.path.join(out_dir, f"pegging_{cumulative_games}.npz")
     logger.info(f"Saving to {out_path_discard} and {out_path_pegging}")
     np.savez(out_path_discard, X=Xd, y=yd)
     np.savez(out_path_pegging, X=Xp, y=yp)

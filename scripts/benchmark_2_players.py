@@ -83,9 +83,27 @@ def benchmark_2_players(args) -> int:
     # {"wins":wins, "diffs": diffs, "winrate": winrate, "ci_lo": lo, "ci_hi": hi} 
     results = play_multiple_games(args.games, p0=p0, p1=p1)
     wins, diffs, winrate, lo, hi = results["wins"], results["diffs"], results["winrate"], results["ci_lo"], results["ci_hi"]
-    file_list = os.listdir(TRAINING_DATA_DIR) # todo need to be able to pass in
-    logger.info(f"file_list: {file_list}")
-    estimated_training_games = len(file_list) * 2000 / 2
+    
+    # Count actual training games from discard file names (which are cumulative)
+    from pathlib import Path
+    data_dir = Path(TRAINING_DATA_DIR)
+    discard_files = sorted(data_dir.glob("discard_*.npz"))
+    
+    if discard_files:
+        # Get the highest cumulative game count from filenames
+        max_games = 0
+        for f in discard_files:
+            try:
+                # Extract number from filename like "discard_2000.npz"
+                num = int(f.stem.split('_')[1])
+                max_games = max(max_games, num)
+            except (ValueError, IndexError):
+                pass
+        estimated_training_games = max_games
+    else:
+        estimated_training_games = 0
+    
+    logger.info(f"Estimated training games from files: {estimated_training_games}")
     avg_diff = float(np.mean(diffs)) if diffs else 0.0
     output_str = f"{player_names[0]} vs {player_names[1]} after {estimated_training_games} training games wins={wins}/{args.games} winrate={winrate*100:.1f}% (95% CI {lo*100:.1f}% - {hi*100:.1f})% avg point diff {avg_diff:.2f}\n"
     with open("benchmark_results.txt", "a") as f:
