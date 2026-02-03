@@ -150,6 +150,11 @@ def train_linear_models(args) -> int:
 
             last_discard_loss = float(discard_losses[-1]) if discard_losses else last_discard_loss
             last_pegging_loss = float(pegging_losses[-1]) if pegging_losses else last_pegging_loss
+            if last_pegging_loss is not None and not np.isfinite(last_pegging_loss):
+                raise SystemExit(
+                    "Pegging loss became NaN/inf. Try a smaller --lr (e.g., 5e-5), "
+                    "a larger --batch_size (e.g., 2048+), or increase --l2."
+                )
 
     discard_path = models_dir / "discard_linear.npz"
     pegging_path = models_dir / "pegging_linear.npz"
@@ -283,7 +288,7 @@ if __name__ == "__main__":
     ap.add_argument("--lr", type=float, default=0.0005)
     ap.add_argument("--epochs", type=int, default=2)
     ap.add_argument("--batch_size", type=int, default=1024)
-    ap.add_argument("--l2", type=float, default=0.0)
+    ap.add_argument("--l2", type=float, default=0.001)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--eval_samples", type=int, default=2048)
     ap.add_argument("--max_shards", type=int, default=None)
@@ -293,4 +298,5 @@ if __name__ == "__main__":
     train_linear_models(args)
 
 # python .\scripts\train_linear_models.py
-# python .\scripts\train_linear_models.py --data_dir "il_datasets/discard_v2/001" --models_dir "models" --model_version "discard_v2" --discard_loss regression --epochs 5 --eval_samples 2048 --max_shards 2
+# .\.venv\Scripts\python.exe .\scripts\train_linear_models.py --data_dir "il_datasets/discard_v3/001" --models_dir "models" --model_version "discard_v3" --discard_loss regression --epochs 5 --eval_samples 2048 --lr 0.00005 --batch_size 2048 --l2 0.001
+

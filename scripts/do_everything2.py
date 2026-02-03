@@ -42,8 +42,8 @@ if __name__ == "__main__":
     ap.add_argument("--model_version", type=str, default="discard_v2")
     ap.add_argument("--model_run_id", type=str, default=None)
     ap.add_argument("--discard_loss", type=str, default="regression", choices=["classification", "regression", "ranking"])
-    ap.add_argument("--lr", type=float, default=0.0001)
-    ap.add_argument("--batch_size", type=int, default=1024)
+    ap.add_argument("--lr", type=float, default=0.00005)
+    ap.add_argument("--batch_size", type=int, default=2048)
     ap.add_argument("--l2", type=float, default=0.001)
     ap.add_argument("--max_shards", type=int, default=None)
     ap.add_argument("--fallback_player", type=str, default="beginner")
@@ -116,4 +116,5 @@ if __name__ == "__main__":
             break
 
 # python .\scripts\do_everything2.py
-# python .\scripts\do_everything2.py --games 2000 --loops -1 --dataset_version "discard_v2" --model_version "discard_v2" --strategy regression --discard_loss regression --benchmark_games 200
+# python .\scripts\do_everything2.py --games 2000 --loops -1 --dataset_version "discard_v3" --model_version "discard_v3" --strategy regression --discard_loss regression --benchmark_games 200
+
