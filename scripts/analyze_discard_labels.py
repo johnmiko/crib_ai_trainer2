@@ -33,7 +33,12 @@ def card_from_index(i: int) -> Card:
 
 
 def decode_hand_from_option(x_option: np.ndarray) -> Tuple[List[Card], bool]:
-    """Decode a hand and dealer flag from a single (105,) discard feature."""
+    """Decode a hand and dealer flag from a single discard feature vector.
+
+    We only use the first 105 dims (52 discards + 52 kept + 1 dealer flag).
+    """
+    if x_option.shape[0] < 105:
+        raise ValueError(f"Expected discard feature length >= 105, got {x_option.shape[0]}")
     disc_vec = x_option[:52]
     kept_vec = x_option[52:104]
     dealer_flag = bool(round(float(x_option[104])))

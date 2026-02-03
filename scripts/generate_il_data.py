@@ -40,7 +40,7 @@ from cribbage.database import normalize_hand_to_str
 
 from cribbage.players.beginner_player import BeginnerPlayer
 from cribbage.players.medium_player import MediumPlayer
-from crib_ai_trainer.players.neural_player import featurize_discard, featurize_pegging
+from crib_ai_trainer.players.neural_player import featurize_discard, featurize_pegging, DISCARD_FEATURE_DIM
 
 from cribbage.cribbagegame import score_hand, score_play
 
@@ -560,44 +560,44 @@ def save_data(log, out_dir, cumulative_games, strategy, seed):
     if log.X_discard:
         x0 = log.X_discard[0]
         if strategy == "classification":
-            assert x0.shape == (15, 105)
+            assert x0.shape == (15, DISCARD_FEATURE_DIM)
         elif strategy == "ranking":
-            assert x0.shape == (15, 105)
+            assert x0.shape == (15, DISCARD_FEATURE_DIM)
         else:
-            assert x0.shape == (105,)
+            assert x0.shape == (DISCARD_FEATURE_DIM,)
     
     if strategy == "classification":
-        Xd = np.stack(log.X_discard).astype(np.float32) if log.X_discard else np.zeros((0, 15, 105), np.float32)
+        Xd = np.stack(log.X_discard).astype(np.float32) if log.X_discard else np.zeros((0, 15, DISCARD_FEATURE_DIM), np.float32)
         yd = np.array(log.y_discard, dtype=np.int64)
 
         assert Xd.ndim == 3
         assert Xd.shape[1] == 15
-        assert Xd.shape[2] == 105
+        assert Xd.shape[2] == DISCARD_FEATURE_DIM
         assert yd.ndim == 1
         assert yd.shape[0] == Xd.shape[0]
         assert yd.min() >= 0 and yd.max() < 15
 
     elif strategy == "regression":
-        Xd = np.stack(log.X_discard).astype(np.float32) if log.X_discard else np.zeros((0, 105), np.float32)
+        Xd = np.stack(log.X_discard).astype(np.float32) if log.X_discard else np.zeros((0, DISCARD_FEATURE_DIM), np.float32)
         yd = np.array(log.y_discard, dtype=np.float32)
 
         assert Xd.ndim == 2
-        assert Xd.shape[1] == 105
+        assert Xd.shape[1] == DISCARD_FEATURE_DIM
         assert yd.ndim == 1
         assert yd.shape[0] == Xd.shape[0]
 
     elif strategy == "ranking":
-        Xd = np.stack(log.X_discard).astype(np.float32) if log.X_discard else np.zeros((0, 15, 105), np.float32)
+        Xd = np.stack(log.X_discard).astype(np.float32) if log.X_discard else np.zeros((0, 15, DISCARD_FEATURE_DIM), np.float32)
         yd = np.stack(log.y_discard).astype(np.float32) if log.y_discard else np.zeros((0, 15), np.float32)
 
         assert Xd.ndim == 3
         assert Xd.shape[1] == 15
-        assert Xd.shape[2] == 105
+        assert Xd.shape[2] == DISCARD_FEATURE_DIM
         assert yd.ndim == 2
         assert yd.shape[0] == Xd.shape[0]
         assert yd.shape[1] == 15
 
-    Xp = np.stack(log.X_pegging).astype(np.float32) if log.X_pegging else np.zeros((0, 188), np.float32)
+    Xp = np.stack(log.X_pegging).astype(np.float32) if log.X_pegging else np.zeros((0, 240), np.float32)
     yp = np.array(log.y_pegging, dtype=np.float32)
 
     out_path_discard = os.path.join(out_dir, f"discard_{cumulative_games}.npz")
@@ -623,7 +623,7 @@ def save_data(log, out_dir, cumulative_games, strategy, seed):
                 "discard_features": "52 multi-hot discards",
                 "kept_features": "52 multi-hot kept",
                 "dealer_flag": "1 float (1.0 if dealer_is_self else 0.0)",
-                "total_dim": 105,
+            "total_dim": DISCARD_FEATURE_DIM,
             },
             "label": {
                 "classification": "best option index (0..14)",

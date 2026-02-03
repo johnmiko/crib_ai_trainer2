@@ -7,6 +7,97 @@ from cribbage.players.beginner_player import BeginnerPlayer
 
 from crib_ai_trainer.features import multi_hot_cards
 
+RANKS = ["a", "2", "3", "4", "5", "6", "7", "8", "9", "10", "j", "q", "k"]
+RANK_TO_I = {r: i for i, r in enumerate(RANKS)}
+TENS_RANKS = {"10", "j", "q", "k"}
+
+# Base discard features (52 discards + 52 kept + 1 dealer flag)
+BASE_DISCARD_FEATURE_DIM = 105
+
+# Engineered discard features count:
+# 13 kept rank counts + 13 discard rank counts +
+# 2 value sums + 2 tens counts + 2 fives counts +
+# 3 kept pair/trip/quad + 3 discard pair/trip/quad +
+# 3 run counts (3/4/5) + 1 run max +
+# 2 flush flags (kept/discard) + 1 nobs + 2 fifteen counts
+ENGINEERED_DISCARD_FEATURE_DIM = 47
+
+DISCARD_FEATURE_DIM = BASE_DISCARD_FEATURE_DIM + ENGINEERED_DISCARD_FEATURE_DIM
+
+
+def _rank_counts(cards: List[Card]) -> np.ndarray:
+    counts = np.zeros(13, dtype=np.float32)
+    for c in cards:
+        counts[RANK_TO_I[c.get_rank().lower()]] += 1.0
+    return counts
+
+
+def _value_sum(cards: List[Card]) -> float:
+    return float(sum(c.get_value() for c in cards))
+
+
+def _count_tens(cards: List[Card]) -> float:
+    return float(sum(1 for c in cards if c.get_rank().lower() in TENS_RANKS))
+
+
+def _count_fives(cards: List[Card]) -> float:
+    return float(sum(1 for c in cards if c.get_rank().lower() == "5"))
+
+
+def _pair_trip_quad_counts(cards: List[Card]) -> Tuple[float, float, float]:
+    counts = _rank_counts(cards)
+    pair_count = float(np.sum(counts * (counts - 1.0) / 2.0))
+    trip_count = float(np.sum(counts * (counts - 1.0) * (counts - 2.0) / 6.0))
+    quad_count = float(np.sum(counts * (counts - 1.0) * (counts - 2.0) * (counts - 3.0) / 24.0))
+    return pair_count, trip_count, quad_count
+
+
+def _run_counts(cards: List[Card]) -> Tuple[float, float, float, float]:
+    counts = _rank_counts(cards)
+    run3 = 0.0
+    run4 = 0.0
+    run5 = 0.0
+    run_max = 0.0
+    # Runs are counted by multiplicity of rank counts.
+    for start in range(0, 13):
+        if start + 3 <= 13:
+            c = counts[start:start + 3]
+            if np.all(c > 0):
+                run3 += float(np.prod(c))
+                run_max = max(run_max, 3.0)
+        if start + 4 <= 13:
+            c = counts[start:start + 4]
+            if np.all(c > 0):
+                run4 += float(np.prod(c))
+                run_max = max(run_max, 4.0)
+        if start + 5 <= 13:
+            c = counts[start:start + 5]
+            if np.all(c > 0):
+                run5 += float(np.prod(c))
+                run_max = max(run_max, 5.0)
+    return run3, run4, run5, run_max
+
+
+def _count_fifteens(cards: List[Card]) -> float:
+    values = [c.get_value() for c in cards]
+    total = 0
+    for r in range(2, len(values) + 1):
+        for combo in combinations(values, r):
+            if sum(combo) == 15:
+                total += 1
+    return float(total)
+
+
+def _all_same_suit(cards: List[Card]) -> float:
+    if not cards:
+        return 0.0
+    suit = cards[0].get_suit()
+    return 1.0 if all(c.get_suit() == suit for c in cards) else 0.0
+
+
+def _has_nobs(cards: List[Card]) -> float:
+    return 1.0 if any(c.get_rank().lower() == "j" for c in cards) else 0.0
+
 
 def featurize_discard(
     kept: List[Card],
@@ -17,11 +108,33 @@ def featurize_discard(
     kept_vec = multi_hot_cards(kept)          # (52,)
     dealer_vec = np.array([1.0 if dealer_is_self else 0.0], dtype=np.float32)
 
-    return np.concatenate([
+    engineered = np.concatenate([
+        _rank_counts(kept),                       # 13
+        _rank_counts(discards),                   # 13
+        np.array([_value_sum(kept)], dtype=np.float32),
+        np.array([_value_sum(discards)], dtype=np.float32),
+        np.array([_count_tens(kept)], dtype=np.float32),
+        np.array([_count_tens(discards)], dtype=np.float32),
+        np.array([_count_fives(kept)], dtype=np.float32),
+        np.array([_count_fives(discards)], dtype=np.float32),
+        np.array(_pair_trip_quad_counts(kept), dtype=np.float32),
+        np.array(_pair_trip_quad_counts(discards), dtype=np.float32),
+        np.array(_run_counts(kept), dtype=np.float32),
+        np.array([_all_same_suit(kept)], dtype=np.float32),
+        np.array([_all_same_suit(discards)], dtype=np.float32),
+        np.array([_has_nobs(kept)], dtype=np.float32),
+        np.array([_count_fifteens(kept)], dtype=np.float32),
+        np.array([_count_fifteens(discards)], dtype=np.float32),
+    ])
+
+    out = np.concatenate([
         disc_vec,
         kept_vec,
         dealer_vec,
+        engineered,
     ])
+    assert out.shape[0] == DISCARD_FEATURE_DIM, f"discard features dim {out.shape[0]} != {DISCARD_FEATURE_DIM}"
+    return out
 
 def one_hot_count(count: int) -> np.ndarray:
     v = np.zeros(32, dtype=np.float32)
