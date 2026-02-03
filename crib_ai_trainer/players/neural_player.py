@@ -264,6 +264,30 @@ class LinearValueModel:
         m.b = b
         return m
 
+def select_discard_with_model(discard_model, hand: List[Card], dealer_is_self: bool) -> Tuple[Card, Card]:
+    if hasattr(discard_model, "predict_scores"):
+        Xs: List[np.ndarray] = []
+        discards_list: List[Tuple[Card, Card]] = []
+        for kept in combinations(hand, 4):
+            kept = list(kept)
+            discards = [c for c in hand if c not in kept]
+            discards_list.append((discards[0], discards[1]))
+            Xs.append(featurize_discard(kept, discards, dealer_is_self))
+        X15 = np.stack(Xs, axis=0).astype(np.float32)  # (15, D)
+        scores = discard_model.predict_scores(X15)  # (15,)
+        best_i = int(np.argmax(scores))
+        return discards_list[best_i]
+
+    best, best_v = None, float("-inf")
+    for kept in combinations(hand, 4):
+        kept = list(kept)
+        discards = [c for c in hand if c not in kept]
+        x = featurize_discard(kept, discards, dealer_is_self)  # np array
+        v = float(discard_model.predict(x))
+        if v > best_v:
+            best_v, best = v, tuple(discards)
+    return best
+
 def regression_pegging_strategy(
     pegging_model,
     hand,
@@ -310,15 +334,7 @@ class NeuralRegressionPlayer:
         return self.select_crib_cards_regressor(hand, dealer_is_self, your_score, opponent_score) # type: ignore
 
     def select_crib_cards_regressor(self, hand, dealer_is_self, your_score=None, opponent_score=None) -> Tuple[Card, Card]:
-        best, best_v = None, float("-inf")
-        for kept in combinations(hand, 4):
-            kept = list(kept)
-            discards = [c for c in hand if c not in kept]
-            x = featurize_discard(kept, discards, dealer_is_self)  # np array
-            v = float(self.discard_model.predict(x))
-            if v > best_v:
-                best_v, best = v, tuple(discards)
-        return best
+        return select_discard_with_model(self.discard_model, hand, dealer_is_self)
 
     def select_card_to_play(self, player_state, round_state):
         hand = player_state.hand
@@ -351,19 +367,7 @@ class NeuralClassificationPlayer:
 
 
     def select_crib_cards_classification(self, hand: List[Card], dealer_is_self: bool, your_score=None, opponent_score=None) -> Tuple[Card, Card]:
-        Xs: List[np.ndarray] = []
-        discards_list: List[Tuple[Card, Card]] = []
-
-        for kept in combinations(hand, 4):
-            kept = list(kept)
-            discards = [c for c in hand if c not in kept]
-            discards_list.append((discards[0], discards[1]))
-            Xs.append(featurize_discard(kept, discards, dealer_is_self))
-
-        X15 = np.stack(Xs, axis=0).astype(np.float32)  # (15, D)
-        scores = self.discard_model.predict_scores(X15)  # (15,)
-        best_i = int(np.argmax(scores))
-        return discards_list[best_i]
+        return select_discard_with_model(self.discard_model, hand, dealer_is_self)
 
     def select_card_to_play(self, player_state, round_state):
         hand = player_state.hand
@@ -422,3 +426,42 @@ class NeuralPegPlayer(BeginnerPlayer):
             if v > best_v:
                 best_v, best = v, c
         return best
+
+
+class NeuralDiscardOnlyPlayer:
+    """Use a neural discard model, but fall back to another player's pegging."""
+    def __init__(self, discard_model, pegging_fallback, name="neural_discard_only"):
+        self.name = name
+        self.discard_model = discard_model
+        self.pegging_fallback = pegging_fallback
+
+    def select_crib_cards(self, player_state, round_state) -> Tuple[Card, Card]:
+        return select_discard_with_model(self.discard_model, player_state.hand, player_state.is_dealer)
+
+    def select_card_to_play(self, player_state, round_state):
+        return self.pegging_fallback.select_card_to_play(player_state, round_state)
+
+
+class NeuralPegOnlyPlayer:
+    """Use a neural pegging model, but fall back to another player's discard."""
+    def __init__(self, pegging_model, discard_fallback, name="neural_peg_only"):
+        self.name = name
+        self.pegging_model = pegging_model
+        self.discard_fallback = discard_fallback
+
+    def select_crib_cards(self, player_state, round_state) -> Tuple[Card, Card]:
+        return self.discard_fallback.select_crib_cards(player_state, round_state)
+
+    def select_card_to_play(self, player_state, round_state):
+        hand = player_state.hand
+        table = round_state.table_cards
+        crib = round_state.crib
+        count = round_state.count
+        return regression_pegging_strategy(
+            self.pegging_model,
+            hand,
+            table,
+            crib,
+            count,
+            known_cards=player_state.known_cards,
+        )

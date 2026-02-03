@@ -18,7 +18,14 @@ from crib_ai_trainer.constants import MODELS_DIR, TRAINING_DATA_DIR
 from cribbage.players.random_player import RandomPlayer
 from cribbage.players.medium_player import MediumPlayer
 from cribbage.players.beginner_player import BeginnerPlayer
-from crib_ai_trainer.players.neural_player import LinearDiscardClassifier, LinearValueModel, NeuralClassificationPlayer, NeuralRegressionPlayer
+from crib_ai_trainer.players.neural_player import (
+    LinearDiscardClassifier,
+    LinearValueModel,
+    NeuralClassificationPlayer,
+    NeuralRegressionPlayer,
+    NeuralDiscardOnlyPlayer,
+    NeuralPegOnlyPlayer,
+)
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -52,20 +59,30 @@ def benchmark_2_players(args) -> int:
     # breakpoint()
     rng = np.random.default_rng(args.seed)
 
+    def base_player_factory(name: str):
+        if name == "beginner":
+            return BeginnerPlayer(name=name)
+        if name == "random":
+            return RandomPlayer(name=name, seed=args.seed)
+        if name == "medium":
+            return MediumPlayer(name=name)
+        raise ValueError(f"Unknown fallback player type: {name}")
+
     def player_factory(name: str):
         if name == "NeuralClassificationPlayer":
             discard_model = LinearDiscardClassifier.load_npz(f"{args.models_dir}/discard_linear.npz")
             return NeuralClassificationPlayer(discard_model, pegging_model, name=name)
-        elif name == "NeuralRegressionPlayer":
+        if name == "NeuralRegressionPlayer":
             discard_model = LinearValueModel.load_npz(f"{args.models_dir}/discard_linear.npz")
             return NeuralRegressionPlayer(discard_model, pegging_model, name=name)
-        elif name == "beginner":
-            return BeginnerPlayer(name=name)
-        elif name == "random":            
-            return RandomPlayer(name=name, seed=args.seed)
-        elif name == "medium":
-            return MediumPlayer(name=name)
-        raise ValueError(f"Unknown player type: {name}")
+        if name == "NeuralDiscardOnlyPlayer":
+            discard_model = LinearDiscardClassifier.load_npz(f"{args.models_dir}/discard_linear.npz")
+            fallback = base_player_factory(args.fallback_player)
+            return NeuralDiscardOnlyPlayer(discard_model, fallback, name=name)
+        if name == "NeuralPegOnlyPlayer":
+            fallback = base_player_factory(args.fallback_player)
+            return NeuralPegOnlyPlayer(pegging_model, fallback, name=name)
+        return base_player_factory(name)
     
     player_names = args.players.split(",")
     if len(player_names) != 2:
@@ -86,8 +103,12 @@ def benchmark_2_players(args) -> int:
     
     # Count actual training games from discard file names (which are cumulative)
     from pathlib import Path
-    data_dir = Path(TRAINING_DATA_DIR)
+    data_dir = Path(args.data_dir)
     discard_files = sorted(data_dir.glob("discard_*.npz"))
+    if args.max_shards is not None:
+        if args.max_shards <= 0:
+            raise ValueError("--max_shards must be > 0 if provided")
+        discard_files = discard_files[: args.max_shards]
     
     if discard_files:
         # Get the highest cumulative game count from filenames
@@ -117,7 +138,10 @@ if __name__ == "__main__":
     ap.add_argument("--players", type=str, default="NeuralClassificationPlayer,beginner")
     ap.add_argument("--games", type=int, default=500)
     ap.add_argument("--models_dir", type=str, default=MODELS_DIR)
+    ap.add_argument("--data_dir", type=str, default=TRAINING_DATA_DIR)
+    ap.add_argument("--max_shards", type=int, default=None)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--fallback_player", type=str, default="beginner")
     ap.add_argument("--auto_random_benchmark", default=True)
     args = ap.parse_args()
     logger.info(f"models dir: {args.models_dir}")
