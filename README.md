@@ -10,6 +10,20 @@
     - Pegging strategy - play highest scoring pegging play, if points are equal or 0, play highest card
 
 # Results / History
+2026-02-03
+Results (1000 hands)
+
+Margin mean: 1.299
+Margin median: 0.655
+Margin 25/75 pct: 0.117 / 1.902
+Margin ≤ 0.1: 24.3%
+Margin ≤ 0.5: 45.5%
+Margin ≤ 1.0: 55.8%
+Interpretation
+This confirms the same story at scale: nearly half the hands have a top‑1 vs top‑2 gap under 0.5 points, which makes strict classification a pretty brittle target even when the teacher is good.
+
+If you want, the next logical step is to train a discard model that predicts a score for each option (regression ranking) but keep the same medium‑player scoring (no Monte Carlo). That would let the model treat near‑ties as near‑ties.
+
 2025-12-27
 Trained a simple multinomial logistic regression model using 2 "beginner" players to create the training data. Results
 - linear regression vs beginner after 12000.0 training games wins=45/500 winrate=0.090 (95% CI 0.068 - 0.118) avg point diff -17.88
