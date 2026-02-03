@@ -52,6 +52,8 @@ logger = logging.getLogger(__name__)
 
 import random
 from itertools import combinations
+import json
+from datetime import datetime, timezone
 
 def estimate_discard_value_mc(
     hand: List[Card],
@@ -188,6 +190,11 @@ class LoggedClassificationDiscardData(LoggedData):
     y_discard: List[int] = field(default_factory=list)         # each is 0..14
 
 @dataclass
+class LoggedRankingDiscardData(LoggedData):
+    X_discard: List[np.ndarray] = field(default_factory=list)  # each is (15, D)
+    y_discard: List[np.ndarray] = field(default_factory=list)  # each is (15,)
+
+@dataclass
 class LoggedRegPegRegDiscardData(LoggedRegressionPegData, LoggedRegressionDiscardData):
     pass
 
@@ -195,6 +202,9 @@ class LoggedRegPegRegDiscardData(LoggedRegressionPegData, LoggedRegressionDiscar
 class LoggedRegPegClasDiscardData(LoggedRegressionPegData, LoggedClassificationDiscardData):
     pass
 
+@dataclass
+class LoggedRegPegRankDiscardData(LoggedRegressionPegData, LoggedRankingDiscardData):
+    pass
 
 
 class LoggingBeginnerPlayer(BeginnerPlayer):
@@ -346,6 +356,8 @@ class LoggingMediumPlayer(MediumPlayer):
         self._log = log
         if discard_strategy == "classification":
             self._discard_strategy_mode = "classification"
+        elif discard_strategy == "ranking":
+            self._discard_strategy_mode = "ranking"
         elif discard_strategy == "regression":
             self._discard_strategy_mode = "regression"
         else:
@@ -362,6 +374,8 @@ class LoggingMediumPlayer(MediumPlayer):
         
         if self._discard_strategy_mode == "classification":
             return self.select_crib_cards_classifier(hand, dealer_is_self, your_score, opponent_score)
+        elif self._discard_strategy_mode == "ranking":
+            return self.select_crib_cards_ranking(hand, dealer_is_self, your_score, opponent_score)
         else:
             return self.select_crib_cards_regresser(hand, dealer_is_self, your_score, opponent_score)
 
@@ -458,6 +472,47 @@ class LoggingMediumPlayer(MediumPlayer):
 
         return tuple(best_discards_cards)
        
+    def select_crib_cards_ranking(self, hand, dealer_is_self, your_score=None, opponent_score=None) -> Tuple[Card, Card]:
+        full_deck = get_full_deck()
+        hand_score_cache = {}
+        crib_score_cache = {}
+        hand_results = process_dealt_hand_only_exact([hand, full_deck, hand_score_cache])
+        df_hand = pd.DataFrame(hand_results, columns=["hand_key","min_hand_score","max_hand_score","avg_hand_score"])
+        crib_results = calc_crib_min_only_given_6_cards(hand)
+        df_crib = pd.DataFrame(crib_results, columns=["hand_key","crib_key","min_crib_score","avg_crib_score"])
+        df3 = pd.merge(df_hand, df_crib, on=["hand_key"])
+        df3["avg_total_score"] = df3["avg_hand_score"] + (df3["avg_crib_score"] if dealer_is_self else -df3["avg_crib_score"])
+
+        Xs: List[np.ndarray] = []
+        ys: List[float] = []
+        discards_list: List[Tuple[Card, Card]] = []
+
+        for kept in combinations(hand, 4):
+            kept_list = list(kept)
+            discards_list_temp = [c for c in hand if c not in kept_list]
+
+            hand_key = normalize_hand_to_str(kept_list)
+            crib_key = normalize_hand_to_str(discards_list_temp)
+
+            row = df3[(df3["hand_key"] == hand_key) & (df3["crib_key"] == crib_key)]
+            if len(row) == 0:
+                continue
+
+            y = row["avg_total_score"].values[0]
+            x = featurize_discard(kept_list, discards_list_temp, dealer_is_self)
+            Xs.append(x)
+            ys.append(float(y))
+            discards_list.append((discards_list_temp[0], discards_list_temp[1]))
+
+        # Log the full 15-option set with their scores.
+        X_hand = np.stack(Xs, axis=0).astype(np.float32)  # (15, D)
+        y_hand = np.array(ys, dtype=np.float32)           # (15,)
+        self._log.X_discard.append(X_hand)  # type: ignore
+        self._log.y_discard.append(y_hand)  # type: ignore
+
+        best_i = int(np.argmax(y_hand))
+        return discards_list[best_i]
+
 
     def select_crib_cards_regresser(self, hand, dealer_is_self, your_score=None, opponent_score=None) -> Tuple[Card, Card]:                
         # don't analyze crib, just calculate min value of the crib and use that
@@ -505,6 +560,8 @@ def save_data(log, out_dir, cumulative_games, strategy):
         x0 = log.X_discard[0]
         if strategy == "classification":
             assert x0.shape == (15, 105)
+        elif strategy == "ranking":
+            assert x0.shape == (15, 105)
         else:
             assert x0.shape == (105,)
     
@@ -528,6 +585,17 @@ def save_data(log, out_dir, cumulative_games, strategy):
         assert yd.ndim == 1
         assert yd.shape[0] == Xd.shape[0]
 
+    elif strategy == "ranking":
+        Xd = np.stack(log.X_discard).astype(np.float32) if log.X_discard else np.zeros((0, 15, 105), np.float32)
+        yd = np.stack(log.y_discard).astype(np.float32) if log.y_discard else np.zeros((0, 15), np.float32)
+
+        assert Xd.ndim == 3
+        assert Xd.shape[1] == 15
+        assert Xd.shape[2] == 105
+        assert yd.ndim == 2
+        assert yd.shape[0] == Xd.shape[0]
+        assert yd.shape[1] == 15
+
     Xp = np.stack(log.X_pegging).astype(np.float32) if log.X_pegging else np.zeros((0, 188), np.float32)
     yp = np.array(log.y_pegging, dtype=np.float32)
 
@@ -538,6 +606,48 @@ def save_data(log, out_dir, cumulative_games, strategy):
     np.savez(out_path_pegging, X=Xp, y=yp)
     logger.info(f"Saved discard: X={Xd.shape} y={yd.shape}")
     logger.info(f"Saved pegging: X={Xp.shape} y={yp.shape}")
+
+    # Write/update dataset metadata for easy inspection.
+    # This overwrites each time with the latest shard info.
+    dataset_meta = {
+        "updated_at_utc": datetime.now(timezone.utc).isoformat(),
+        "strategy": strategy,
+        "cumulative_games": cumulative_games,
+        "discard": {
+            "file": os.path.basename(out_path_discard),
+            "X_shape": list(Xd.shape),
+            "y_shape": list(yd.shape),
+            "features": {
+                "discard_features": "52 multi-hot discards",
+                "kept_features": "52 multi-hot kept",
+                "dealer_flag": "1 float (1.0 if dealer_is_self else 0.0)",
+                "total_dim": 105,
+            },
+            "label": {
+                "classification": "best option index (0..14)",
+                "regression": "avg_total_score for each option",
+                "ranking": "avg_total_score for each option (15 values)",
+            }.get(strategy, "unknown"),
+        },
+        "pegging": {
+            "file": os.path.basename(out_path_pegging),
+            "X_shape": list(Xp.shape),
+            "y_shape": list(yp.shape),
+            "features": {
+                "hand": "52 multi-hot",
+                "table": "52 multi-hot",
+                "count": "32 one-hot (0..31)",
+                "candidate": "52 one-hot",
+                "known_cards": "52 multi-hot",
+                "total_dim": 240,
+            },
+            "label": "medium pegging score for the candidate card",
+        },
+    }
+    meta_path = os.path.join(out_dir, "dataset_meta.json")
+    with open(meta_path, "w", encoding="utf-8") as f:
+        json.dump(dataset_meta, f, indent=2)
+    logger.info(f"Saved dataset metadata -> {meta_path}")
 
 
 def get_cumulative_game_count(out_dir):
@@ -573,6 +683,10 @@ def generate_il_data(games, out_dir, seed, strategy) -> int:
         log = LoggedRegPegClasDiscardData()
         p1 = LoggingMediumPlayer("teacher1", log, discard_strategy="classification", pegging_strategy="regression")
         p2 = LoggingMediumPlayer("teacher2", log, discard_strategy="classification", pegging_strategy="regression")
+    elif strategy == "ranking":
+        log = LoggedRegPegRankDiscardData()
+        p1 = LoggingMediumPlayer("teacher1", log, discard_strategy="ranking", pegging_strategy="regression")
+        p2 = LoggingMediumPlayer("teacher2", log, discard_strategy="ranking", pegging_strategy="regression")
     elif strategy == "regression":  
         log = LoggedRegPegRegDiscardData()
         p1 = LoggingMediumPlayer("teacher1", log, discard_strategy="regression", pegging_strategy="regression")

@@ -251,6 +251,104 @@ class LinearValueModel:
             losses.append(epoch_loss / max(1, n_seen))
         return losses
 
+    def fit_rank_pairwise(
+        self,
+        X: np.ndarray,
+        y: np.ndarray,
+        *,
+        lr: float = 0.05,
+        epochs: int = 5,
+        batch_size: int = 128,
+        l2: float = 0.0,
+        seed: int = 0,
+        shuffle: bool = True,
+        pairs_per_hand: int = 20,
+    ) -> List[float]:
+        """Train a linear ranker with pairwise logistic loss.
+
+        X: shape (N, 15, D)
+        y: shape (N, 15) scores (higher is better)
+        """
+        if X.ndim != 3 or X.shape[1] != 15:
+            raise ValueError(f"X must be (N,15,D), got {X.shape}")
+        if y.ndim != 2 or y.shape[1] != 15:
+            raise ValueError(f"y must be (N,15), got {y.shape}")
+        if X.shape[0] != y.shape[0]:
+            raise ValueError(f"X and y must share N, got {X.shape[0]} and {y.shape[0]}")
+        if X.shape[2] != self.w.shape[0]:
+            raise ValueError(f"X has D={X.shape[2]} but model expects {self.w.shape[0]}")
+        if batch_size <= 0:
+            raise ValueError("batch_size must be > 0")
+        if pairs_per_hand <= 0:
+            raise ValueError("pairs_per_hand must be > 0")
+
+        rng = np.random.default_rng(seed)
+        N = X.shape[0]
+        losses: List[float] = []
+
+        X = X.astype(np.float32, copy=False)
+        y = y.astype(np.float32, copy=False)
+
+        for _ in range(epochs):
+            idx = np.arange(N)
+            if shuffle:
+                rng.shuffle(idx)
+
+            epoch_loss = 0.0
+            n_seen = 0
+
+            for start in range(0, N, batch_size):
+                batch_idx = idx[start:start + batch_size]
+                Xb = X[batch_idx]  # (B,15,D)
+                yb = y[batch_idx]  # (B,15)
+
+                grad_w = np.zeros_like(self.w)
+                grad_b = 0.0
+                batch_loss = 0.0
+
+                for i in range(Xb.shape[0]):
+                    Xi = Xb[i]  # (15,D)
+                    yi = yb[i]  # (15,)
+                    scores = Xi @ self.w + self.b  # (15,)
+
+                    # sample pairs where yi differs
+                    for _ in range(pairs_per_hand):
+                        a = rng.integers(0, 15)
+                        b = rng.integers(0, 15)
+                        if a == b:
+                            continue
+                        if yi[a] == yi[b]:
+                            continue
+                        s = 1.0 if yi[a] > yi[b] else -1.0
+                        diff = scores[a] - scores[b]
+                        # logistic loss: log(1+exp(-s*diff))
+                        z = -s * diff
+                        loss = np.log1p(np.exp(z))
+                        batch_loss += float(loss)
+                        # grad for diff: -s * sigmoid(z)
+                        sigmoid = 1.0 / (1.0 + np.exp(-z))
+                        g = -s * sigmoid
+                        grad_w += g * (Xi[a] - Xi[b])
+                        grad_b += g
+
+                if l2 > 0.0:
+                    grad_w += 2.0 * l2 * self.w
+
+                # normalize by number of hands in batch
+                if Xb.shape[0] > 0:
+                    grad_w /= float(Xb.shape[0])
+                    grad_b /= float(Xb.shape[0])
+                    batch_loss /= float(Xb.shape[0])
+
+                self.w -= lr * grad_w.astype(np.float32)
+                self.b -= lr * grad_b
+
+                epoch_loss += batch_loss * len(batch_idx)
+                n_seen += len(batch_idx)
+
+            losses.append(epoch_loss / max(1, n_seen))
+
+        return losses
     def save_npz(self, path: str) -> None:
         np.savez(path, w=self.w, b=np.array([self.b], dtype=np.float32))
 
