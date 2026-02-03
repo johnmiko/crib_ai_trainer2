@@ -28,3 +28,8 @@ NeuralClassificationPlayer vs medium after 6000.0 training games wins=40/500 win
 NeuralClassificationPlayer vs beginner after 6000.0 training games wins=51/500 winrate=10.200 (95% CI 7.843 - 13.164) avg point diff -29.92
 
 Include known_cards for pegging
+NeuralClassificationPlayer vs beginner after 4000 training games wins=49/500 winrate=9.8% (95% CI 7.5% - 12.7)% avg point diff -30.27
+NeuralClassificationPlayer vs beginner after 24000 training games wins=51/500 winrate=10.2% (95% CI 7.8% - 13.2)% avg point diff -28.94
+NeuralClassificationPlayer vs beginner after 46000 training games wins=55/500 winrate=11.0% (95% CI 8.5% - 14.0)% avg point diff -29.09
+NeuralClassificationPlayer vs beginner after 228000 training games wins=54/500 winrate=10.8% (95% CI 8.4% - 13.8)% avg point diff -29.16
+NeuralClassificationPlayer vs beginner after 228000 training games wins=43/500 winrate=8.6% (95% CI 6.4% - 11.4)% avg point diff -30.07

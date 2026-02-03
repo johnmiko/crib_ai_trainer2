@@ -289,7 +289,12 @@ class NeuralRegressionPlayer:
         self.discard_model = discard_model
         self.pegging_model = pegging_model
 
-    def select_crib_cards(self, hand: List[Card], dealer_is_self: bool, your_score=None, opponent_score=None) -> Tuple[Card, Card]:
+    def select_crib_cards(self, player_state, round_state) -> Tuple[Card, Card]:
+        # Extract hand and dealer info from state objects
+        hand = player_state.hand
+        dealer_is_self = player_state.is_dealer
+        your_score = player_state.score
+        opponent_score = None  # Not available in state
         return self.select_crib_cards_regressor(hand, dealer_is_self, your_score, opponent_score) # type: ignore
 
     def select_crib_cards_regressor(self, hand, dealer_is_self, your_score=None, opponent_score=None) -> Tuple[Card, Card]:
@@ -303,7 +308,11 @@ class NeuralRegressionPlayer:
                 best_v, best = v, tuple(discards)
         return best
 
-    def select_card_to_play(self, hand, table, crib, count):
+    def select_card_to_play(self, player_state, round_state):
+        hand = player_state.hand
+        table = round_state.table_cards
+        crib = round_state.crib
+        count = round_state.count
         best = regression_pegging_strategy(self.pegging_model, hand, table, crib, count)
         return best
 
@@ -313,7 +322,12 @@ class NeuralClassificationPlayer:
         self.discard_model = discard_model
         self.pegging_model = pegging_model
 
-    def select_crib_cards(self, hand: List[Card], dealer_is_self: bool, your_score=None, opponent_score=None) -> Tuple[Card, Card]:
+    def select_crib_cards(self, player_state, round_state) -> Tuple[Card, Card]:
+        # Extract hand and dealer info from state objects
+        hand = player_state.hand
+        dealer_is_self = player_state.is_dealer
+        your_score = player_state.score
+        opponent_score = None  # Not available in state
         return self.select_crib_cards_classification(hand, dealer_is_self, your_score, opponent_score) # type: ignore
 
 
@@ -332,7 +346,11 @@ class NeuralClassificationPlayer:
         best_i = int(np.argmax(scores))
         return discards_list[best_i]
 
-    def select_card_to_play(self, hand, table, crib, count):
+    def select_card_to_play(self, player_state, round_state):
+        hand = player_state.hand
+        table = round_state.table_cards
+        crib = round_state.crib
+        count = round_state.count
         best = regression_pegging_strategy(self.pegging_model, hand, table, crib, count)
         return best
 

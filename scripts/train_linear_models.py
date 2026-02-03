@@ -110,7 +110,7 @@ if __name__ == "__main__":
     ap.add_argument("--data_dir", type=str, default=TRAINING_DATA_DIR)
     ap.add_argument("--models_dir", type=str, default=MODELS_DIR)
     ap.add_argument("--lr", type=float, default=0.05)
-    ap.add_argument("--epochs", type=int, default=20)
+    ap.add_argument("--epochs", type=int, default=2)
     ap.add_argument("--batch_size", type=int, default=8192)
     ap.add_argument("--l2", type=float, default=0.0)
     ap.add_argument("--seed", type=int, default=0)

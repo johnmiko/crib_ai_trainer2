@@ -494,41 +494,10 @@ class LoggingMediumPlayer(MediumPlayer):
         return tuple(best_discards_cards)
 
 
-def play_one_game(players) -> None:
-    game = cribbagegame.CribbageGame(players=players, copy_players=False)
-    # Some engines have game.play(), some run rounds internally.
-    final_pegging_score = game.start()
-
-
-def generate_il_data(games, out_dir, seed, strategy) -> int:
-    logger.info(f"Generating IL data for {games} games into {out_dir} using 2 medium players")
-    rng = np.random.default_rng(seed)
-    # log = LoggedData()
-    # todo - this probably needs to be dynamic
-    if strategy == "classification":
-        log = LoggedRegPegClasDiscardData()
-        p1 = LoggingMediumPlayer("teacher1", log, discard_strategy="classification", pegging_strategy="regression")
-        p2 = LoggingMediumPlayer("teacher2", log, discard_strategy="classification", pegging_strategy="regression")
-    elif strategy == "regression":  
-        log = LoggedRegPegRegDiscardData()
-        p1 = LoggingMediumPlayer("teacher1", log, discard_strategy="regression", pegging_strategy="regression")
-        p2 = LoggingMediumPlayer("teacher2", log, discard_strategy="regression", pegging_strategy="regression")
-    
-
-    for i in range(games):
-        if i % 100 == 0:
-            logger.info(f"Playing games {i} - {i + 100}/{games}")
-        # If your engine uses RNG/Deck seeding, set it here.
-        # Some engines read global RNG; we at least randomize player order sometimes.
-        if (i % 2) == 1:
-            players = [p2, p1]
-        else:
-            players = [p1, p2]
-        play_one_game(players)
-    
-    logger.info(f"Saving data to {out_dir}")
-
+def save_data(log, out_dir, cumulative_games, strategy):
+    """Save accumulated training data to disk."""
     os.makedirs(out_dir, exist_ok=True)
+    
     # check that we did not use the wrong logging structure
     if log.X_discard:
         x0 = log.X_discard[0]
@@ -536,6 +505,7 @@ def generate_il_data(games, out_dir, seed, strategy) -> int:
             assert x0.shape == (15, 105)
         else:
             assert x0.shape == (105,)
+    
     if strategy == "classification":
         Xd = np.stack(log.X_discard).astype(np.float32) if log.X_discard else np.zeros((0, 15, 105), np.float32)
         yd = np.array(log.y_discard, dtype=np.int64)
@@ -559,11 +529,19 @@ def generate_il_data(games, out_dir, seed, strategy) -> int:
     Xp = np.stack(log.X_pegging).astype(np.float32) if log.X_pegging else np.zeros((0, 188), np.float32)
     yp = np.array(log.y_pegging, dtype=np.float32)
 
+    out_path_discard = os.path.join(out_dir, f"discard_{cumulative_games}.npz")
+    out_path_pegging = os.path.join(out_dir, f"pegging_{cumulative_games}.npz")
+    logger.info(f"Saving to {out_path_discard} and {out_path_pegging}")
+    np.savez(out_path_discard, X=Xd, y=yd)
+    np.savez(out_path_pegging, X=Xp, y=yp)
+    logger.info(f"Saved discard: X={Xd.shape} y={yd.shape}")
+    logger.info(f"Saved pegging: X={Xp.shape} y={yp.shape}")
+
+
+def get_cumulative_game_count(out_dir):
+    """Get the cumulative game count from existing files."""
     out_dir_path = Path(out_dir)
-    
-    # Find cumulative game count from existing files
     existing_discard = sorted(out_dir_path.glob("discard_*.npz"))
-    existing_pegging = sorted(out_dir_path.glob("pegging_*.npz"))
     
     cumulative_games = 0
     if existing_discard:
@@ -574,17 +552,64 @@ def generate_il_data(games, out_dir, seed, strategy) -> int:
                 cumulative_games = max(cumulative_games, num)
             except (ValueError, IndexError):
                 pass
+    return cumulative_games
+
+def play_one_game(players) -> None:
+    game = cribbagegame.CribbageGame(players=players, copy_players=False)
+    # Some engines have game.play(), some run rounds internally.
+    final_pegging_score = game.start()
+
+def generate_il_data(games, out_dir, seed, strategy) -> int:
+    logger.info(f"Generating IL data for {games} games into {out_dir} using 2 medium players")
+    rng = np.random.default_rng(seed)
     
-    # Add current games to cumulative total
-    cumulative_games += games
+    # Get starting cumulative count
+    cumulative_games = get_cumulative_game_count(out_dir)
+    save_interval = 2000
     
-    out_path_discard = os.path.join(out_dir, f"discard_{cumulative_games}.npz")
-    out_path_pegging = os.path.join(out_dir, f"pegging_{cumulative_games}.npz")
-    logger.info(f"Saving to {out_path_discard} and {out_path_pegging}")
-    np.savez(out_path_discard, X=Xd, y=yd)
-    np.savez(out_path_pegging, X=Xp, y=yp)
-    logger.info(f"Saved discard: X={Xd.shape} y={yd.shape}")
-    logger.info(f"Saved pegging: X={Xp.shape} y={yp.shape}")
+    if strategy == "classification":
+        log = LoggedRegPegClasDiscardData()
+        p1 = LoggingMediumPlayer("teacher1", log, discard_strategy="classification", pegging_strategy="regression")
+        p2 = LoggingMediumPlayer("teacher2", log, discard_strategy="classification", pegging_strategy="regression")
+    elif strategy == "regression":  
+        log = LoggedRegPegRegDiscardData()
+        p1 = LoggingMediumPlayer("teacher1", log, discard_strategy="regression", pegging_strategy="regression")
+        p2 = LoggingMediumPlayer("teacher2", log, discard_strategy="regression", pegging_strategy="regression")
+    
+    games_since_save = 0
+
+    for i in range(games):
+        if i % 100 == 0:
+            logger.info(f"Playing games {i} - {i + 100}/{games}")
+        
+        # If your engine uses RNG/Deck seeding, set it here.
+        # Some engines read global RNG; we at least randomize player order sometimes.
+        if (i % 2) == 1:
+            players = [p2, p1]
+        else:
+            players = [p1, p2]
+        play_one_game(players)
+        games_since_save += 1
+        
+        # Save every save_interval games if total games > save_interval
+        if games > save_interval and games_since_save >= save_interval:
+            cumulative_games += games_since_save
+            logger.info(f"Reached {save_interval} games, saving checkpoint at {cumulative_games} total games")
+            save_data(log, out_dir, cumulative_games, strategy)
+            
+            # Clear the logs to save memory
+            log.X_discard.clear()
+            log.y_discard.clear()
+            log.X_pegging.clear()
+            log.y_pegging.clear()
+            games_since_save = 0
+    
+    # Save any remaining data
+    if games_since_save > 0:
+        cumulative_games += games_since_save
+        logger.info(f"Saving final data at {cumulative_games} total games")
+        save_data(log, out_dir, cumulative_games, strategy)
+    
     return 0
 
 
@@ -601,6 +626,7 @@ if __name__ == "__main__":
 
 # python .\scripts\generate_il_data.py --games 20
 #  python .\scripts\generate_il_data.py --games 2000 --out_dir "il_datasets/"
+# python .\scripts\generate_il_data.py --games 2000000 <- overnight does about 1.8 mil
 # python .\scripts\train_linear_models.py
 # python scripts/benchmark_2_players.py --players neural,beginner
 # python scripts/benchmark_2_players.py --players neural,beginner
