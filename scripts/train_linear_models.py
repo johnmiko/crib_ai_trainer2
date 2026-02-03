@@ -12,6 +12,7 @@ import argparse
 import numpy as np
 import json
 from datetime import datetime, timezone
+from pathlib import Path
 
 sys.path.insert(0, ".")
 from crib_ai_trainer.constants import MODELS_DIR, TRAINING_DATA_DIR
@@ -21,7 +22,35 @@ import logging
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
+def _next_run_id(base_dir: str) -> str:
+    base = Path(base_dir)
+    base.mkdir(parents=True, exist_ok=True)
+    existing = [p.name for p in base.iterdir() if p.is_dir() and p.name.isdigit()]
+    if not existing:
+        return "001"
+    max_id = max(int(x) for x in existing)
+    return f"{max_id + 1:03d}"
+
+def _resolve_models_dir(base_models_dir: str, model_version: str, run_id: str | None) -> str:
+    version_dir = Path(base_models_dir) / model_version
+    if run_id is None:
+        run_id = _next_run_id(str(version_dir))
+    return str(version_dir / run_id)
+
 def train_linear_models(args) -> int:
+    if args.lr <= 0 or args.lr > 0.05:
+        raise SystemExit(
+            f"Invalid --lr={args.lr}. For stability with engineered features, use 0 < lr <= 0.05 "
+            f"(recommended 0.0001–0.005). Larger values can explode and produce NaNs."
+        )
+    if args.batch_size <= 0:
+        raise SystemExit("--batch_size must be > 0.")
+    if args.l2 < 0 or args.l2 > 0.1:
+        raise SystemExit("--l2 must be in [0, 0.1]. Larger values dominate the loss and stall learning.")
+    if args.epochs <= 0:
+        raise SystemExit("--epochs must be > 0.")
+    if args.rank_pairs_per_hand <= 0:
+        raise SystemExit("--rank_pairs_per_hand must be > 0.")
     data_dir = Path(args.data_dir)
     models_dir = Path(args.models_dir)
     models_dir.mkdir(parents=True, exist_ok=True)
@@ -185,8 +214,13 @@ def train_linear_models(args) -> int:
         eval_metrics["pegging_regressor_mse"] = mse_p
 
     # Write model metadata for easy inspection.
+    model_path = Path(models_dir)
+    model_version = model_path.parent.name
+    run_id = model_path.name
     model_meta = {
         "trained_at_utc": datetime.now(timezone.utc).isoformat(),
+        "model_version": model_version,
+        "run_id": run_id,
         "data_dir": str(data_dir),
         "models_dir": str(models_dir),
         "discard_loss": discard_mode,
@@ -212,6 +246,8 @@ def train_linear_models(args) -> int:
     txt_path = models_dir / "model_meta.txt"
     lines = [
         f"trained_at_utc: {model_meta['trained_at_utc']}",
+        f"model_version: {model_meta['model_version']}",
+        f"run_id: {model_meta['run_id']}",
         f"data_dir: {model_meta['data_dir']}",
         f"models_dir: {model_meta['models_dir']}",
         f"discard_loss: {model_meta['discard_loss']}",
@@ -241,6 +277,8 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--data_dir", type=str, default=TRAINING_DATA_DIR)
     ap.add_argument("--models_dir", type=str, default=MODELS_DIR)
+    ap.add_argument("--model_version", type=str, default="discard_v1")
+    ap.add_argument("--run_id", type=str, default=None, help="Run id folder (e.g., 001). Omit to auto-increment.")
     ap.add_argument("--discard_loss", type=str, default=None, choices=["classification", "regression", "ranking"])
     ap.add_argument("--lr", type=float, default=0.0005)
     ap.add_argument("--epochs", type=int, default=2)
@@ -251,7 +289,12 @@ if __name__ == "__main__":
     ap.add_argument("--max_shards", type=int, default=None)
     ap.add_argument("--rank_pairs_per_hand", type=int, default=20)
     args = ap.parse_args()
+    args.models_dir = _resolve_models_dir(args.models_dir, args.model_version, args.run_id)
     train_linear_models(args)
 
 # python .\scripts\train_linear_models.py
-# python .\scripts\train_linear_models.py --data_dir "il_datasets/medium_discard_ranking" --models_dir "models/ranking" --discard_loss ranking --epochs 6 --eval_samples 2048 --max_shards 6 --rank_pairs_per_hand 20
+# python .\scripts\train_linear_models.py --data_dir "il_datasets/discard_v2/001" --models_dir "models" --model_version "discard_v2" --discard_loss regression --epochs 5 --eval_samples 2048 --max_shards 2
+
+# .\.venv\Scripts\python.exe .\scripts\generate_il_data.py --games 4000 --out_dir "il_datasets" --dataset_version "discard_v2" --strategy regression
+# .\.venv\Scripts\python.exe .\scripts\train_linear_models.py --data_dir "il_datasets/discard_v2/001" --models_dir "models" --model_version "discard_v2" --discard_loss regression --epochs 5 --eval_samples 2048 --max_shards 2
+# .\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py --players NeuralRegressionPlayer,beginner --games 200 --models_dir "models/discard_v2/001" --data_dir "il_datasets/discard_v2/001" --max_shards 2

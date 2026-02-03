@@ -143,7 +143,7 @@ def benchmark_2_players(args) -> int:
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--players", type=str, default="NeuralClassificationPlayer,beginner")
+    ap.add_argument("--players", type=str, default="NeuralRegressionPlayer,beginner")
     ap.add_argument("--games", type=int, default=500)
     ap.add_argument("--models_dir", type=str, default=MODELS_DIR)
     ap.add_argument("--data_dir", type=str, default=TRAINING_DATA_DIR)
@@ -157,4 +157,10 @@ if __name__ == "__main__":
     benchmark_2_players(args)
 
 # python scripts/benchmark_2_players.py
-# python scripts/benchmark_2_players.py --players NeuralDiscardOnlyPlayer,beginner --games 200 --models_dir "models/ranking" --data_dir "il_datasets/medium_discard_ranking" --max_shards 6 --fallback_player beginner
+# python scripts/benchmark_2_players.py --players NeuralRegressionPlayer,beginner --games 200 --models_dir "models/ranking" --data_dir "il_datasets/medium_discard_ranking" --max_shards 6 --fallback_player beginner
+
+# .\.venv\Scripts\python.exe .\scripts\generate_il_data.py --games 4000 --out_dir "il_datasets" --dataset_version "discard_v2" --strategy regression
+# .\.venv\Scripts\python.exe .\scripts\train_linear_models.py --data_dir "il_datasets/discard_v2/001" --models_dir "models" --model_version "discard_v2" --discard_loss regression --epochs 5 --eval_samples 2048 --max_shards 2
+# .\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py --players NeuralRegressionPlayer,beginner --games 200 --models_dir "models/discard_v2/001" --data_dir "il_datasets/discard_v2/001" --max_shards 2
+
+

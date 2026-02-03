@@ -634,8 +634,13 @@ def save_data(log, out_dir, cumulative_games, strategy, seed):
 
     # Write/update dataset metadata for easy inspection.
     # This overwrites each time with the latest shard info.
+    out_path = Path(out_dir)
+    dataset_version = out_path.parent.name
+    run_id = out_path.name
     dataset_meta = {
         "updated_at_utc": datetime.now(timezone.utc).isoformat(),
+        "dataset_version": dataset_version,
+        "run_id": run_id,
         "strategy": strategy,
         "cumulative_games": cumulative_games,
         "seed": seed,
@@ -682,6 +687,8 @@ def save_data(log, out_dir, cumulative_games, strategy, seed):
     txt_path = os.path.join(out_dir, "dataset_meta.txt")
     lines = [
         f"updated_at_utc: {dataset_meta['updated_at_utc']}",
+        f"dataset_version: {dataset_meta['dataset_version']}",
+        f"run_id: {dataset_meta['run_id']}",
         f"strategy: {dataset_meta['strategy']}",
         f"cumulative_games: {dataset_meta['cumulative_games']}",
         f"seed: {dataset_meta['seed']}",
@@ -714,6 +721,21 @@ def save_data(log, out_dir, cumulative_games, strategy, seed):
     with open(txt_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
     logger.info(f"Saved dataset summary -> {txt_path}")
+
+def _next_run_id(base_dir: str) -> str:
+    base = Path(base_dir)
+    base.mkdir(parents=True, exist_ok=True)
+    existing = [p.name for p in base.iterdir() if p.is_dir() and p.name.isdigit()]
+    if not existing:
+        return "001"
+    max_id = max(int(x) for x in existing)
+    return f"{max_id + 1:03d}"
+
+def _resolve_output_dir(base_out_dir: str, dataset_version: str, run_id: str | None) -> str:
+    version_dir = Path(base_out_dir) / dataset_version
+    if run_id is None:
+        run_id = _next_run_id(str(version_dir))
+    return str(version_dir / run_id)
 
 
 def get_cumulative_game_count(out_dir):
@@ -815,11 +837,17 @@ if __name__ == "__main__":
     ap.add_argument("--games", type=int, default=200, help="Number of games to simulate. Use -1 to run forever.")
     default_out_dir = TRAINING_DATA_DIR
     ap.add_argument("--out_dir", type=str, default=default_out_dir)
+    ap.add_argument("--dataset_version", type=str, default="discard_v1")
+    ap.add_argument("--run_id", type=str, default=None, help="Run id folder (e.g., 001). Omit to auto-increment.")
     ap.add_argument("--seed", type=int, default=None, help="Random seed. Omit to use a random seed.")
     ap.add_argument("--strategy", type=str, default="classification")
     args = ap.parse_args()
-    generate_il_data(args.games, args.out_dir, args.seed, args.strategy)
+    resolved_out_dir = _resolve_output_dir(args.out_dir, args.dataset_version, args.run_id)
+    generate_il_data(args.games, resolved_out_dir, args.seed, args.strategy)
 
 # python .\scripts\generate_il_data.py
-# python .\scripts\generate_il_data.py --games -1 --out_dir "il_datasets/medium_discard_regression" --strategy regression
-# python .\scripts\train_linear_models.py --data_dir "il_datasets\medium_discard_regression" --models_dir "models\regression" --epochs 5 --eval_samples 2048 --max_shards 2
+# python .\scripts\generate_il_data.py --games -1 --out_dir "il_datasets" --dataset_version "discard_v2" --strategy regression
+
+# .\.venv\Scripts\python.exe .\scripts\generate_il_data.py --games 4000 --out_dir "il_datasets" --dataset_version "discard_v2" --strategy regression
+# .\.venv\Scripts\python.exe .\scripts\train_linear_models.py --data_dir "il_datasets/discard_v2/001" --models_dir "models" --model_version "discard_v2" --discard_loss regression --epochs 5 --eval_samples 2048 --max_shards 2
+# .\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py --players NeuralRegressionPlayer,beginner --games 200 --models_dir "models/discard_v2/001" --data_dir "il_datasets/discard_v2/001" --max_shards 2

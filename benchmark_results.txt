@@ -55,4 +55,7 @@ Add all of the scoring features to the discard training set (15s, pairs, runs, f
 NeuralRegressionPlayer vs beginner after 4000 training games wins=85/200 winrate=42.5% (95% CI 35.9% - 49.4)% avg point diff -5.69
 NeuralDiscardOnlyPlayer vs beginner after 4000 training games wins=105/200 winrate=52.5% (95% CI 45.6% - 59.3)% avg point diff 0.24
 NeuralPegOnlyPlayer vs beginner after 4000 training games wins=84/200 winrate=42.0% (95% CI 35.4% - 48.9)% avg point diff -5.76
+
 That went well, going to add more features to pegging
+NeuralRegressionPlayer vs beginner after 4000 training games wins=78/200 winrate=39.0% (95% CI 32.5% - 45.9)% avg point diff -7.32
+NeuralDiscardOnlyPlayer vs beginner after 4000 training games wins=94/200 winrate=47.0% (95% CI 40.2% - 53.9)% avg point diff -2.85
