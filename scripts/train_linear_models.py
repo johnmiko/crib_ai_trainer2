@@ -254,5 +254,4 @@ if __name__ == "__main__":
     train_linear_models(args)
 
 # python .\scripts\train_linear_models.py
-# python .\scripts\train_linear_models.py --data_dir "il_datasets/" --models_dir models --epochs 20
-# train over the whole dataset 20 times
+# python .\scripts\train_linear_models.py --data_dir "il_datasets/medium_discard_ranking" --models_dir "models/ranking" --discard_loss ranking --epochs 6 --eval_samples 2048 --max_shards 6 --rank_pairs_per_hand 20

@@ -790,9 +790,5 @@ if __name__ == "__main__":
     args = ap.parse_args()
     generate_il_data(args.games, args.out_dir, args.seed, args.strategy)
 
-# python .\scripts\generate_il_data.py --games 20
-#  python .\scripts\generate_il_data.py --games 2000 --out_dir "il_datasets/"
-# python .\scripts\generate_il_data.py --games 2000000 <- overnight does about 1.8 mil
-# python .\scripts\train_linear_models.py
-# python scripts/benchmark_2_players.py --players neural,beginner
-# python scripts/benchmark_2_players.py --players neural,beginner
+# python .\scripts\generate_il_data.py
+# python .\scripts\generate_il_data.py --games -1 --out_dir "il_datasets/medium_discard_regression" --strategy regression

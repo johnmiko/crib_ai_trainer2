@@ -1,0 +1,25 @@
+updated_at_utc: 2026-02-03T18:19:47.161169+00:00
+strategy: regression
+cumulative_games: 12020
+
+discard_file: discard_12020.npz
+discard_X_shape: [528060, 105]
+discard_y_shape: [528060]
+discard_features:
+  - 52 multi-hot discards
+  - 52 multi-hot kept
+  - 1 float (1.0 if dealer_is_self else 0.0)
+  - total_dim: 105
+discard_label: avg_total_score for each option
+
+pegging_file: pegging_12020.npz
+pegging_X_shape: [338679, 240]
+pegging_y_shape: [338679]
+pegging_features:
+  - 52 multi-hot
+  - 52 multi-hot
+  - 32 one-hot (0..31)
+  - 52 one-hot
+  - 52 multi-hot
+  - total_dim: 240
+pegging_label: medium pegging score for the candidate card

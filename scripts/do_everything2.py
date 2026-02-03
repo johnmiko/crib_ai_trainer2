@@ -16,7 +16,7 @@ from scripts.generate_il_data import generate_il_data
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--games", type=int, default=2000, help="Games per loop")
-    ap.add_argument("--loops", type=int, default=1, help="Number of generate→train→benchmark cycles")
+    ap.add_argument("--loops", type=int, default=1, help="Number of generate→train→benchmark cycles. Use -1 to loop forever.")
     ap.add_argument("--training_dir", type=str, default=TRAINING_DATA_DIR)
     ap.add_argument("--strategy", type=str, default="classification")
     ap.add_argument("--seed", type=int, default=0)
@@ -30,14 +30,22 @@ if __name__ == "__main__":
     args = ap.parse_args()
     if args.data_dir is None:
         args.data_dir = args.training_dir
-    if args.loops <= 0:
-        raise SystemExit("--loops must be >= 1")
-    for i in range(args.loops):
-        print(f"\n=== Loop {i + 1}/{args.loops} ===")
+    if args.loops == 0 or args.loops < -1:
+        raise SystemExit("--loops must be >= 1 or -1 for infinite")
+    i = 0
+    while True:
+        i += 1
+        if args.loops == -1:
+            print(f"\n=== Loop {i}/∞ ===")
+        else:
+            print(f"\n=== Loop {i}/{args.loops} ===")
         generate_il_data(args.games, args.training_dir, args.seed, args.strategy)
         train_linear_models(args)
         benchmark_2_players(args)
         args.players = "NeuralClassificationPlayer,beginner"
         benchmark_2_players(args)
+        if args.loops != -1 and i >= args.loops:
+            break
 
 # python .\scripts\do_everything2.py
+# python .\scripts\do_everything2.py --games 2000 --loops -1 --strategy ranking --training_dir "il_datasets/medium_discard_ranking" --data_dir "il_datasets/medium_discard_ranking" --models_dir "models/ranking" --players NeuralRegressionPlayer,beginner --benchmark_games 200

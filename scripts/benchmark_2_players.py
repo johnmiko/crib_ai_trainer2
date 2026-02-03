@@ -156,8 +156,5 @@ if __name__ == "__main__":
     logger.info(f"models dir: {args.models_dir}")
     benchmark_2_players(args)
 
-# python scripts/benchmark_2_players.py 
-# python scripts/benchmark_2_players.py --players NeuralClassificationPlayer,medium --games 500
-# python scripts/benchmark_2_players.py --players NeuralClassificationPlayer,beginner --games 500
-# python scripts/benchmark_2_players.py --players NeuralRegressionPlayer,random --games 500
-# python scripts/benchmark_2_players.py --players NeuralRegressionPlayer,medium --games 500
+# python scripts/benchmark_2_players.py
+# python scripts/benchmark_2_players.py --players NeuralDiscardOnlyPlayer,beginner --games 200 --models_dir "models/ranking" --data_dir "il_datasets/medium_discard_ranking" --max_shards 6 --fallback_player beginner
