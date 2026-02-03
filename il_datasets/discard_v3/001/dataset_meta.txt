@@ -1,0 +1,33 @@
+updated_at_utc: 2026-02-03T20:46:56.854346+00:00
+dataset_version: discard_v3
+run_id: 001
+strategy: regression
+cumulative_games: 2012
+seed: 1203165289
+
+discard_file: discard_2012.npz
+discard_X_shape: [528510, 158]
+discard_y_shape: [528510]
+discard_features:
+  - 52 multi-hot discards
+  - 52 multi-hot kept
+  - 1 float (1.0 if dealer_is_self else 0.0)
+  - player_score, opponent_score, score_margin, endgame_self, endgame_opp, endgame_any
+  - total_dim: 158
+discard_label: avg_total_score for each option
+
+pegging_file: pegging_2012.npz
+pegging_X_shape: [338706, 369]
+pegging_y_shape: [338706]
+pegging_features:
+  - 52 multi-hot
+  - 52 multi-hot
+  - 32 one-hot (0..31)
+  - 52 one-hot
+  - 52 multi-hot
+  - 52 multi-hot
+  - 52 multi-hot
+  - 25 scalar pegging features (15/31 flags, runs, setups, hand sizes, go-prob, scores, endgame)
+  - feature_set: full
+  - total_dim: 369
+pegging_label: medium pegging score for the candidate card

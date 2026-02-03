@@ -40,7 +40,12 @@ from cribbage.database import normalize_hand_to_str
 
 from cribbage.players.beginner_player import BeginnerPlayer
 from cribbage.players.medium_player import MediumPlayer
-from crib_ai_trainer.players.neural_player import featurize_discard, featurize_pegging, DISCARD_FEATURE_DIM, PEGGING_FEATURE_DIM
+from crib_ai_trainer.players.neural_player import (
+    featurize_discard,
+    featurize_pegging,
+    DISCARD_FEATURE_DIM,
+    get_pegging_feature_dim,
+)
 
 from cribbage.cribbagegame import score_hand, score_play
 
@@ -211,7 +216,7 @@ class LoggedRegPegRankDiscardData(LoggedRegressionPegData, LoggedRankingDiscardD
 class LoggingBeginnerPlayer(BeginnerPlayer):
     """Wrap BeginnerPlayer so we can collect training data while it plays."""
 
-    def __init__(self, name: str, log: LoggedData, discard_strategy, pegging_strategy, seed: int = 0, ):
+    def __init__(self, name: str, log: LoggedData, discard_strategy, pegging_strategy, seed: int = 0, pegging_feature_set: str = "full"):
         super().__init__(name=name)
         self._rng = random.Random(seed)
         self._full_deck = get_full_deck()
@@ -223,14 +228,21 @@ class LoggingBeginnerPlayer(BeginnerPlayer):
         else:
             raise ValueError(f"Unknown discard_strategy: {discard_strategy}")        
         self._pegging_strategy = pegging_strategy # not implemented yet
+        self._pegging_feature_set = pegging_feature_set
 
     def select_crib_cards(self, player_state, round_state) -> Tuple[Card, Card]:
         # Extract hand and dealer info from state objects
         hand = player_state.hand
         dealer_is_self = player_state.is_dealer
-        return self._discard_strategy(hand, dealer_is_self)
+        return self._discard_strategy(hand, dealer_is_self, player_state.score, player_state.opponent_score)
     
-    def select_crib_cards_classifier(self, hand: List[Card], dealer_is_self: bool) -> Tuple[Card, Card]:
+    def select_crib_cards_classifier(
+        self,
+        hand: List[Card],
+        dealer_is_self: bool,
+        your_score: int | None = None,
+        opponent_score: int | None = None,
+    ) -> Tuple[Card, Card]:
         hand_set = set(hand)
         remaining = [c for c in self._full_deck if c not in hand_set]  # 46
 
@@ -253,7 +265,7 @@ class LoggingBeginnerPlayer(BeginnerPlayer):
                 n_opp_discards=8,
             )
 
-            x = featurize_discard(kept, discards, dealer_is_self)  # (105,)
+            x = featurize_discard(kept, discards, dealer_is_self, your_score, opponent_score)
             Xs.append(x)
             ys.append(float(y))
             discards_list.append(disc_t)
@@ -268,7 +280,13 @@ class LoggingBeginnerPlayer(BeginnerPlayer):
 
         return discards_list[best_i]
 
-    def select_crib_cards_regresser(self, hand: List[Card], dealer_is_self: bool) -> Tuple[Card, Card]:
+    def select_crib_cards_regresser(
+        self,
+        hand: List[Card],
+        dealer_is_self: bool,
+        your_score: int | None = None,
+        opponent_score: int | None = None,
+    ) -> Tuple[Card, Card]:
         hand_set = set(hand)
         remaining = [c for c in self._full_deck if c not in hand_set]  # 46
 
@@ -295,7 +313,7 @@ class LoggingBeginnerPlayer(BeginnerPlayer):
                 print("discards:", discards)
                 a = 1
 
-            x = featurize_discard(kept, discards, dealer_is_self)  # or drop hand param
+            x = featurize_discard(kept, discards, dealer_is_self, your_score, opponent_score)
             self._log.X_discard.append(x)
             self._log.y_discard.append(float(y))
 
@@ -339,6 +357,8 @@ class LoggingBeginnerPlayer(BeginnerPlayer):
                 opponent_known_hand=player_state.opponent_known_hand,
                 all_played_cards=round_state.all_played_cards,
                 player_score=player_state.score,
+                opponent_score=player_state.opponent_score,
+                feature_set=self._pegging_feature_set,
             )
             self._log.X_pegging.append(x) # type: ignore
             self._log.y_pegging.append(float(y)) # type: ignore
@@ -359,7 +379,7 @@ class LoggingBeginnerPlayer(BeginnerPlayer):
 class LoggingMediumPlayer(MediumPlayer):
     """Wrap MediumPlayer so we can collect training data while it plays."""
 
-    def __init__(self, name: str, log: LoggedData, discard_strategy, pegging_strategy, seed: int = 0, ):
+    def __init__(self, name: str, log: LoggedData, discard_strategy, pegging_strategy, seed: int = 0, pegging_feature_set: str = "full"):
         super().__init__(name=name)
         self._rng = random.Random(seed)
         self._full_deck = get_full_deck()
@@ -373,6 +393,7 @@ class LoggingMediumPlayer(MediumPlayer):
         else:
             raise ValueError(f"Unknown discard_strategy: {discard_strategy}")        
         self._pegging_strategy = pegging_strategy
+        self._pegging_feature_set = pegging_feature_set
 
     def select_crib_cards(self, player_state, round_state) -> Tuple[Card, Card]:
         """Override to log training data."""
@@ -380,7 +401,7 @@ class LoggingMediumPlayer(MediumPlayer):
         hand = player_state.hand
         dealer_is_self = player_state.is_dealer
         your_score = player_state.score
-        opponent_score = None  # Not available in state, but not used by these methods
+        opponent_score = player_state.opponent_score
         
         if self._discard_strategy_mode == "classification":
             return self.select_crib_cards_classifier(hand, dealer_is_self, your_score, opponent_score)
@@ -400,6 +421,8 @@ class LoggingMediumPlayer(MediumPlayer):
         self._current_opponent_known_hand = list(player_state.opponent_known_hand)
         self._current_all_played_cards = list(round_state.all_played_cards)
         self._current_player_score = int(player_state.score)
+        self._current_opponent_score = int(player_state.opponent_score)
+        self._current_pegging_feature_set = self._pegging_feature_set
         return self.play_pegging(playable_cards, round_state.count, round_state.table_cards)
     
     def play_pegging(self, playable: List[Card], count: int, history_since_reset: List[Card]) -> Optional[Card]:
@@ -426,6 +449,8 @@ class LoggingMediumPlayer(MediumPlayer):
         opp_known = getattr(self, "_current_opponent_known_hand", [])
         all_played = getattr(self, "_current_all_played_cards", [])
         player_score = getattr(self, "_current_player_score", 0)
+        opponent_score = getattr(self, "_current_opponent_score", 0)
+        feature_set = getattr(self, "_current_pegging_feature_set", "full")
         
         # Log all playable options
         for card, score in scores.items():
@@ -440,6 +465,8 @@ class LoggingMediumPlayer(MediumPlayer):
                 opponent_known_hand=opp_known,
                 all_played_cards=all_played,
                 player_score=player_score,
+                opponent_score=opponent_score,
+                feature_set=feature_set,
             )
             self._log.X_pegging.append(x) # type: ignore
             self._log.y_pegging.append(float(y)) # type: ignore
@@ -483,7 +510,7 @@ class LoggingMediumPlayer(MediumPlayer):
                 continue
             
             y = row["avg_total_score"].values[0]
-            x = featurize_discard(kept_list, discards_list_temp, dealer_is_self)  # (105,)
+            x = featurize_discard(kept_list, discards_list_temp, dealer_is_self, your_score, opponent_score)
             Xs.append(x)
             ys.append(float(y))
             discards_list.append((discards_list_temp[0], discards_list_temp[1]))
@@ -524,7 +551,7 @@ class LoggingMediumPlayer(MediumPlayer):
                 continue
 
             y = row["avg_total_score"].values[0]
-            x = featurize_discard(kept_list, discards_list_temp, dealer_is_self)
+            x = featurize_discard(kept_list, discards_list_temp, dealer_is_self, your_score, opponent_score)
             Xs.append(x)
             ys.append(float(y))
             discards_list.append((discards_list_temp[0], discards_list_temp[1]))
@@ -566,7 +593,7 @@ class LoggingMediumPlayer(MediumPlayer):
                 continue
             
             y = row["avg_total_score"].values[0]
-            x = featurize_discard(kept_list, discards_list, dealer_is_self)
+            x = featurize_discard(kept_list, discards_list, dealer_is_self, your_score, opponent_score)
             self._log.X_discard.append(x)
             self._log.y_discard.append(float(y))
 
@@ -576,7 +603,7 @@ class LoggingMediumPlayer(MediumPlayer):
         return tuple(best_discards_cards)
 
 
-def save_data(log, out_dir, cumulative_games, strategy, seed):
+def save_data(log, out_dir, cumulative_games, strategy, seed, pegging_feature_set: str):
     """Save accumulated training data to disk."""
     os.makedirs(out_dir, exist_ok=True)
     
@@ -621,7 +648,8 @@ def save_data(log, out_dir, cumulative_games, strategy, seed):
         assert yd.shape[0] == Xd.shape[0]
         assert yd.shape[1] == 15
 
-    Xp = np.stack(log.X_pegging).astype(np.float32) if log.X_pegging else np.zeros((0, PEGGING_FEATURE_DIM), np.float32)
+    pegging_dim = get_pegging_feature_dim(pegging_feature_set)
+    Xp = np.stack(log.X_pegging).astype(np.float32) if log.X_pegging else np.zeros((0, pegging_dim), np.float32)
     yp = np.array(log.y_pegging, dtype=np.float32)
 
     out_path_discard = os.path.join(out_dir, f"discard_{cumulative_games}.npz")
@@ -652,6 +680,7 @@ def save_data(log, out_dir, cumulative_games, strategy, seed):
                 "discard_features": "52 multi-hot discards",
                 "kept_features": "52 multi-hot kept",
                 "dealer_flag": "1 float (1.0 if dealer_is_self else 0.0)",
+                "score_context": "player_score, opponent_score, score_margin, endgame_self, endgame_opp, endgame_any",
             "total_dim": DISCARD_FEATURE_DIM,
             },
             "label": {
@@ -670,10 +699,11 @@ def save_data(log, out_dir, cumulative_games, strategy, seed):
                 "count": "32 one-hot (0..31)",
                 "candidate": "52 one-hot",
                 "known_cards": "52 multi-hot",
-            "total_dim": PEGGING_FEATURE_DIM,
+            "total_dim": pegging_dim,
             "opponent_played": "52 multi-hot",
             "all_played": "52 multi-hot",
-            "engineered": "20 scalar pegging features (15/31 flags, runs, setups, hand sizes, go-prob, score)",
+            "engineered": "25 scalar pegging features (15/31 flags, runs, setups, hand sizes, go-prob, scores, endgame)",
+            "feature_set": pegging_feature_set,
             },
             "label": "medium pegging score for the candidate card",
         },
@@ -700,6 +730,7 @@ def save_data(log, out_dir, cumulative_games, strategy, seed):
         f"  - {dataset_meta['discard']['features']['discard_features']}",
         f"  - {dataset_meta['discard']['features']['kept_features']}",
         f"  - {dataset_meta['discard']['features']['dealer_flag']}",
+        f"  - {dataset_meta['discard']['features']['score_context']}",
         f"  - total_dim: {dataset_meta['discard']['features']['total_dim']}",
         f"discard_label: {dataset_meta['discard']['label']}",
         "",
@@ -715,6 +746,7 @@ def save_data(log, out_dir, cumulative_games, strategy, seed):
         f"  - {dataset_meta['pegging']['features']['opponent_played']}",
         f"  - {dataset_meta['pegging']['features']['all_played']}",
         f"  - {dataset_meta['pegging']['features']['engineered']}",
+        f"  - feature_set: {dataset_meta['pegging']['features']['feature_set']}",
         f"  - total_dim: {dataset_meta['pegging']['features']['total_dim']}",
         f"pegging_label: {dataset_meta['pegging']['label']}",
     ]
@@ -731,10 +763,28 @@ def _next_run_id(base_dir: str) -> str:
     max_id = max(int(x) for x in existing)
     return f"{max_id + 1:03d}"
 
-def _resolve_output_dir(base_out_dir: str, dataset_version: str, run_id: str | None) -> str:
+def _latest_run_id(base_dir: str) -> str | None:
+    base = Path(base_dir)
+    if not base.exists():
+        return None
+    existing = [p.name for p in base.iterdir() if p.is_dir() and p.name.isdigit()]
+    if not existing:
+        return None
+    max_id = max(int(x) for x in existing)
+    return f"{max_id:03d}"
+
+def _resolve_output_dir(
+    base_out_dir: str,
+    dataset_version: str,
+    run_id: str | None,
+    new_run: bool,
+) -> str:
     version_dir = Path(base_out_dir) / dataset_version
     if run_id is None:
-        run_id = _next_run_id(str(version_dir))
+        if new_run:
+            run_id = _next_run_id(str(version_dir))
+        else:
+            run_id = _latest_run_id(str(version_dir)) or "001"
     return str(version_dir / run_id)
 
 
@@ -759,7 +809,7 @@ def play_one_game(players) -> None:
     # Some engines have game.play(), some run rounds internally.
     final_pegging_score = game.start()
 
-def generate_il_data(games, out_dir, seed, strategy) -> int:
+def generate_il_data(games, out_dir, seed, strategy, pegging_feature_set: str = "full") -> int:
     if seed is None:
         seed = secrets.randbits(32)
         logger.info(f"No seed provided, using random seed={seed}")
@@ -775,16 +825,58 @@ def generate_il_data(games, out_dir, seed, strategy) -> int:
     
     if strategy == "classification":
         log = LoggedRegPegClasDiscardData()
-        p1 = LoggingMediumPlayer("teacher1", log, discard_strategy="classification", pegging_strategy="regression")
-        p2 = LoggingMediumPlayer("teacher2", log, discard_strategy="classification", pegging_strategy="regression")
+        p1 = LoggingMediumPlayer(
+            "teacher1",
+            log,
+            discard_strategy="classification",
+            pegging_strategy="regression",
+            seed=seed or 0,
+            pegging_feature_set=pegging_feature_set,
+        )
+        p2 = LoggingMediumPlayer(
+            "teacher2",
+            log,
+            discard_strategy="classification",
+            pegging_strategy="regression",
+            seed=seed or 0,
+            pegging_feature_set=pegging_feature_set,
+        )
     elif strategy == "ranking":
         log = LoggedRegPegRankDiscardData()
-        p1 = LoggingMediumPlayer("teacher1", log, discard_strategy="ranking", pegging_strategy="regression")
-        p2 = LoggingMediumPlayer("teacher2", log, discard_strategy="ranking", pegging_strategy="regression")
+        p1 = LoggingMediumPlayer(
+            "teacher1",
+            log,
+            discard_strategy="ranking",
+            pegging_strategy="regression",
+            seed=seed or 0,
+            pegging_feature_set=pegging_feature_set,
+        )
+        p2 = LoggingMediumPlayer(
+            "teacher2",
+            log,
+            discard_strategy="ranking",
+            pegging_strategy="regression",
+            seed=seed or 0,
+            pegging_feature_set=pegging_feature_set,
+        )
     elif strategy == "regression":  
         log = LoggedRegPegRegDiscardData()
-        p1 = LoggingMediumPlayer("teacher1", log, discard_strategy="regression", pegging_strategy="regression")
-        p2 = LoggingMediumPlayer("teacher2", log, discard_strategy="regression", pegging_strategy="regression")
+        p1 = LoggingMediumPlayer(
+            "teacher1",
+            log,
+            discard_strategy="regression",
+            pegging_strategy="regression",
+            seed=seed or 0,
+            pegging_feature_set=pegging_feature_set,
+        )
+        p2 = LoggingMediumPlayer(
+            "teacher2",
+            log,
+            discard_strategy="regression",
+            pegging_strategy="regression",
+            seed=seed or 0,
+            pegging_feature_set=pegging_feature_set,
+        )
     
     games_since_save = 0
 
@@ -809,7 +901,7 @@ def generate_il_data(games, out_dir, seed, strategy) -> int:
         if games_since_save >= save_interval:
             cumulative_games += games_since_save
             logger.info(f"Reached {save_interval} games, saving checkpoint at {cumulative_games} total games")
-            save_data(log, out_dir, cumulative_games, strategy, seed)
+            save_data(log, out_dir, cumulative_games, strategy, seed, pegging_feature_set)
             
             # Clear the logs to save memory
             log.X_discard.clear()
@@ -826,7 +918,7 @@ def generate_il_data(games, out_dir, seed, strategy) -> int:
     if games_since_save > 0:
         cumulative_games += games_since_save
         logger.info(f"Saving final data at {cumulative_games} total games")
-        save_data(log, out_dir, cumulative_games, strategy, seed)
+        save_data(log, out_dir, cumulative_games, strategy, seed, pegging_feature_set)
     
     return 0
 
@@ -838,16 +930,36 @@ if __name__ == "__main__":
     default_out_dir = TRAINING_DATA_DIR
     ap.add_argument("--out_dir", type=str, default=default_out_dir)
     ap.add_argument("--dataset_version", type=str, default="discard_v1")
-    ap.add_argument("--run_id", type=str, default=None, help="Run id folder (e.g., 001). Omit to auto-increment.")
+    ap.add_argument(
+        "--run_id",
+        type=str,
+        default=None,
+        help="Run id folder (e.g., 001). Omit to append to latest run unless --new_run is set.",
+    )
+    ap.add_argument(
+        "--new_run",
+        action="store_true",
+        help="Create a new run folder even if one already exists for this dataset_version.",
+    )
     ap.add_argument("--seed", type=int, default=None, help="Random seed. Omit to use a random seed.")
     ap.add_argument("--strategy", type=str, default="classification")
+    ap.add_argument(
+        "--pegging_feature_set",
+        type=str,
+        default="full",
+        choices=["basic", "full"],
+        help="Which pegging feature set to use.",
+    )
     args = ap.parse_args()
-    resolved_out_dir = _resolve_output_dir(args.out_dir, args.dataset_version, args.run_id)
-    generate_il_data(args.games, resolved_out_dir, args.seed, args.strategy)
+    resolved_out_dir = _resolve_output_dir(args.out_dir, args.dataset_version, args.run_id, args.new_run)
+    generate_il_data(args.games, resolved_out_dir, args.seed, args.strategy, args.pegging_feature_set)
 
 # python .\scripts\generate_il_data.py
 # python .\scripts\generate_il_data.py --games -1 --out_dir "il_datasets" --dataset_version "discard_v2" --strategy regression
 
 # .\.venv\Scripts\python.exe .\scripts\generate_il_data.py --games 4000 --out_dir "il_datasets" --dataset_version "discard_v2" --strategy regression
-# .\.venv\Scripts\python.exe .\scripts\train_linear_models.py --data_dir "il_datasets/discard_v2/001" --models_dir "models" --model_version "discard_v2" --discard_loss regression --epochs 5 --eval_samples 2048 --max_shards 2
-# .\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py --players NeuralRegressionPlayer,beginner --games 200 --models_dir "models/discard_v2/001" --data_dir "il_datasets/discard_v2/001" --max_shards 2
+
+
+# .\.venv\Scripts\python.exe .\scripts\train_linear_models.py --data_dir "il_datasets\discard_v2\001" --models_dir "models" --model_version "discard_v2" --run_id 003 --discard_loss regression --epochs 5 --eval_samples 2048 --lr 0.0001 --l2 0.001 --batch_size 1024
+
+# .\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py --players NeuralRegressionPlayer,beginner --games 200 --models_dir "models\discard_v2\003"

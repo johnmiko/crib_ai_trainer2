@@ -48,7 +48,11 @@ def get_scores(game) -> tuple[int, int]:
 
 
 
-def benchmark_2_players(args) -> int:
+def benchmark_2_players(
+    args,
+    players_override: str | None = None,
+    fallback_override: str | None = None,
+) -> int:
     logger.info("Loading models from %s", args.models_dir)    
     pegging_model = LinearValueModel.load_npz(f"{args.models_dir}/pegging_linear.npz")
     # print("discard |w|", float(np.linalg.norm(discard_model.w)), "b", float(discard_model.b))
@@ -76,6 +80,8 @@ def benchmark_2_players(args) -> int:
 
     model_tag = resolve_model_tag()
 
+    fallback_player_name = fallback_override or args.fallback_player
+
     def player_factory(name: str):
         if name == "NeuralClassificationPlayer":
             discard_model = LinearDiscardClassifier.load_npz(f"{args.models_dir}/discard_linear.npz")
@@ -85,14 +91,15 @@ def benchmark_2_players(args) -> int:
             return NeuralRegressionPlayer(discard_model, pegging_model, name=f"{name}:{model_tag}")
         if name == "NeuralDiscardOnlyPlayer":
             discard_model = LinearDiscardClassifier.load_npz(f"{args.models_dir}/discard_linear.npz")
-            fallback = base_player_factory(args.fallback_player)
+            fallback = base_player_factory(fallback_player_name)
             return NeuralDiscardOnlyPlayer(discard_model, fallback, name=f"{name}:{model_tag}")
         if name == "NeuralPegOnlyPlayer":
-            fallback = base_player_factory(args.fallback_player)
+            fallback = base_player_factory(fallback_player_name)
             return NeuralPegOnlyPlayer(pegging_model, fallback, name=f"{name}:{model_tag}")
         return base_player_factory(name)
     
-    player_names = args.players.split(",")
+    players_value = players_override or args.players
+    player_names = players_value.split(",")
     if len(player_names) != 2:
         raise ValueError("Must specify exactly two players via --players")
     # temp debugging
@@ -151,16 +158,35 @@ if __name__ == "__main__":
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--fallback_player", type=str, default="beginner")
     ap.add_argument("--model_tag", type=str, default=None)
-    ap.add_argument("--auto_random_benchmark", default=True)
+    ap.add_argument("--auto_mixed_benchmarks", action="store_true", default=True)
+    ap.add_argument(
+        "--no_auto_mixed_benchmarks",
+        dest="auto_mixed_benchmarks",
+        action="store_false",
+    )
     args = ap.parse_args()
     logger.info(f"models dir: {args.models_dir}")
     benchmark_2_players(args)
+    if args.auto_mixed_benchmarks:
+        logger.info("Running discard-only and pegging-only benchmarks vs beginner fallback")
+        benchmark_2_players(
+            args,
+            players_override="NeuralDiscardOnlyPlayer,beginner",
+            fallback_override="beginner",
+        )
+        benchmark_2_players(
+            args,
+            players_override="NeuralPegOnlyPlayer,beginner",
+            fallback_override="beginner",
+        )
 
 # python scripts/benchmark_2_players.py
 # python scripts/benchmark_2_players.py --players NeuralRegressionPlayer,beginner --games 200 --models_dir "models/ranking" --data_dir "il_datasets/medium_discard_ranking" --max_shards 6 --fallback_player beginner
 
-# .\.venv\Scripts\python.exe .\scripts\generate_il_data.py --games 4000 --out_dir "il_datasets" --dataset_version "discard_v2" --strategy regression
-# .\.venv\Scripts\python.exe .\scripts\train_linear_models.py --data_dir "il_datasets/discard_v2/001" --models_dir "models" --model_version "discard_v2" --discard_loss regression --epochs 5 --eval_samples 2048 --max_shards 2
-# .\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py --players NeuralRegressionPlayer,beginner --games 200 --models_dir "models/discard_v2/001" --data_dir "il_datasets/discard_v2/001" --max_shards 2
+# .\.venv\Scripts\python.exe .\scripts\generate_il_data.py --games 4000 --out_dir "il_datasets" --dataset_version "discard_v2" --run_id 001 --strategy regression
+
+# .\.venv\Scripts\python.exe .\scripts\train_linear_models.py --data_dir "il_datasets\discard_v2\001" --models_dir "models" --model_version "discard_v2" --run_id 002 --discard_loss regression --epochs 5 --eval_samples 2048 --lr 0.0001 --l2 0.001 --batch_size 1024
+
+# .\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py --players NeuralRegressionPlayer,beginner --games 200 --models_dir "models\discard_v2\002" --data_dir "il_datasets\discard_v2\001"
 
 

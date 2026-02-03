@@ -1,0 +1,20 @@
+trained_at_utc: 2026-02-03T20:39:31.934775+00:00
+model_version: discard_v3
+run_id: 005
+data_dir: C:\Users\johnm\ccode\crib_ai_trainer2\il_datasets\discard_v3\001
+models_dir: C:\Users\johnm\ccode\crib_ai_trainer2\models\regression\discard_v3\005
+discard_loss: regression
+epochs: 5
+lr: 0.0001
+batch_size: 1024
+l2: 0.001
+seed: None
+max_shards: None
+num_shards_used: 6
+last_discard_loss: 6.361516952514648
+last_pegging_loss: 5451.6474609375
+discard_model_file: discard_linear.npz
+pegging_model_file: pegging_linear.npz
+eval_metrics:
+  - discard_regressor_mse: 6.246499061584473
+  - pegging_regressor_mse: 5372.74609375

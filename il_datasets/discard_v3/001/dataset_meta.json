@@ -1,0 +1,49 @@
+{
+  "updated_at_utc": "2026-02-03T20:46:56.854346+00:00",
+  "dataset_version": "discard_v3",
+  "run_id": "001",
+  "strategy": "regression",
+  "cumulative_games": 2012,
+  "seed": 1203165289,
+  "discard": {
+    "file": "discard_2012.npz",
+    "X_shape": [
+      528510,
+      158
+    ],
+    "y_shape": [
+      528510
+    ],
+    "features": {
+      "discard_features": "52 multi-hot discards",
+      "kept_features": "52 multi-hot kept",
+      "dealer_flag": "1 float (1.0 if dealer_is_self else 0.0)",
+      "score_context": "player_score, opponent_score, score_margin, endgame_self, endgame_opp, endgame_any",
+      "total_dim": 158
+    },
+    "label": "avg_total_score for each option"
+  },
+  "pegging": {
+    "file": "pegging_2012.npz",
+    "X_shape": [
+      338706,
+      369
+    ],
+    "y_shape": [
+      338706
+    ],
+    "features": {
+      "hand": "52 multi-hot",
+      "table": "52 multi-hot",
+      "count": "32 one-hot (0..31)",
+      "candidate": "52 one-hot",
+      "known_cards": "52 multi-hot",
+      "total_dim": 369,
+      "opponent_played": "52 multi-hot",
+      "all_played": "52 multi-hot",
+      "engineered": "25 scalar pegging features (15/31 flags, runs, setups, hand sizes, go-prob, scores, endgame)",
+      "feature_set": "full"
+    },
+    "label": "medium pegging score for the candidate card"
+  }
+}
