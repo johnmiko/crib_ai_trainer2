@@ -229,7 +229,13 @@ def benchmark_2_players(
     games_to_play = args.benchmark_games
 
     results = play_multiple_games(games_to_play, p0=p0, p1=p1)
-    wins, diffs, winrate = results["wins"], results["diffs"], results["winrate"]
+    wins = results["wins"]
+    diffs = results["diffs"]
+    winrate = results["winrate"]
+    win_ci_lo = results.get("ci_lo", winrate)
+    win_ci_hi = results.get("ci_hi", winrate)
+    diff_ci_lo = results.get("diff_ci_lo")
+    diff_ci_hi = results.get("diff_ci_hi")
     
     # Count actual training games from discard file names (which are cumulative)
     from pathlib import Path
@@ -256,14 +262,15 @@ def benchmark_2_players(
     
     logger.info(f"Estimated training games from files: {estimated_training_games}")
     avg_diff = float(np.mean(diffs)) if diffs else 0.0
-    if diffs and len(diffs) > 1:
-        std_diff = float(np.std(diffs, ddof=1))
-        se_diff = std_diff / float(np.sqrt(len(diffs)))
-        diff_ci_lo = avg_diff - 1.96 * se_diff
-        diff_ci_hi = avg_diff + 1.96 * se_diff
-    else:
-        diff_ci_lo = avg_diff
-        diff_ci_hi = avg_diff
+    if diff_ci_lo is None or diff_ci_hi is None:
+        if diffs and len(diffs) > 1:
+            std_diff = float(np.std(diffs, ddof=1))
+            se_diff = std_diff / float(np.sqrt(len(diffs)))
+            diff_ci_lo = avg_diff - 1.96 * se_diff
+            diff_ci_hi = avg_diff + 1.96 * se_diff
+        else:
+            diff_ci_lo = avg_diff
+            diff_ci_hi = avg_diff
     display_names = []
     model_prefix = "MLP" if model_type == "mlp" else "Linear"
     for name in player_names:
@@ -298,7 +305,8 @@ def benchmark_2_players(
     output_str = (
         f"{display_names[0]} vs {display_names[1]} [{model_dir_label}] after {estimated_training_games} training games "
         f"avg point diff {avg_diff:.2f} (95% CI {diff_ci_lo:.2f} - {diff_ci_hi:.2f}) "
-        f"wins={wins}/{games_to_play} winrate={winrate*100:.1f}%\n"
+        f"wins={wins}/{games_to_play} winrate={winrate*100:.2f}% "
+        f"(95% CI {win_ci_lo*100:.2f}% - {win_ci_hi*100:.2f}%)\n"
     )
     with open("benchmark_results.txt", "a") as f:
         f.write(output_str)
@@ -317,6 +325,8 @@ def benchmark_2_players(
         "avg_point_diff": avg_diff,
         "avg_point_diff_ci_lo": diff_ci_lo,
         "avg_point_diff_ci_hi": diff_ci_hi,
+        "winrate_ci_lo": win_ci_lo,
+        "winrate_ci_hi": win_ci_hi,
         "estimated_training_games": estimated_training_games,
         "discard_feature_set": args.discard_feature_set,
         "pegging_feature_set": args.pegging_feature_set,
