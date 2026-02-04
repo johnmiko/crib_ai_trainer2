@@ -1,1 +1,1 @@
-C:\Users\johnm\ccode\crib_ai_trainer2\models\regression\discard_v5\045_large
+C:\Users\johnm\ccode\crib_ai_trainer2\models\regression\selfv5\001

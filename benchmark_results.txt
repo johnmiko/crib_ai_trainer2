@@ -140,6 +140,7 @@ Change benchmarking to be against medium player since we can beat the beginner p
 # medium=256,128
 # large=512,256
 # xl=1024,512
+# small3=128,64,32
 .\.venv\Scripts\python.exe .\scripts\do_everything2.py --il_games 1000 --loops -1 --dataset_version "discard_v5" --model_version "discard_v5" --strategy regression --discard_loss regression --benchmark_games 1000 --benchmark_mode full --model_type mlp --mlp_hidden "256,128"
 
 MLPVV5.018Player vs beginner [018] after 12500 training games avg point diff 3.17 (95% CI 1.68 - 4.66) wins=550/1000 winrate=55.0%
@@ -163,6 +164,8 @@ MLPVV5.044Player vs medium [044] after 58500 training games avg point diff -0.83
 against beginner player
 medium vs beginner avg point diff 3.34 (95% CI 2.69 - 3.98) wins=3330/6000 winrate=55.50% (95% CI 54.24% - 56.75%)
 MLPVV5.0453Player vs beginner [045_small3] after 62500 training games avg point diff 3.12 (95% CI 2.47 - 3.76) wins=3319/6000 winrate=55.32% (95% CI 54.06% - 56.57%)
+MLPVV5.0173Player vs beginner [045_medium3] after 62500 training games avg point diff 2.88 (95% CI 2.25 - 3.51) wins=3303/6000 winrate=55.05% (95% CI 53.79% - 56.31%)
+MLPVV5.0453Player vs beginner [045_large3] after 62500 training games avg point diff 3.28 (95% CI 2.64 - 3.92) wins=3301/6000 winrate=55.02% (95% CI 53.76% - 56.27%)
 MLPVV5.045Player vs beginner [045_large] after 62500 training games avg point diff 3.34 (95% CI 2.70 - 3.98) wins=3319/6000 winrate=55.3%
 MLPVV5.045Player vs beginner [045_extra_large] after 62500 training games avg point diff 2.74 (95% CI 2.09 - 3.38) wins=3246/6000 winrate=54.1%
 
@@ -174,4 +177,7 @@ MLPVV5.045Player vs medium [045_large] after 62500 training games avg point diff
 MLPVV5.045Player vs medium [045_extra_large] after 62500 training games avg point diff -0.60 (95% CI -1.48 - 0.28) wins=1485/3000 winrate=49.5%
 MLPVV5.045Player vs medium [045_large] after 62500 training games avg point diff -0.79 (95% CI -1.41 - -0.16) wins=2891/6000 winrate=48.2%
 
-.\.venv\Scripts\python.exe .\scripts\self_play_loop.py --models_dir "models\regression" --model_version "discard_v5" --teacher_dataset_version "discard_v5" --selfplay_dataset_version "selfplay_v5" --games 1000 --benchmark_games 1000 --selfplay_ratio 0.3 --model_type mlp --mlp_hidden "512,256"
+# self play loop with 2 layer medium size
+.\.venv\Scripts\python.exe .\scripts\self_play_loop.py --models_dir "models\regression" --model_version "discard_v5" --teacher_dataset_version "discard_v5" --selfplay_dataset_version "selfplay_v5" --games 1000 --benchmark_games 1000 --selfplay_ratio 0.3 --model_type mlp --mlp_hidden "128,64,32" --benchmark_opponent beginner
+
+new after 1000 self play games, 1000 benchmark games vs best [001] wins=480/1000 winrate=0.480 avg_diff=-0.74, vs medium: wins=592/1000 winrate=0.592 avg_diff=4.69, Best vs medium: wins=543/1000 winrate=0.543 avg_diff=2.59

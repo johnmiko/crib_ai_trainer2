@@ -35,6 +35,9 @@ from crib_ai_trainer.constants import (
     DEFAULT_CRIB_MC_SAMPLES,
     DEFAULT_PEGGING_LABEL_MODE,
     DEFAULT_PEGGING_ROLLOUTS,
+    DEFAULT_WIN_PROB_MODE,
+    DEFAULT_WIN_PROB_ROLLOUTS,
+    DEFAULT_WIN_PROB_MIN_SCORE,
 )
 import argparse
 from itertools import combinations
@@ -46,8 +49,12 @@ import pandas as pd
 
 from cribbage import cribbagegame
 from cribbage.playingcards import Card, build_hand
-from cribbage.strategies.pegging_strategies import medium_pegging_strategy_scores, get_highest_rank_card
-from cribbage.strategies.hand_strategies import process_dealt_hand_only_exact
+from cribbage.strategies.pegging_strategies import (
+    medium_pegging_strategy_scores,
+    medium_pegging_strategy,
+    get_highest_rank_card,
+)
+from cribbage.strategies.hand_strategies import process_dealt_hand_only_exact, exact_hand_and_min_crib
 from cribbage.strategies.crib_strategies import calc_crib_min_only_given_6_cards
 from cribbage.database import normalize_hand_to_str
 
@@ -294,6 +301,135 @@ def estimate_pegging_rollout_value_2ply(
     return total / float(n_rollouts)
 
 
+def simulate_pegging_points(
+    hand_self: List[Card],
+    hand_opp: List[Card],
+    *,
+    dealer_is_self: bool,
+    rng: random.Random,
+    start_table: Optional[List[Card]] = None,
+    start_count: int = 0,
+    start_turn: int = 0,
+) -> Tuple[int, int]:
+    """Simulate pegging with medium strategy for both players.
+
+    Returns pegging points for (self, opp).
+    """
+    table = list(start_table) if start_table else []
+    count = int(start_count)
+    hands = [list(hand_self), list(hand_opp)]
+    scores = [0, 0]
+    turn = int(start_turn)
+    passes = 0
+    last_played: Optional[int] = None
+
+    while hands[0] or hands[1]:
+        playable = [c for c in hands[turn] if c.get_value() + count <= 31]
+        if not playable:
+            passes += 1
+            if passes >= 2:
+                if last_played is not None:
+                    scores[last_played] += 1
+                table = []
+                count = 0
+                passes = 0
+                last_played = None
+            turn = 1 - turn
+            continue
+
+        passes = 0
+        card = medium_pegging_strategy(playable, count, table) or playable[0]
+        hands[turn].remove(card)
+        table.append(card)
+        count += card.get_value()
+        scores[turn] += int(score_play(table)[0])
+
+        if count == 31:
+            scores[turn] += 2
+            table = []
+            count = 0
+            last_played = None
+            turn = 1 - turn
+            continue
+
+        last_played = turn
+        turn = 1 - turn
+
+    if count > 0 and last_played is not None:
+        scores[last_played] += 1
+
+    return int(scores[0]), int(scores[1])
+
+
+def estimate_win_prob_discard_rollout(
+    hand: List[Card],
+    kept: List[Card],
+    discards: List[Card],
+    dealer_is_self: bool,
+    player_score: int | None,
+    opponent_score: int | None,
+    rng: random.Random,
+    n_rollouts: int,
+    min_score_for_eval: int,
+) -> float:
+    """Estimate win probability by simulating the rest of the round."""
+    if n_rollouts <= 0:
+        return 0.5
+    if player_score is None:
+        player_score = 0
+    if opponent_score is None:
+        opponent_score = 0
+    if max(player_score, opponent_score) < min_score_for_eval:
+        return 0.5
+
+    full_deck = get_full_deck()
+    remaining = [c for c in full_deck if c not in set(hand)]
+    if len(remaining) < 6:
+        return 0.5
+
+    wins = 0
+    ties = 0
+    for _ in range(n_rollouts):
+        opp_hand = rng.sample(remaining, 6)
+        opp_discards = list(exact_hand_and_min_crib(opp_hand, dealer_is_self=not dealer_is_self))
+        opp_kept = [c for c in opp_hand if c not in opp_discards]
+
+        remaining2 = [c for c in remaining if c not in opp_hand]
+        if not remaining2:
+            starter = remaining[rng.randrange(len(remaining))]
+        else:
+            starter = remaining2[rng.randrange(len(remaining2))]
+
+        crib = [discards[0], discards[1], opp_discards[0], opp_discards[1]]
+
+        start_turn = 1 if dealer_is_self else 0  # non-dealer leads
+        pegging_self, pegging_opp = simulate_pegging_points(
+            kept,
+            opp_kept,
+            dealer_is_self=dealer_is_self,
+            rng=rng,
+            start_table=[],
+            start_count=0,
+            start_turn=start_turn,
+        )
+
+        self_total = player_score + pegging_self + score_hand(kept + [starter], is_crib=False)
+        opp_total = opponent_score + pegging_opp + score_hand(opp_kept + [starter], is_crib=False)
+
+        crib_score = score_hand(crib + [starter], is_crib=True)
+        if dealer_is_self:
+            self_total += crib_score
+        else:
+            opp_total += crib_score
+
+        if self_total > opp_total:
+            wins += 1
+        elif self_total == opp_total:
+            ties += 1
+
+    return (wins + 0.5 * ties) / float(n_rollouts)
+
+
 class LoggedData:
     pass
 
@@ -306,6 +442,7 @@ class LoggedRegressionPegData(LoggedData):
 class LoggedRegressionDiscardData(LoggedData):
     X_discard: List[np.ndarray] = field(default_factory=list)
     y_discard: List[float] = field(default_factory=list)
+    y_discard_win: List[float] = field(default_factory=list)
 
 @dataclass
 class LoggedClassificationDiscardData(LoggedData):
@@ -343,6 +480,9 @@ class LoggingBeginnerPlayer(BeginnerPlayer):
         pegging_feature_set: str = "full",
         pegging_label_mode: str = "immediate",
         pegging_rollouts: int = 32,
+        win_prob_mode: str = "off",
+        win_prob_rollouts: int = 16,
+        win_prob_min_score: int = 90,
     ):
         super().__init__(name=name)
         self._rng = random.Random(seed)
@@ -358,6 +498,9 @@ class LoggingBeginnerPlayer(BeginnerPlayer):
         self._pegging_feature_set = pegging_feature_set
         self._pegging_label_mode = pegging_label_mode
         self._pegging_rollouts = pegging_rollouts
+        self._win_prob_mode = win_prob_mode
+        self._win_prob_rollouts = win_prob_rollouts
+        self._win_prob_min_score = win_prob_min_score
 
     def select_crib_cards(self, player_state, round_state) -> Tuple[Card, Card]:
         # Extract hand and dealer info from state objects
@@ -445,6 +588,19 @@ class LoggingBeginnerPlayer(BeginnerPlayer):
             x = featurize_discard(kept, discards, dealer_is_self, your_score, opponent_score)
             self._log.X_discard.append(x)
             self._log.y_discard.append(float(y))
+            if self._win_prob_mode == "rollout":
+                y_win = estimate_win_prob_discard_rollout(
+                    hand=hand,
+                    kept=kept,
+                    discards=discards,
+                    dealer_is_self=dealer_is_self,
+                    player_score=your_score,
+                    opponent_score=opponent_score,
+                    rng=self._rng,
+                    n_rollouts=self._win_prob_rollouts,
+                    min_score_for_eval=self._win_prob_min_score,
+                )
+                self._log.y_discard_win.append(float(y_win))
 
             if y > best_y:
                 best_y = y
@@ -543,6 +699,9 @@ class LoggingMediumPlayer(MediumPlayer):
         crib_mc_samples: int = 32,
         pegging_label_mode: str = "immediate",
         pegging_rollouts: int = 32,
+        win_prob_mode: str = "off",
+        win_prob_rollouts: int = 16,
+        win_prob_min_score: int = 90,
     ):
         super().__init__(name=name)
         self._rng = random.Random(seed)
@@ -562,6 +721,9 @@ class LoggingMediumPlayer(MediumPlayer):
         self._crib_mc_samples = crib_mc_samples
         self._pegging_label_mode = pegging_label_mode
         self._pegging_rollouts = pegging_rollouts
+        self._win_prob_mode = win_prob_mode
+        self._win_prob_rollouts = win_prob_rollouts
+        self._win_prob_min_score = win_prob_min_score
 
     def select_crib_cards(self, player_state, round_state) -> Tuple[Card, Card]:
         """Override to log training data."""
@@ -848,6 +1010,19 @@ class LoggingMediumPlayer(MediumPlayer):
             x = featurize_discard(kept_list, discards_list, dealer_is_self, your_score, opponent_score)
             self._log.X_discard.append(x)
             self._log.y_discard.append(float(y))
+            if self._win_prob_mode == "rollout":
+                y_win = estimate_win_prob_discard_rollout(
+                    hand=hand,
+                    kept=kept_list,
+                    discards=discards_list,
+                    dealer_is_self=dealer_is_self,
+                    player_score=your_score,
+                    opponent_score=opponent_score,
+                    rng=self._rng,
+                    n_rollouts=self._win_prob_rollouts,
+                    min_score_for_eval=self._win_prob_min_score,
+                )
+                self._log.y_discard_win.append(float(y_win))
 
         best_discards_str = df3.loc[df3["avg_total_score"] == df3["avg_total_score"].max()]["crib_key"].values[0]
         best_discards = best_discards_str.lower().replace("t", "10").split("|")
@@ -866,6 +1041,9 @@ def save_data(
     crib_mc_samples: int,
     pegging_label_mode: str,
     pegging_rollouts: int,
+    win_prob_mode: str,
+    win_prob_rollouts: int,
+    win_prob_min_score: int,
 ):
     """Save accumulated training data to disk."""
     os.makedirs(out_dir, exist_ok=True)
@@ -880,6 +1058,13 @@ def save_data(
         else:
             assert x0.shape == (DISCARD_FEATURE_DIM,)
     
+    y_discard_win = None
+    if hasattr(log, "y_discard_win") and getattr(log, "y_discard_win"):
+        try:
+            y_discard_win = np.array(getattr(log, "y_discard_win"), dtype=np.float32)
+        except Exception:
+            y_discard_win = None
+
     if strategy == "classification":
         Xd = np.stack(log.X_discard).astype(np.float32) if log.X_discard else np.zeros((0, 15, DISCARD_FEATURE_DIM), np.float32)
         yd = np.array(log.y_discard, dtype=np.int64)
@@ -918,7 +1103,10 @@ def save_data(
     out_path_discard = os.path.join(out_dir, f"discard_{cumulative_games}.npz")
     out_path_pegging = os.path.join(out_dir, f"pegging_{cumulative_games}.npz")
     logger.info(f"Saving to {out_path_discard} and {out_path_pegging}")
-    np.savez(out_path_discard, X=Xd, y=yd)
+    if y_discard_win is not None and y_discard_win.shape[0] == yd.shape[0]:
+        np.savez(out_path_discard, X=Xd, y=yd, y_win=y_discard_win)
+    else:
+        np.savez(out_path_discard, X=Xd, y=yd)
     np.savez(out_path_pegging, X=Xp, y=yp)
     logger.info(f"Saved discard: X={Xd.shape} y={yd.shape}")
     logger.info(f"Saved pegging: X={Xp.shape} y={yp.shape}")
@@ -937,6 +1125,10 @@ def save_data(
         "crib_mc_samples": crib_mc_samples,
         "pegging_label_mode": pegging_label_mode,
         "pegging_rollouts": pegging_rollouts,
+        "win_prob_mode": win_prob_mode,
+        "win_prob_rollouts": win_prob_rollouts,
+        "win_prob_min_score": win_prob_min_score,
+        "has_discard_win_prob": y_discard_win is not None and (y_discard_win.shape[0] == yd.shape[0]),
         "cumulative_games": cumulative_games,
         "seed": seed,
         "discard": {
@@ -991,6 +1183,10 @@ def save_data(
         f"crib_mc_samples: {dataset_meta['crib_mc_samples']}",
         f"pegging_label_mode: {dataset_meta['pegging_label_mode']}",
         f"pegging_rollouts: {dataset_meta['pegging_rollouts']}",
+        f"win_prob_mode: {dataset_meta['win_prob_mode']}",
+        f"win_prob_rollouts: {dataset_meta['win_prob_rollouts']}",
+        f"win_prob_min_score: {dataset_meta['win_prob_min_score']}",
+        f"has_discard_win_prob: {dataset_meta['has_discard_win_prob']}",
         f"cumulative_games: {dataset_meta['cumulative_games']}",
         f"seed: {dataset_meta['seed']}",
         "",
@@ -1090,6 +1286,9 @@ def generate_il_data(
     crib_mc_samples: int = 32,
     pegging_label_mode: str = "immediate",
     pegging_rollouts: int = 32,
+    win_prob_mode: str = "off",
+    win_prob_rollouts: int = 16,
+    win_prob_min_score: int = 90,
 ) -> int:
     if seed is None:
         seed = secrets.randbits(32)
@@ -1117,6 +1316,9 @@ def generate_il_data(
             crib_mc_samples=crib_mc_samples,
             pegging_label_mode=pegging_label_mode,
             pegging_rollouts=pegging_rollouts,
+            win_prob_mode=win_prob_mode,
+            win_prob_rollouts=win_prob_rollouts,
+            win_prob_min_score=win_prob_min_score,
         )
         p2 = LoggingMediumPlayer(
             "teacher2",
@@ -1129,6 +1331,9 @@ def generate_il_data(
             crib_mc_samples=crib_mc_samples,
             pegging_label_mode=pegging_label_mode,
             pegging_rollouts=pegging_rollouts,
+            win_prob_mode=win_prob_mode,
+            win_prob_rollouts=win_prob_rollouts,
+            win_prob_min_score=win_prob_min_score,
         )
     elif strategy == "ranking":
         log = LoggedRegPegRankDiscardData()
@@ -1143,6 +1348,9 @@ def generate_il_data(
             crib_mc_samples=crib_mc_samples,
             pegging_label_mode=pegging_label_mode,
             pegging_rollouts=pegging_rollouts,
+            win_prob_mode=win_prob_mode,
+            win_prob_rollouts=win_prob_rollouts,
+            win_prob_min_score=win_prob_min_score,
         )
         p2 = LoggingMediumPlayer(
             "teacher2",
@@ -1155,6 +1363,9 @@ def generate_il_data(
             crib_mc_samples=crib_mc_samples,
             pegging_label_mode=pegging_label_mode,
             pegging_rollouts=pegging_rollouts,
+            win_prob_mode=win_prob_mode,
+            win_prob_rollouts=win_prob_rollouts,
+            win_prob_min_score=win_prob_min_score,
         )
     elif strategy == "regression":  
         log = LoggedRegPegRegDiscardData()
@@ -1169,6 +1380,9 @@ def generate_il_data(
             crib_mc_samples=crib_mc_samples,
             pegging_label_mode=pegging_label_mode,
             pegging_rollouts=pegging_rollouts,
+            win_prob_mode=win_prob_mode,
+            win_prob_rollouts=win_prob_rollouts,
+            win_prob_min_score=win_prob_min_score,
         )
         p2 = LoggingMediumPlayer(
             "teacher2",
@@ -1181,6 +1395,9 @@ def generate_il_data(
             crib_mc_samples=crib_mc_samples,
             pegging_label_mode=pegging_label_mode,
             pegging_rollouts=pegging_rollouts,
+            win_prob_mode=win_prob_mode,
+            win_prob_rollouts=win_prob_rollouts,
+            win_prob_min_score=win_prob_min_score,
         )
     
     games_since_save = 0
@@ -1217,11 +1434,16 @@ def generate_il_data(
                 crib_mc_samples,
                 pegging_label_mode,
                 pegging_rollouts,
+                win_prob_mode,
+                win_prob_rollouts,
+                win_prob_min_score,
             )
             
             # Clear the logs to save memory
             log.X_discard.clear()
             log.y_discard.clear()
+            if hasattr(log, "y_discard_win"):
+                log.y_discard_win.clear()
             log.X_pegging.clear()
             log.y_pegging.clear()
             games_since_save = 0
@@ -1245,6 +1467,9 @@ def generate_il_data(
             crib_mc_samples,
             pegging_label_mode,
             pegging_rollouts,
+            win_prob_mode,
+            win_prob_rollouts,
+            win_prob_min_score,
         )
     
     return 0
@@ -1309,6 +1534,25 @@ if __name__ == "__main__":
         default=DEFAULT_PEGGING_ROLLOUTS,
         help="Number of rollouts for pegging_label_mode=rollout1.",
     )
+    ap.add_argument(
+        "--win_prob_mode",
+        type=str,
+        default=DEFAULT_WIN_PROB_MODE,
+        choices=["off", "rollout"],
+        help="Win-probability label mode for discard (rollout or off).",
+    )
+    ap.add_argument(
+        "--win_prob_rollouts",
+        type=int,
+        default=DEFAULT_WIN_PROB_ROLLOUTS,
+        help="Number of rollouts for win-probability estimation.",
+    )
+    ap.add_argument(
+        "--win_prob_min_score",
+        type=int,
+        default=DEFAULT_WIN_PROB_MIN_SCORE,
+        help="Only estimate win-prob when max(score) >= this threshold (else label 0.5).",
+    )
     args = ap.parse_args()
     resolved_out_dir = _resolve_output_dir(args.out_dir, args.dataset_version, args.run_id, args.new_run)
     generate_il_data(
@@ -1321,6 +1565,9 @@ if __name__ == "__main__":
         args.crib_mc_samples,
         args.pegging_label_mode,
         args.pegging_rollouts,
+        args.win_prob_mode,
+        args.win_prob_rollouts,
+        args.win_prob_min_score,
     )
 
 # python .\scripts\generate_il_data.py

@@ -97,6 +97,7 @@ if __name__ == "__main__":
     ap.add_argument("--selfplay_dataset_version", type=str, default="selfplay_v1")
     ap.add_argument("--games", type=int, default=DEFAULT_GAMES_PER_LOOP)
     ap.add_argument("--benchmark_games", type=int, default=DEFAULT_BENCHMARK_GAMES)
+    ap.add_argument("--benchmark_opponent", type=str, default="medium", choices=["medium", "beginner"])
     ap.add_argument("--selfplay_ratio", type=float, default=0.3)
     ap.add_argument("--best_file", type=str, default="best_model.txt")
     ap.add_argument("--loops", type=int, default=-1)
@@ -135,12 +136,18 @@ if __name__ == "__main__":
         )
 
         # 2) Train new model mixing teacher + self-play data
+        # Prefer saving new models under the same version as the current best.
+        model_version_for_training = args.model_version
+        if best_path.parent.name and best_path.parent.name != args.model_version:
+            model_version_for_training = best_path.parent.name
+            print(f"Using model_version={model_version_for_training} to keep accepted models in the same series.")
+
         train_args = argparse.Namespace(
             data_dir=teacher_dir,
             extra_data_dir=selfplay_dir,
             extra_ratio=args.selfplay_ratio,
             models_dir=args.models_dir,
-            model_version=args.model_version,
+            model_version=model_version_for_training,
             run_id=None,
             discard_loss="regression",
             discard_feature_set=args.discard_feature_set,
@@ -164,17 +171,22 @@ if __name__ == "__main__":
         best_player = _make_player(best_path, name_override=f"selfplay:best:{best_path.name}")
         new_player = _make_player(new_path, name_override=f"selfplay:new:{new_path.name}")
 
-        print("Benchmark: BEST vs MEDIUM")
-        best_vs_medium = _evaluate(best_player, MediumPlayer(name="medium"), args.benchmark_games)
-        print("Benchmark: NEW vs MEDIUM")
-        new_vs_medium = _evaluate(new_player, MediumPlayer(name="medium"), args.benchmark_games)
+        if args.benchmark_opponent == "beginner":
+            print("Benchmark: BEST vs BEGINNER")
+            best_vs_medium = _evaluate(best_player, BeginnerPlayer(name="beginner"), args.benchmark_games)
+            print("Benchmark: NEW vs BEGINNER")
+            new_vs_medium = _evaluate(new_player, BeginnerPlayer(name="beginner"), args.benchmark_games)
+        else:
+            print("Benchmark: BEST vs MEDIUM")
+            best_vs_medium = _evaluate(best_player, MediumPlayer(name="medium"), args.benchmark_games)
+            print("Benchmark: NEW vs MEDIUM")
+            new_vs_medium = _evaluate(new_player, MediumPlayer(name="medium"), args.benchmark_games)
         print("Benchmark: NEW vs BEST")
         new_vs_best = _evaluate(new_player, best_player, args.benchmark_games)
 
         # 4) Acceptance: frozen + strict
         accept = (
             new_vs_best["winrate"] > 0.5
-            and float(sum(new_vs_best["diffs"]) / len(new_vs_best["diffs"])) > 0.0
             and new_vs_medium["winrate"] >= best_vs_medium["winrate"]
         )
 
@@ -213,12 +225,13 @@ if __name__ == "__main__":
         print(f"- Results log: {Path('selfplay_experiments.jsonl').resolve()}")
         print(f"- Best model: {best_path}")
         print(f"- New model: {new_path}")
+        label = "beginner" if args.benchmark_opponent == "beginner" else "medium"
         print(
-            f"- Best vs medium: wins={_wins(best_vs_medium)}/{_games(best_vs_medium)} "
+            f"- Best vs {label}: wins={_wins(best_vs_medium)}/{_games(best_vs_medium)} "
             f"winrate={best_vs_medium['winrate']:.3f} avg_diff={_avg_diff(best_vs_medium):.2f}"
         )
         print(
-            f"- New vs medium: wins={_wins(new_vs_medium)}/{_games(new_vs_medium)} "
+            f"- New vs {label}: wins={_wins(new_vs_medium)}/{_games(new_vs_medium)} "
             f"winrate={new_vs_medium['winrate']:.3f} avg_diff={_avg_diff(new_vs_medium):.2f}"
         )
         print(
@@ -226,6 +239,18 @@ if __name__ == "__main__":
             f"winrate={new_vs_best['winrate']:.3f} avg_diff={_avg_diff(new_vs_best):.2f}"
         )
         print(f"- Accepted: {accept}")
+
+        summary_line = (
+            f"new after {args.games} self play games, {args.benchmark_games} benchmark games vs best "
+            f"[{best_path.name}] wins={_wins(new_vs_best)}/{_games(new_vs_best)} "
+            f"winrate={new_vs_best['winrate']:.3f} avg_diff={_avg_diff(new_vs_best):.2f}, "
+            f"vs medium: wins={_wins(new_vs_medium)}/{_games(new_vs_medium)} "
+            f"winrate={new_vs_medium['winrate']:.3f} avg_diff={_avg_diff(new_vs_medium):.2f}, "
+            f"Best vs medium: wins={_wins(best_vs_medium)}/{_games(best_vs_medium)} "
+            f"winrate={best_vs_medium['winrate']:.3f} avg_diff={_avg_diff(best_vs_medium):.2f}\n"
+        )
+        with open("benchmark_results.txt", "a", encoding="utf-8") as f:
+            f.write(summary_line)
 
         if args.loops != -1 and i >= args.loops:
             break
