@@ -691,11 +691,11 @@ class LinearValueModel:
 class MLPValueModel:
     """Small MLP regressor using PyTorch for nonlinear value prediction."""
 
-    def __init__(self, input_dim: int, hidden_sizes: Tuple[int, ...] = (128, 64), seed: int = 0):
+    def __init__(self, input_dim: int, hidden_sizes: Tuple[int, ...] = (128, 64), seed: int | None = 0):
         import torch
         import torch.nn as nn
 
-        torch.manual_seed(seed)
+        torch.manual_seed(0 if seed is None else int(seed))
         layers = []
         prev = input_dim
         for h in hidden_sizes:
@@ -739,7 +739,7 @@ class MLPValueModel:
         import torch.nn as nn
         import torch.optim as optim
 
-        torch.manual_seed(seed)
+        torch.manual_seed(0 if seed is None else int(seed))
         X = X.astype(np.float32, copy=False)
         y = y.astype(np.float32, copy=False)
         N = X.shape[0]

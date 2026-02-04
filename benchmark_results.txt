@@ -93,3 +93,7 @@ MLPVV3.027Player vs beginner [027] after 27414 training games avg point diff -1.
 NeuralDiscardOnlyPlayer vs beginner [027] after 27414 training games avg point diff 1.77 (95% CI -1.85 - 5.39) wins=103/200 winrate=51.5%
 NeuralPegOnlyPlayer vs beginner [027] after 27414 training games avg point diff 0.10 (95% CI -3.52 - 3.73) wins=102/200 winrate=51.0%
 
+Moving to discard V4. Add monte carlo estimates for crib, and for pegging rollout
+MLPVV4.003Player vs beginner [003] after 501 training games avg point diff -17.39 (95% CI -20.97 - -13.81) wins=49/200 winrate=24.5%
+NeuralDiscardOnlyPlayer vs beginner [003] after 501 training games avg point diff -16.59 (95% CI -20.62 - -12.55) wins=55/200 winrate=27.5%
+NeuralPegOnlyPlayer vs beginner [003] after 501 training games avg point diff -0.28 (95% CI -3.91 - 3.36) wins=100/200 winrate=50.0%

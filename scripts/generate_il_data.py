@@ -33,6 +33,8 @@ from crib_ai_trainer.constants import (
     DEFAULT_USE_RANDOM_SEED,
     DEFAULT_CRIB_EV_MODE,
     DEFAULT_CRIB_MC_SAMPLES,
+    DEFAULT_PEGGING_LABEL_MODE,
+    DEFAULT_PEGGING_ROLLOUTS,
 )
 import argparse
 from itertools import combinations
@@ -221,6 +223,37 @@ def estimate_crib_ev_mc_from_remaining(
     return total / float(n_samples)
 
 
+def estimate_pegging_rollout_value(
+    hand: List[Card],
+    table: List[Card],
+    count: int,
+    candidate: Card,
+    known_cards: List[Card],
+    all_played_cards: List[Card],
+    rng: random.Random,
+    n_rollouts: int = 32,
+) -> float:
+    """One-step rollout: our immediate points minus expected opponent immediate points."""
+    seq_after = table + [candidate]
+    our_points = float(score_play(seq_after)[0])
+    if n_rollouts <= 0:
+        return our_points
+    full_deck = get_full_deck()
+    known_set = set(known_cards) | set(all_played_cards) | set(hand)
+    unseen = [c for c in full_deck if c not in known_set]
+    if not unseen:
+        return our_points
+    total = 0.0
+    for _ in range(n_rollouts):
+        opp_card = unseen[rng.randrange(len(unseen))]
+        if count + candidate.get_value() + opp_card.get_value() > 31:
+            opp_points = 0.0
+        else:
+            opp_points = float(score_play(seq_after + [opp_card])[0])
+        total += (our_points - opp_points)
+    return total / float(n_rollouts)
+
+
 class LoggedData:
     pass
 
@@ -260,7 +293,17 @@ class LoggedRegPegRankDiscardData(LoggedRegressionPegData, LoggedRankingDiscardD
 class LoggingBeginnerPlayer(BeginnerPlayer):
     """Wrap BeginnerPlayer so we can collect training data while it plays."""
 
-    def __init__(self, name: str, log: LoggedData, discard_strategy, pegging_strategy, seed: int = 0, pegging_feature_set: str = "full"):
+    def __init__(
+        self,
+        name: str,
+        log: LoggedData,
+        discard_strategy,
+        pegging_strategy,
+        seed: int = 0,
+        pegging_feature_set: str = "full",
+        pegging_label_mode: str = "immediate",
+        pegging_rollouts: int = 32,
+    ):
         super().__init__(name=name)
         self._rng = random.Random(seed)
         self._full_deck = get_full_deck()
@@ -273,6 +316,8 @@ class LoggingBeginnerPlayer(BeginnerPlayer):
             raise ValueError(f"Unknown discard_strategy: {discard_strategy}")        
         self._pegging_strategy = pegging_strategy # not implemented yet
         self._pegging_feature_set = pegging_feature_set
+        self._pegging_label_mode = pegging_label_mode
+        self._pegging_rollouts = pegging_rollouts
 
     def select_crib_cards(self, player_state, round_state) -> Tuple[Card, Card]:
         # Extract hand and dealer info from state objects
@@ -390,7 +435,19 @@ class LoggingBeginnerPlayer(BeginnerPlayer):
         for c in playable:
             sequence = history_since_reset + [c]
             pts, _ = score_play(sequence)
-            y = pts
+            if self._pegging_label_mode == "rollout1":
+                y = estimate_pegging_rollout_value(
+                    hand,
+                    history_since_reset,
+                    count,
+                    c,
+                    known_cards=player_state.known_cards,
+                    all_played_cards=round_state.all_played_cards,
+                    rng=self._rng,
+                    n_rollouts=self._pegging_rollouts,
+                )
+            else:
+                y = float(pts)
             # Known cards: from player_state (includes hand, table, past cards, starter)
             x = featurize_pegging(
                 hand,
@@ -433,6 +490,8 @@ class LoggingMediumPlayer(MediumPlayer):
         pegging_feature_set: str = "full",
         crib_ev_mode: str = "min",
         crib_mc_samples: int = 32,
+        pegging_label_mode: str = "immediate",
+        pegging_rollouts: int = 32,
     ):
         super().__init__(name=name)
         self._rng = random.Random(seed)
@@ -450,6 +509,8 @@ class LoggingMediumPlayer(MediumPlayer):
         self._pegging_feature_set = pegging_feature_set
         self._crib_ev_mode = crib_ev_mode
         self._crib_mc_samples = crib_mc_samples
+        self._pegging_label_mode = pegging_label_mode
+        self._pegging_rollouts = pegging_rollouts
 
     def select_crib_cards(self, player_state, round_state) -> Tuple[Card, Card]:
         """Override to log training data."""
@@ -510,7 +571,19 @@ class LoggingMediumPlayer(MediumPlayer):
         
         # Log all playable options
         for card, score in scores.items():
-            y = score
+            if self._pegging_label_mode == "rollout1":
+                y = estimate_pegging_rollout_value(
+                    full_hand,
+                    history_since_reset,
+                    count,
+                    card,
+                    known_cards=known_cards,
+                    all_played_cards=all_played,
+                    rng=self._rng,
+                    n_rollouts=self._pegging_rollouts,
+                )
+            else:
+                y = score
             # Known cards: from player_state (includes hand, table, past cards, starter)
             x = featurize_pegging(
                 full_hand,
@@ -720,7 +793,18 @@ class LoggingMediumPlayer(MediumPlayer):
         return tuple(best_discards_cards)
 
 
-def save_data(log, out_dir, cumulative_games, strategy, seed, pegging_feature_set: str, crib_ev_mode: str, crib_mc_samples: int):
+def save_data(
+    log,
+    out_dir,
+    cumulative_games,
+    strategy,
+    seed,
+    pegging_feature_set: str,
+    crib_ev_mode: str,
+    crib_mc_samples: int,
+    pegging_label_mode: str,
+    pegging_rollouts: int,
+):
     """Save accumulated training data to disk."""
     os.makedirs(out_dir, exist_ok=True)
     
@@ -789,6 +873,8 @@ def save_data(log, out_dir, cumulative_games, strategy, seed, pegging_feature_se
         "strategy": strategy,
         "crib_ev_mode": crib_ev_mode,
         "crib_mc_samples": crib_mc_samples,
+        "pegging_label_mode": pegging_label_mode,
+        "pegging_rollouts": pegging_rollouts,
         "cumulative_games": cumulative_games,
         "seed": seed,
         "discard": {
@@ -824,7 +910,7 @@ def save_data(log, out_dir, cumulative_games, strategy, seed, pegging_feature_se
             "engineered": "25 scalar pegging features (15/31 flags, runs, setups, hand sizes, go-prob, scores, endgame)",
             "feature_set": pegging_feature_set,
             },
-            "label": "medium pegging score for the candidate card",
+            "label": f"pegging_label_mode={pegging_label_mode}",
         },
     }
     meta_path = os.path.join(out_dir, "dataset_meta.json")
@@ -841,6 +927,8 @@ def save_data(log, out_dir, cumulative_games, strategy, seed, pegging_feature_se
         f"strategy: {dataset_meta['strategy']}",
         f"crib_ev_mode: {dataset_meta['crib_ev_mode']}",
         f"crib_mc_samples: {dataset_meta['crib_mc_samples']}",
+        f"pegging_label_mode: {dataset_meta['pegging_label_mode']}",
+        f"pegging_rollouts: {dataset_meta['pegging_rollouts']}",
         f"cumulative_games: {dataset_meta['cumulative_games']}",
         f"seed: {dataset_meta['seed']}",
         "",
@@ -938,6 +1026,8 @@ def generate_il_data(
     pegging_feature_set: str = "full",
     crib_ev_mode: str = "mc",
     crib_mc_samples: int = 32,
+    pegging_label_mode: str = "immediate",
+    pegging_rollouts: int = 32,
 ) -> int:
     if seed is None:
         seed = secrets.randbits(32)
@@ -963,6 +1053,8 @@ def generate_il_data(
             pegging_feature_set=pegging_feature_set,
             crib_ev_mode=crib_ev_mode,
             crib_mc_samples=crib_mc_samples,
+            pegging_label_mode=pegging_label_mode,
+            pegging_rollouts=pegging_rollouts,
         )
         p2 = LoggingMediumPlayer(
             "teacher2",
@@ -973,6 +1065,8 @@ def generate_il_data(
             pegging_feature_set=pegging_feature_set,
             crib_ev_mode=crib_ev_mode,
             crib_mc_samples=crib_mc_samples,
+            pegging_label_mode=pegging_label_mode,
+            pegging_rollouts=pegging_rollouts,
         )
     elif strategy == "ranking":
         log = LoggedRegPegRankDiscardData()
@@ -985,6 +1079,8 @@ def generate_il_data(
             pegging_feature_set=pegging_feature_set,
             crib_ev_mode=crib_ev_mode,
             crib_mc_samples=crib_mc_samples,
+            pegging_label_mode=pegging_label_mode,
+            pegging_rollouts=pegging_rollouts,
         )
         p2 = LoggingMediumPlayer(
             "teacher2",
@@ -995,6 +1091,8 @@ def generate_il_data(
             pegging_feature_set=pegging_feature_set,
             crib_ev_mode=crib_ev_mode,
             crib_mc_samples=crib_mc_samples,
+            pegging_label_mode=pegging_label_mode,
+            pegging_rollouts=pegging_rollouts,
         )
     elif strategy == "regression":  
         log = LoggedRegPegRegDiscardData()
@@ -1007,6 +1105,8 @@ def generate_il_data(
             pegging_feature_set=pegging_feature_set,
             crib_ev_mode=crib_ev_mode,
             crib_mc_samples=crib_mc_samples,
+            pegging_label_mode=pegging_label_mode,
+            pegging_rollouts=pegging_rollouts,
         )
         p2 = LoggingMediumPlayer(
             "teacher2",
@@ -1017,6 +1117,8 @@ def generate_il_data(
             pegging_feature_set=pegging_feature_set,
             crib_ev_mode=crib_ev_mode,
             crib_mc_samples=crib_mc_samples,
+            pegging_label_mode=pegging_label_mode,
+            pegging_rollouts=pegging_rollouts,
         )
     
     games_since_save = 0
@@ -1042,7 +1144,18 @@ def generate_il_data(
         if games_since_save >= save_interval:
             cumulative_games += games_since_save
             logger.info(f"Reached {save_interval} games, saving checkpoint at {cumulative_games} total games")
-            save_data(log, out_dir, cumulative_games, strategy, seed, pegging_feature_set, crib_ev_mode, crib_mc_samples)
+            save_data(
+                log,
+                out_dir,
+                cumulative_games,
+                strategy,
+                seed,
+                pegging_feature_set,
+                crib_ev_mode,
+                crib_mc_samples,
+                pegging_label_mode,
+                pegging_rollouts,
+            )
             
             # Clear the logs to save memory
             log.X_discard.clear()
@@ -1059,7 +1172,18 @@ def generate_il_data(
     if games_since_save > 0:
         cumulative_games += games_since_save
         logger.info(f"Saving final data at {cumulative_games} total games")
-        save_data(log, out_dir, cumulative_games, strategy, seed, pegging_feature_set, crib_ev_mode, crib_mc_samples)
+        save_data(
+            log,
+            out_dir,
+            cumulative_games,
+            strategy,
+            seed,
+            pegging_feature_set,
+            crib_ev_mode,
+            crib_mc_samples,
+            pegging_label_mode,
+            pegging_rollouts,
+        )
     
     return 0
 
@@ -1110,6 +1234,19 @@ if __name__ == "__main__":
         default=DEFAULT_CRIB_MC_SAMPLES,
         help="Number of Monte Carlo samples for crib EV when crib_ev_mode=mc.",
     )
+    ap.add_argument(
+        "--pegging_label_mode",
+        type=str,
+        default=DEFAULT_PEGGING_LABEL_MODE,
+        choices=["immediate", "rollout1"],
+        help="How to label pegging data.",
+    )
+    ap.add_argument(
+        "--pegging_rollouts",
+        type=int,
+        default=DEFAULT_PEGGING_ROLLOUTS,
+        help="Number of rollouts for pegging_label_mode=rollout1.",
+    )
     args = ap.parse_args()
     resolved_out_dir = _resolve_output_dir(args.out_dir, args.dataset_version, args.run_id, args.new_run)
     generate_il_data(
@@ -1120,6 +1257,8 @@ if __name__ == "__main__":
         args.pegging_feature_set,
         args.crib_ev_mode,
         args.crib_mc_samples,
+        args.pegging_label_mode,
+        args.pegging_rollouts,
     )
 
 # python .\scripts\generate_il_data.py

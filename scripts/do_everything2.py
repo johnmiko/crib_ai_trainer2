@@ -38,6 +38,8 @@ from crib_ai_trainer.constants import (
     DEFAULT_MLP_HIDDEN,
     DEFAULT_CRIB_EV_MODE,
     DEFAULT_CRIB_MC_SAMPLES,
+    DEFAULT_PEGGING_LABEL_MODE,
+    DEFAULT_PEGGING_ROLLOUTS,
 )
 from scripts.benchmark_2_players import benchmark_2_players
 from scripts.generate_il_data import generate_il_data, _resolve_output_dir
@@ -86,6 +88,8 @@ if __name__ == "__main__":
     ap.add_argument("--mlp_hidden", type=str, default=DEFAULT_MLP_HIDDEN)
     ap.add_argument("--crib_ev_mode", type=str, default=DEFAULT_CRIB_EV_MODE, choices=["min", "mc"])
     ap.add_argument("--crib_mc_samples", type=int, default=DEFAULT_CRIB_MC_SAMPLES)
+    ap.add_argument("--pegging_label_mode", type=str, default=DEFAULT_PEGGING_LABEL_MODE, choices=["immediate", "rollout1"])
+    ap.add_argument("--pegging_rollouts", type=int, default=DEFAULT_PEGGING_ROLLOUTS)
     ap.add_argument("--lr", type=float, default=DEFAULT_LR)
     ap.add_argument("--batch_size", type=int, default=DEFAULT_BATCH_SIZE)
     ap.add_argument("--l2", type=float, default=DEFAULT_L2)
@@ -144,6 +148,8 @@ if __name__ == "__main__":
             data_pegging_feature_set,
             args.crib_ev_mode,
             args.crib_mc_samples,
+            args.pegging_label_mode,
+            args.pegging_rollouts,
         )
 
         print("step: train_linear_models", flush=True)

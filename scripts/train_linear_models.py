@@ -127,12 +127,12 @@ def train_linear_models(args) -> int:
     else:
         with np.load(discard_shards[0]) as d0:
             if model_type == "mlp":
-                discard_model = MLPValueModel(int(len(discard_feature_indices)), mlp_hidden, seed=args.seed)
+                discard_model = MLPValueModel(int(len(discard_feature_indices)), mlp_hidden, seed=args.seed or 0)
             else:
                 discard_model = LinearValueModel(int(len(discard_feature_indices)))
     with np.load(pegging_shards[0]) as p0:
         if model_type == "mlp":
-            pegging_model = MLPValueModel(int(len(pegging_feature_indices)), mlp_hidden, seed=args.seed)
+            pegging_model = MLPValueModel(int(len(pegging_feature_indices)), mlp_hidden, seed=args.seed or 0)
         else:
             pegging_model = LinearValueModel(int(len(pegging_feature_indices)))
 

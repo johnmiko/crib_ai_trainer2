@@ -26,6 +26,8 @@ These affect all four scripts:
 - `MLP_HIDDEN`: comma-separated hidden sizes for the MLP (e.g., `128,64`)
 - `CRIB_EV_MODE`: `min` or `mc` for discard label crib EV
 - `CRIB_MC_SAMPLES`: number of MC samples for crib EV (when `CRIB_EV_MODE=mc`)
+- `PEGGING_LABEL_MODE`: `immediate` or `rollout1` for pegging labels
+- `PEGGING_ROLLOUTS`: number of rollouts for pegging labels (when `PEGGING_LABEL_MODE=rollout1`)
 
 ## Script Quick Usage (uses defaults)
 Run any of these without flags and they will use `.env`:
