@@ -141,6 +141,7 @@ Change benchmarking to be against medium player since we can beat the beginner p
 # large=512,256
 # xl=1024,512
 # small3=128,64,32
+# mini3=64,32,16
 .\.venv\Scripts\python.exe .\scripts\do_everything2.py --il_games 1000 --loops -1 --dataset_version "discard_v5" --model_version "discard_v5" --strategy regression --discard_loss regression --benchmark_games 1000 --benchmark_mode full --model_type mlp --mlp_hidden "256,128"
 
 MLPVV5.018Player vs beginner [018] after 12500 training games avg point diff 3.17 (95% CI 1.68 - 4.66) wins=550/1000 winrate=55.0%
@@ -152,13 +153,10 @@ MLPVV5.033Player vs medium [033] after 36500 training games avg point diff -0.29
 MLPVV5.036Player vs medium [036] after 42500 training games avg point diff -1.87 (95% CI -2.95 - -0.80) wins=941/2000 winrate=47.0%
 MLPVV5.044Player vs medium [044] after 58500 training games avg point diff -0.83 (95% CI -1.90 - 0.24) wins=957/2000 winrate=47.9%
 
-.\.venv\Scripts\python.exe .\scripts\train_linear_models.py --data_dir "il_datasets\discard_v5\001" --models_dir "models\regression" --model_version "discard_v5" --run_id 045_XXL --discard_loss regression --model_type mlp --mlp_hidden "2048,1024"
-.\.venv\Scripts\python.exe .\scripts\train_linear_models.py --data_dir "il_datasets\discard_v5\001" --models_dir "models\regression" --model_version "discard_v5" --run_id 045_extra_large --discard_loss regression --model_type mlp --mlp_hidden "1024,512"
-.\.venv\Scripts\python.exe .\scripts\train_linear_models.py --data_dir "il_datasets\discard_v5\001" --models_dir "models\regression" --model_version "discard_v5" --run_id 045_large3 --discard_loss regression --model_type mlp --mlp_hidden "512,256,128"
-.\.venv\Scripts\python.exe .\scripts\train_linear_models.py --data_dir "il_datasets\discard_v5\001" --models_dir "models\regression" --model_version "discard_v5" --run_id 045_medium3 --discard_loss regression --model_type mlp --mlp_hidden "256,128,64"
-.\.venv\Scripts\python.exe .\scripts\train_linear_models.py --data_dir "il_datasets\discard_v5\001" --models_dir "models\regression" --model_version "discard_v5" --run_id 045_small --discard_loss regression --model_type mlp --mlp_hidden "128,64"
+
+.\.venv\Scripts\python.exe .\scripts\train_linear_models.py --data_dir "il_datasets\discard_v5\001" --models_dir "models\regression" --model_version "discard_v5" --run_id 045_mini3 --discard_loss regression --model_type mlp --mlp_hidden "64,32,16"
 .\.venv\Scripts\python.exe .\scripts\train_linear_models.py --data_dir "il_datasets\discard_v5\001" --models_dir "models\regression" --model_version "discard_v5" --run_id 045_small3 --discard_loss regression --model_type mlp --mlp_hidden "128,64,32"
-.\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py --players NeuralRegressionPlayer,beginner --benchmark_games 6000 --models_dir "models\regression\discard_v5\045_large3" --data_dir "il_datasets\discard_v5\001" --no_auto_mixed_benchmarks
+.\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py --players NeuralRegressionPlayer,beginner --benchmark_games 6000 --models_dir "models\regression\discard_v5\045_mini3" --data_dir "il_datasets\discard_v5\001" --no_auto_mixed_benchmarks
 
 
 against beginner player
@@ -179,5 +177,13 @@ MLPVV5.045Player vs medium [045_large] after 62500 training games avg point diff
 
 # self play loop with 2 layer medium size
 .\.venv\Scripts\python.exe .\scripts\self_play_loop.py --models_dir "models\regression" --model_version "discard_v5" --teacher_dataset_version "discard_v5" --selfplay_dataset_version "selfplay_v5" --games 1000 --benchmark_games 1000 --selfplay_ratio 0.3 --model_type mlp --mlp_hidden "128,64,32" --benchmark_opponent beginner
+.\.venv\Scripts\python.exe .\scripts\generate_il_data.py `
+  --games -1 `
+  --out_dir "il_datasets" `
+  --dataset_version "discard_v6" `
+  --strategy regression `
+  --win_prob_mode rollout `
+  --win_prob_rollouts 16 `
+  --win_prob_min_score 90
 
-new after 1000 self play games, 1000 benchmark games vs best [001] wins=480/1000 winrate=0.480 avg_diff=-0.74, vs medium: wins=592/1000 winrate=0.592 avg_diff=4.69, Best vs medium: wins=543/1000 winrate=0.543 avg_diff=2.59
+new after 1000 self play games, 1000 benchmark games vs best [001] wins=480/1000 winrate=0.480 avg_diff=-0.74, vs beginner: wins=592/1000 winrate=0.592 avg_diff=4.69, Best vs beginner: wins=543/1000 winrate=0.543 avg_diff=2.59

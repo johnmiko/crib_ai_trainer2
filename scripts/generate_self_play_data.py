@@ -46,6 +46,7 @@ from crib_ai_trainer.players.neural_player import (
     get_discard_feature_indices,
     get_pegging_feature_indices,
     select_discard_with_model_with_scores,
+    estimate_pegging_ev_mc_for_discard,
     regression_pegging_strategy,
     LinearValueModel,
     LinearDiscardClassifier,
@@ -135,6 +136,7 @@ class LoggingNeuralPlayer:
         self.name = name
         self._log = log
         self._rng = random.Random(seed)
+        self._rng_np = np.random.default_rng(seed)
         self._full_deck = get_full_deck()
 
         self.discard_model = discard_model
@@ -200,7 +202,24 @@ class LoggingNeuralPlayer:
             avg_crib = crib_map.get((hand_key, crib_key), 0.0)
             y = avg_hand + (avg_crib if dealer_is_self else -avg_crib)
 
-            x = featurize_discard(kept_list, discards_list, dealer_is_self, your_score, opponent_score)
+            pegging_ev = None
+            if self.discard_feature_set in {"engineered_no_scores_pev", "full_pev"}:
+                pegging_ev = estimate_pegging_ev_mc_for_discard(
+                    hand,
+                    kept_list,
+                    discards_list,
+                    dealer_is_self,
+                    self._rng_np,
+                    n_rollouts=8,
+                )
+            x = featurize_discard(
+                kept_list,
+                discards_list,
+                dealer_is_self,
+                your_score,
+                opponent_score,
+                pegging_ev=pegging_ev,
+            )
             self._log.X_discard.append(x)
             self._log.y_discard.append(float(y))
 
@@ -211,6 +230,7 @@ class LoggingNeuralPlayer:
             your_score,
             opponent_score,
             self.discard_feature_indices,
+            self.discard_feature_set,
         )
 
     def select_card_to_play(self, player_state, round_state):

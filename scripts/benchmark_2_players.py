@@ -354,7 +354,12 @@ if __name__ == "__main__":
     ap.add_argument("--seed", type=int, default=DEFAULT_SEED)
     ap.add_argument("--fallback_player", type=str, default=DEFAULT_FALLBACK_PLAYER)
     ap.add_argument("--model_tag", type=str, default=DEFAULT_MODEL_TAG or None)
-    ap.add_argument("--discard_feature_set", type=str, default=DEFAULT_DISCARD_FEATURE_SET, choices=["base", "engineered_no_scores", "full"])
+    ap.add_argument(
+        "--discard_feature_set",
+        type=str,
+        default=DEFAULT_DISCARD_FEATURE_SET,
+        choices=["base", "engineered_no_scores", "engineered_no_scores_pev", "full", "full_pev"],
+    )
     ap.add_argument("--pegging_feature_set", type=str, default=DEFAULT_PEGGING_MODEL_FEATURE_SET, choices=["base", "full_no_scores", "full"])
     ap.add_argument("--auto_mixed_benchmarks", action="store_true", default=True)
     ap.add_argument(

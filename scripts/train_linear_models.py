@@ -387,7 +387,12 @@ if __name__ == "__main__":
     ap.add_argument("--model_version", type=str, default=DEFAULT_MODEL_VERSION)
     ap.add_argument("--run_id", type=str, default=DEFAULT_MODEL_RUN_ID or None, help="Run id folder (e.g., 001). Omit to auto-increment.")
     ap.add_argument("--discard_loss", type=str, default=DEFAULT_DISCARD_LOSS, choices=["classification", "regression", "ranking"])
-    ap.add_argument("--discard_feature_set", type=str, default=DEFAULT_DISCARD_FEATURE_SET, choices=["base", "engineered_no_scores", "full"])
+    ap.add_argument(
+        "--discard_feature_set",
+        type=str,
+        default=DEFAULT_DISCARD_FEATURE_SET,
+        choices=["base", "engineered_no_scores", "engineered_no_scores_pev", "full", "full_pev"],
+    )
     ap.add_argument("--pegging_feature_set", type=str, default=DEFAULT_PEGGING_MODEL_FEATURE_SET, choices=["base", "full_no_scores", "full"])
     ap.add_argument("--model_type", type=str, default=DEFAULT_MODEL_TYPE, choices=["linear", "mlp"])
     ap.add_argument("--mlp_hidden", type=str, default=DEFAULT_MLP_HIDDEN, help="Comma-separated hidden sizes, e.g. 128,64")

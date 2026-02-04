@@ -38,6 +38,8 @@ from crib_ai_trainer.constants import (
     DEFAULT_WIN_PROB_MODE,
     DEFAULT_WIN_PROB_ROLLOUTS,
     DEFAULT_WIN_PROB_MIN_SCORE,
+    DEFAULT_PEGGING_EV_MODE,
+    DEFAULT_PEGGING_EV_ROLLOUTS,
 )
 import argparse
 from itertools import combinations
@@ -65,6 +67,7 @@ from crib_ai_trainer.players.neural_player import (
     featurize_pegging,
     DISCARD_FEATURE_DIM,
     get_pegging_feature_dim,
+    estimate_pegging_ev_mc_for_discard,
 )
 
 from cribbage.cribbagegame import score_hand, score_play
@@ -80,6 +83,113 @@ import secrets
 from itertools import combinations
 import json
 from datetime import datetime, timezone
+
+RANKS = ["a", "2", "3", "4", "5", "6", "7", "8", "9", "10", "j", "q", "k"]
+RANK_TO_VALUE = {
+    "a": 1,
+    "2": 2,
+    "3": 3,
+    "4": 4,
+    "5": 5,
+    "6": 6,
+    "7": 7,
+    "8": 8,
+    "9": 9,
+    "10": 10,
+    "j": 10,
+    "q": 10,
+    "k": 10,
+}
+
+def remaining_rank_counts(
+    known_cards: List[Card],
+    all_played_cards: List[Card],
+    hand: List[Card],
+) -> dict[str, int]:
+    counts = {r: 4 for r in RANKS}
+    for c in list(known_cards) + list(all_played_cards) + list(hand):
+        rank = c.get_rank().lower()
+        counts[rank] = max(0, counts.get(rank, 0) - 1)
+    return counts
+
+
+def sample_rank_from_counts(counts: dict[str, int], rng: random.Random) -> str:
+    total = sum(counts.values())
+    if total <= 0:
+        return "a"
+    r = rng.randrange(total)
+    running = 0
+    for rank, count in counts.items():
+        running += count
+        if r < running:
+            return rank
+    return "a"
+
+
+def exact_expected_pegging_value_ranked(
+    hand: List[Card],
+    table: List[Card],
+    count: int,
+    candidate: Card,
+    known_cards: List[Card],
+    all_played_cards: List[Card],
+) -> float:
+    """Exact expected (our pts - opp pts) by iterating remaining ranks."""
+    seq_after = table + [candidate]
+    our_points = float(score_play(seq_after)[0])
+    counts = remaining_rank_counts(known_cards, all_played_cards, hand)
+    total = sum(counts.values())
+    if total == 0:
+        return our_points
+    acc = 0.0
+    for rank, count_remain in counts.items():
+        if count_remain <= 0:
+            continue
+        opp_value = RANK_TO_VALUE[rank]
+        if count + candidate.get_value() + opp_value > 31:
+            opp_points = 0.0
+        else:
+            opp_points = float(score_play(seq_after + [Card(f"{rank}h")])[0])
+        acc += (our_points - opp_points) * float(count_remain)
+    return acc / float(total)
+
+
+def exact_expected_pegging_value_ranked_2ply(
+    hand: List[Card],
+    table: List[Card],
+    count: int,
+    candidate: Card,
+    known_cards: List[Card],
+    all_played_cards: List[Card],
+) -> float:
+    """Exact expected value with one opponent reply and one of our replies."""
+    seq_after = table + [candidate]
+    our_points = float(score_play(seq_after)[0])
+    counts = remaining_rank_counts(known_cards, all_played_cards, hand)
+    total = sum(counts.values())
+    if total == 0:
+        return our_points
+    acc = 0.0
+    for rank, count_remain in counts.items():
+        if count_remain <= 0:
+            continue
+        opp_value = RANK_TO_VALUE[rank]
+        if count + candidate.get_value() + opp_value > 31:
+            opp_points = 0.0
+            our_next = 0.0
+        else:
+            seq_after_opp = seq_after + [Card(f"{rank}h")]
+            opp_points = float(score_play(seq_after_opp)[0])
+            new_count = count + candidate.get_value() + opp_value
+            playable_next = [c for c in hand if c.get_value() + new_count <= 31]
+            if playable_next:
+                # use mean immediate points across our playable next cards
+                vals = [float(score_play(seq_after_opp + [c])[0]) for c in playable_next]
+                our_next = float(sum(vals) / len(vals))
+            else:
+                our_next = 0.0
+        acc += (our_points - opp_points + our_next) * float(count_remain)
+    return acc / float(total)
 
 def estimate_discard_value_mc(
     hand: List[Card],
@@ -245,14 +355,20 @@ def estimate_pegging_rollout_value(
     our_points = float(score_play(seq_after)[0])
     if n_rollouts <= 0:
         return our_points
-    full_deck = get_full_deck()
-    known_set = set(known_cards) | set(all_played_cards) | set(hand)
-    unseen = [c for c in full_deck if c not in known_set]
-    if not unseen:
-        return our_points
+    if n_rollouts >= 13:
+        return exact_expected_pegging_value_ranked(
+            hand,
+            table,
+            count,
+            candidate,
+            known_cards,
+            all_played_cards,
+        )
     total = 0.0
+    rank_counts = remaining_rank_counts(known_cards, all_played_cards, hand)
     for _ in range(n_rollouts):
-        opp_card = unseen[rng.randrange(len(unseen))]
+        rank = sample_rank_from_counts(rank_counts, rng)
+        opp_card = Card(f"{rank}h")
         if count + candidate.get_value() + opp_card.get_value() > 31:
             opp_points = 0.0
         else:
@@ -276,14 +392,20 @@ def estimate_pegging_rollout_value_2ply(
     our_points = float(score_play(seq_after)[0])
     if n_rollouts <= 0:
         return our_points
-    full_deck = get_full_deck()
-    known_set = set(known_cards) | set(all_played_cards) | set(hand)
-    unseen = [c for c in full_deck if c not in known_set]
-    if not unseen:
-        return our_points
+    if n_rollouts >= 13:
+        return exact_expected_pegging_value_ranked_2ply(
+            hand,
+            table,
+            count,
+            candidate,
+            known_cards,
+            all_played_cards,
+        )
     total = 0.0
+    rank_counts = remaining_rank_counts(known_cards, all_played_cards, hand)
     for _ in range(n_rollouts):
-        opp_card = unseen[rng.randrange(len(unseen))]
+        rank = sample_rank_from_counts(rank_counts, rng)
+        opp_card = Card(f"{rank}h")
         if count + candidate.get_value() + opp_card.get_value() > 31:
             opp_points = 0.0
             our_next = 0.0
@@ -483,6 +605,8 @@ class LoggingBeginnerPlayer(BeginnerPlayer):
         win_prob_mode: str = "off",
         win_prob_rollouts: int = 16,
         win_prob_min_score: int = 90,
+        pegging_ev_mode: str = "off",
+        pegging_ev_rollouts: int = 16,
     ):
         super().__init__(name=name)
         self._rng = random.Random(seed)
@@ -501,6 +625,9 @@ class LoggingBeginnerPlayer(BeginnerPlayer):
         self._win_prob_mode = win_prob_mode
         self._win_prob_rollouts = win_prob_rollouts
         self._win_prob_min_score = win_prob_min_score
+        self._pegging_ev_mode = pegging_ev_mode
+        self._pegging_ev_rollouts = pegging_ev_rollouts
+        self._rng_np = np.random.default_rng(seed)
 
     def select_crib_cards(self, player_state, round_state) -> Tuple[Card, Card]:
         # Extract hand and dealer info from state objects
@@ -537,7 +664,17 @@ class LoggingBeginnerPlayer(BeginnerPlayer):
                 n_opp_discards=8,
             )
 
-            x = featurize_discard(kept, discards, dealer_is_self, your_score, opponent_score)
+            pegging_ev = None
+            if self._pegging_ev_mode == "rollout":
+                pegging_ev = estimate_pegging_ev_mc_for_discard(
+                    hand,
+                    kept,
+                    discards,
+                    dealer_is_self,
+                    self._rng_np,
+                    self._pegging_ev_rollouts,
+                )
+            x = featurize_discard(kept, discards, dealer_is_self, your_score, opponent_score, pegging_ev=pegging_ev)
             Xs.append(x)
             ys.append(float(y))
             discards_list.append(disc_t)
@@ -585,7 +722,17 @@ class LoggingBeginnerPlayer(BeginnerPlayer):
                 print("discards:", discards)
                 a = 1
 
-            x = featurize_discard(kept, discards, dealer_is_self, your_score, opponent_score)
+            pegging_ev = None
+            if self._pegging_ev_mode == "rollout":
+                pegging_ev = estimate_pegging_ev_mc_for_discard(
+                    hand,
+                    kept,
+                    discards,
+                    dealer_is_self,
+                    self._rng_np,
+                    self._pegging_ev_rollouts,
+                )
+            x = featurize_discard(kept, discards, dealer_is_self, your_score, opponent_score, pegging_ev=pegging_ev)
             self._log.X_discard.append(x)
             self._log.y_discard.append(float(y))
             if self._win_prob_mode == "rollout":
@@ -702,6 +849,8 @@ class LoggingMediumPlayer(MediumPlayer):
         win_prob_mode: str = "off",
         win_prob_rollouts: int = 16,
         win_prob_min_score: int = 90,
+        pegging_ev_mode: str = "off",
+        pegging_ev_rollouts: int = 16,
     ):
         super().__init__(name=name)
         self._rng = random.Random(seed)
@@ -724,6 +873,9 @@ class LoggingMediumPlayer(MediumPlayer):
         self._win_prob_mode = win_prob_mode
         self._win_prob_rollouts = win_prob_rollouts
         self._win_prob_min_score = win_prob_min_score
+        self._pegging_ev_mode = pegging_ev_mode
+        self._pegging_ev_rollouts = pegging_ev_rollouts
+        self._rng_np = np.random.default_rng(seed)
 
     def select_crib_cards(self, player_state, round_state) -> Tuple[Card, Card]:
         """Override to log training data."""
@@ -884,7 +1036,17 @@ class LoggingMediumPlayer(MediumPlayer):
                 continue
             
             y = row["avg_total_score"].values[0]
-            x = featurize_discard(kept_list, discards_list_temp, dealer_is_self, your_score, opponent_score)
+            pegging_ev = None
+            if self._pegging_ev_mode == "rollout":
+                pegging_ev = estimate_pegging_ev_mc_for_discard(
+                    hand,
+                    kept_list,
+                    discards_list_temp,
+                    dealer_is_self,
+                    self._rng_np,
+                    self._pegging_ev_rollouts,
+                )
+            x = featurize_discard(kept_list, discards_list_temp, dealer_is_self, your_score, opponent_score, pegging_ev=pegging_ev)
             Xs.append(x)
             ys.append(float(y))
             discards_list.append((discards_list_temp[0], discards_list_temp[1]))
@@ -945,7 +1107,17 @@ class LoggingMediumPlayer(MediumPlayer):
                 continue
 
             y = row["avg_total_score"].values[0]
-            x = featurize_discard(kept_list, discards_list_temp, dealer_is_self, your_score, opponent_score)
+            pegging_ev = None
+            if self._pegging_ev_mode == "rollout":
+                pegging_ev = estimate_pegging_ev_mc_for_discard(
+                    hand,
+                    kept_list,
+                    discards_list_temp,
+                    dealer_is_self,
+                    self._rng_np,
+                    self._pegging_ev_rollouts,
+                )
+            x = featurize_discard(kept_list, discards_list_temp, dealer_is_self, your_score, opponent_score, pegging_ev=pegging_ev)
             Xs.append(x)
             ys.append(float(y))
             discards_list.append((discards_list_temp[0], discards_list_temp[1]))
@@ -1007,7 +1179,17 @@ class LoggingMediumPlayer(MediumPlayer):
                 continue
             
             y = row["avg_total_score"].values[0]
-            x = featurize_discard(kept_list, discards_list, dealer_is_self, your_score, opponent_score)
+            pegging_ev = None
+            if self._pegging_ev_mode == "rollout":
+                pegging_ev = estimate_pegging_ev_mc_for_discard(
+                    hand,
+                    kept_list,
+                    discards_list,
+                    dealer_is_self,
+                    self._rng_np,
+                    self._pegging_ev_rollouts,
+                )
+            x = featurize_discard(kept_list, discards_list, dealer_is_self, your_score, opponent_score, pegging_ev=pegging_ev)
             self._log.X_discard.append(x)
             self._log.y_discard.append(float(y))
             if self._win_prob_mode == "rollout":
@@ -1128,6 +1310,8 @@ def save_data(
         "win_prob_mode": win_prob_mode,
         "win_prob_rollouts": win_prob_rollouts,
         "win_prob_min_score": win_prob_min_score,
+        "pegging_ev_mode": pegging_ev_mode,
+        "pegging_ev_rollouts": pegging_ev_rollouts,
         "has_discard_win_prob": y_discard_win is not None and (y_discard_win.shape[0] == yd.shape[0]),
         "cumulative_games": cumulative_games,
         "seed": seed,
@@ -1140,6 +1324,7 @@ def save_data(
                 "kept_features": "52 multi-hot kept",
                 "dealer_flag": "1 float (1.0 if dealer_is_self else 0.0)",
                 "score_context": "player_score, opponent_score, score_margin, endgame_self, endgame_opp, endgame_any",
+                "pegging_ev": "expected pegging points (self, opp, diff) from MC rollouts",
             "total_dim": DISCARD_FEATURE_DIM,
             },
             "label": {
@@ -1186,6 +1371,8 @@ def save_data(
         f"win_prob_mode: {dataset_meta['win_prob_mode']}",
         f"win_prob_rollouts: {dataset_meta['win_prob_rollouts']}",
         f"win_prob_min_score: {dataset_meta['win_prob_min_score']}",
+        f"pegging_ev_mode: {dataset_meta['pegging_ev_mode']}",
+        f"pegging_ev_rollouts: {dataset_meta['pegging_ev_rollouts']}",
         f"has_discard_win_prob: {dataset_meta['has_discard_win_prob']}",
         f"cumulative_games: {dataset_meta['cumulative_games']}",
         f"seed: {dataset_meta['seed']}",
@@ -1289,6 +1476,8 @@ def generate_il_data(
     win_prob_mode: str = "off",
     win_prob_rollouts: int = 16,
     win_prob_min_score: int = 90,
+    pegging_ev_mode: str = "off",
+    pegging_ev_rollouts: int = 16,
 ) -> int:
     if seed is None:
         seed = secrets.randbits(32)
@@ -1319,6 +1508,8 @@ def generate_il_data(
             win_prob_mode=win_prob_mode,
             win_prob_rollouts=win_prob_rollouts,
             win_prob_min_score=win_prob_min_score,
+            pegging_ev_mode=pegging_ev_mode,
+            pegging_ev_rollouts=pegging_ev_rollouts,
         )
         p2 = LoggingMediumPlayer(
             "teacher2",
@@ -1334,6 +1525,8 @@ def generate_il_data(
             win_prob_mode=win_prob_mode,
             win_prob_rollouts=win_prob_rollouts,
             win_prob_min_score=win_prob_min_score,
+            pegging_ev_mode=pegging_ev_mode,
+            pegging_ev_rollouts=pegging_ev_rollouts,
         )
     elif strategy == "ranking":
         log = LoggedRegPegRankDiscardData()
@@ -1351,6 +1544,8 @@ def generate_il_data(
             win_prob_mode=win_prob_mode,
             win_prob_rollouts=win_prob_rollouts,
             win_prob_min_score=win_prob_min_score,
+            pegging_ev_mode=pegging_ev_mode,
+            pegging_ev_rollouts=pegging_ev_rollouts,
         )
         p2 = LoggingMediumPlayer(
             "teacher2",
@@ -1366,6 +1561,8 @@ def generate_il_data(
             win_prob_mode=win_prob_mode,
             win_prob_rollouts=win_prob_rollouts,
             win_prob_min_score=win_prob_min_score,
+            pegging_ev_mode=pegging_ev_mode,
+            pegging_ev_rollouts=pegging_ev_rollouts,
         )
     elif strategy == "regression":  
         log = LoggedRegPegRegDiscardData()
@@ -1383,6 +1580,8 @@ def generate_il_data(
             win_prob_mode=win_prob_mode,
             win_prob_rollouts=win_prob_rollouts,
             win_prob_min_score=win_prob_min_score,
+            pegging_ev_mode=pegging_ev_mode,
+            pegging_ev_rollouts=pegging_ev_rollouts,
         )
         p2 = LoggingMediumPlayer(
             "teacher2",
@@ -1553,6 +1752,19 @@ if __name__ == "__main__":
         default=DEFAULT_WIN_PROB_MIN_SCORE,
         help="Only estimate win-prob when max(score) >= this threshold (else label 0.5).",
     )
+    ap.add_argument(
+        "--pegging_ev_mode",
+        type=str,
+        default=DEFAULT_PEGGING_EV_MODE,
+        choices=["off", "rollout"],
+        help="Whether to add pegging EV features to discard (rollout or off).",
+    )
+    ap.add_argument(
+        "--pegging_ev_rollouts",
+        type=int,
+        default=DEFAULT_PEGGING_EV_ROLLOUTS,
+        help="Number of rollouts for pegging EV estimation.",
+    )
     args = ap.parse_args()
     resolved_out_dir = _resolve_output_dir(args.out_dir, args.dataset_version, args.run_id, args.new_run)
     generate_il_data(
@@ -1568,6 +1780,8 @@ if __name__ == "__main__":
         args.win_prob_mode,
         args.win_prob_rollouts,
         args.win_prob_min_score,
+        args.pegging_ev_mode,
+        args.pegging_ev_rollouts,
     )
 
 # python .\scripts\generate_il_data.py
