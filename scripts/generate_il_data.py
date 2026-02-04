@@ -824,8 +824,9 @@ class LoggingBeginnerPlayer(BeginnerPlayer):
                 opponent_score=player_state.opponent_score,
                 feature_set=self._pegging_feature_set,
             )
-            self._log.X_pegging.append(x) # type: ignore
-            self._log.y_pegging.append(float(y)) # type: ignore
+            if self._log_pegging:
+                self._log.X_pegging.append(x) # type: ignore
+                self._log.y_pegging.append(float(y)) # type: ignore
             if (pts > best_pts) and (c + count <= 31):
                 best_pts = pts
                 best = c
@@ -860,11 +861,13 @@ class LoggingMediumPlayer(MediumPlayer):
         win_prob_min_score: int = 90,
         pegging_ev_mode: str = "off",
         pegging_ev_rollouts: int = 16,
+        log_pegging: bool = True,
     ):
         super().__init__(name=name)
         self._rng = random.Random(seed)
         self._full_deck = get_full_deck()
         self._log = log
+        self._log_pegging = log_pegging
         if discard_strategy == "classification":
             self._discard_strategy_mode = "classification"
         elif discard_strategy == "ranking":
@@ -920,6 +923,9 @@ class LoggingMediumPlayer(MediumPlayer):
         """Override to log training data."""
         if not playable:
             return None
+
+        if not self._log_pegging:
+            return medium_pegging_strategy(playable, count, history_since_reset)
         
         # Check if any cards are actually playable
         have_playable_cards = False
@@ -1237,6 +1243,7 @@ def save_data(
     win_prob_mode: str,
     win_prob_rollouts: int,
     win_prob_min_score: int,
+    save_pegging: bool = True,
 ):
     """Save accumulated training data to disk."""
     os.makedirs(out_dir, exist_ok=True)
@@ -1295,14 +1302,19 @@ def save_data(
 
     out_path_discard = os.path.join(out_dir, f"discard_{cumulative_games}.npz")
     out_path_pegging = os.path.join(out_dir, f"pegging_{cumulative_games}.npz")
-    logger.info(f"Saving to {out_path_discard} and {out_path_pegging}")
+    if save_pegging:
+        logger.info(f"Saving to {out_path_discard} and {out_path_pegging}")
+    else:
+        logger.info(f"Saving to {out_path_discard} (pegging skipped)")
     if y_discard_win is not None and y_discard_win.shape[0] == yd.shape[0]:
         np.savez(out_path_discard, X=Xd, y=yd, y_win=y_discard_win)
     else:
         np.savez(out_path_discard, X=Xd, y=yd)
-    np.savez(out_path_pegging, X=Xp, y=yp)
+    if save_pegging:
+        np.savez(out_path_pegging, X=Xp, y=yp)
     logger.info(f"Saved discard: X={Xd.shape} y={yd.shape}")
-    logger.info(f"Saved pegging: X={Xp.shape} y={yp.shape}")
+    if save_pegging:
+        logger.info(f"Saved pegging: X={Xp.shape} y={yp.shape}")
 
     # Write/update dataset metadata for easy inspection.
     # This overwrites each time with the latest shard info.
@@ -1345,9 +1357,9 @@ def save_data(
             }.get(strategy, "unknown"),
         },
         "pegging": {
-            "file": os.path.basename(out_path_pegging),
-            "X_shape": list(Xp.shape),
-            "y_shape": list(yp.shape),
+            "file": os.path.basename(out_path_pegging) if save_pegging else None,
+            "X_shape": list(Xp.shape) if save_pegging else [0, pegging_dim],
+            "y_shape": list(yp.shape) if save_pegging else [0],
             "features": {
                 "hand": "52 multi-hot",
                 "table": "52 multi-hot",
@@ -1361,6 +1373,7 @@ def save_data(
             "feature_set": pegging_feature_set,
             },
             "label": f"pegging_label_mode={pegging_label_mode}",
+            "skipped": not save_pegging,
         },
     }
     meta_path = os.path.join(out_dir, "dataset_meta.json")
@@ -1488,6 +1501,7 @@ def _init_logging_players(
     win_prob_min_score: int,
     pegging_ev_mode: str,
     pegging_ev_rollouts: int,
+    log_pegging: bool = True,
 ):
     if strategy == "classification":
         log = LoggedRegPegClasDiscardData()
@@ -1507,6 +1521,7 @@ def _init_logging_players(
             win_prob_min_score=win_prob_min_score,
             pegging_ev_mode=pegging_ev_mode,
             pegging_ev_rollouts=pegging_ev_rollouts,
+            log_pegging=log_pegging,
         )
         p2 = LoggingMediumPlayer(
             "teacher2",
@@ -1524,6 +1539,7 @@ def _init_logging_players(
             win_prob_min_score=win_prob_min_score,
             pegging_ev_mode=pegging_ev_mode,
             pegging_ev_rollouts=pegging_ev_rollouts,
+            log_pegging=log_pegging,
         )
     elif strategy == "ranking":
         log = LoggedRegPegRankDiscardData()
@@ -1543,6 +1559,7 @@ def _init_logging_players(
             win_prob_min_score=win_prob_min_score,
             pegging_ev_mode=pegging_ev_mode,
             pegging_ev_rollouts=pegging_ev_rollouts,
+            log_pegging=log_pegging,
         )
         p2 = LoggingMediumPlayer(
             "teacher2",
@@ -1560,6 +1577,7 @@ def _init_logging_players(
             win_prob_min_score=win_prob_min_score,
             pegging_ev_mode=pegging_ev_mode,
             pegging_ev_rollouts=pegging_ev_rollouts,
+            log_pegging=log_pegging,
         )
     elif strategy == "regression":
         log = LoggedRegPegRegDiscardData()
@@ -1579,6 +1597,7 @@ def _init_logging_players(
             win_prob_min_score=win_prob_min_score,
             pegging_ev_mode=pegging_ev_mode,
             pegging_ev_rollouts=pegging_ev_rollouts,
+            log_pegging=log_pegging,
         )
         p2 = LoggingMediumPlayer(
             "teacher2",
@@ -1594,6 +1613,7 @@ def _init_logging_players(
             win_prob_mode=win_prob_mode,
             win_prob_rollouts=win_prob_rollouts,
             win_prob_min_score=win_prob_min_score,
+            log_pegging=log_pegging,
         )
     else:
         raise ValueError(f"Unknown strategy: {strategy}")
@@ -1615,6 +1635,7 @@ def _collect_il_data_worker(
     pegging_ev_rollouts: int,
     seed: int,
     worker_id: int,
+    log_pegging: bool,
 ) -> dict:
     log, p1, p2 = _init_logging_players(
         strategy,
@@ -1629,7 +1650,12 @@ def _collect_il_data_worker(
         win_prob_min_score,
         pegging_ev_mode,
         pegging_ev_rollouts,
+        log_pegging,
     )
+    if not log_pegging:
+        # Avoid collecting pegging data when skipping pegging generation.
+        log.X_pegging.clear()
+        log.y_pegging.clear()
     i = 0
     while i < games:
         if (i % 2) == 1:
@@ -1669,6 +1695,7 @@ def generate_il_data(
     pegging_ev_rollouts: int = 16,
     workers: int = 1,
     games_per_worker: int | None = None,
+    save_pegging: bool = True,
 ) -> int:
     if seed is None:
         seed = secrets.randbits(32)
@@ -1716,6 +1743,7 @@ def generate_il_data(
                     pegging_ev_rollouts,
                     worker_seed,
                     worker_id,
+                    save_pegging,
                 )
             )
         ctx = mp.get_context("spawn")
@@ -1747,14 +1775,16 @@ def generate_il_data(
             win_prob_min_score,
             pegging_ev_mode,
             pegging_ev_rollouts,
+            save_pegging,
         )
         for result in results:
             log.X_discard.extend(result["X_discard"])
             log.y_discard.extend(result["y_discard"])
             if hasattr(log, "y_discard_win") and result.get("y_discard_win"):
                 log.y_discard_win.extend(result["y_discard_win"])
-            log.X_pegging.extend(result["X_pegging"])
-            log.y_pegging.extend(result["y_pegging"])
+            if save_pegging:
+                log.X_pegging.extend(result["X_pegging"])
+                log.y_pegging.extend(result["y_pegging"])
 
         cumulative_games += total_games
         save_data(
@@ -1773,6 +1803,7 @@ def generate_il_data(
             win_prob_mode,
             win_prob_rollouts,
             win_prob_min_score,
+            save_pegging,
         )
         return 0
 
@@ -1791,6 +1822,7 @@ def generate_il_data(
         win_prob_min_score,
         pegging_ev_mode,
         pegging_ev_rollouts,
+        save_pegging,
     )
 
     games_since_save = 0
@@ -1832,6 +1864,7 @@ def generate_il_data(
                 win_prob_mode,
                 win_prob_rollouts,
                 win_prob_min_score,
+                save_pegging,
             )
             
             # Clear the logs to save memory
@@ -1839,8 +1872,9 @@ def generate_il_data(
             log.y_discard.clear()
             if hasattr(log, "y_discard_win"):
                 log.y_discard_win.clear()
-            log.X_pegging.clear()
-            log.y_pegging.clear()
+            if save_pegging:
+                log.X_pegging.clear()
+                log.y_pegging.clear()
             games_since_save = 0
     
         i += 1
@@ -1867,6 +1901,7 @@ def generate_il_data(
             win_prob_mode,
             win_prob_rollouts,
             win_prob_min_score,
+            save_pegging,
         )
     
     return 0
@@ -1904,6 +1939,7 @@ if __name__ == "__main__":
         args.pegging_ev_rollouts,
         args.workers,
         args.games_per_worker,
+        not args.skip_pegging_data,
     )
 
 # python .\scripts\generate_il_data.py

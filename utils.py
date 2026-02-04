@@ -12,6 +12,7 @@ from crib_ai_trainer.constants import (
     DEFAULT_PEGGING_FEATURE_SET,
     DEFAULT_DISCARD_FEATURE_SET,
     DEFAULT_PEGGING_MODEL_FEATURE_SET,
+    DEFAULT_PEGGING_DATA_DIR,
     DEFAULT_GAMES_PER_LOOP,
     DEFAULT_LOOPS,
     DEFAULT_IL_WORKERS,
@@ -97,6 +98,11 @@ def build_generate_il_parser() -> argparse.ArgumentParser:
     )
     ap.add_argument("--seed", type=int, default=_default_seed(), help="Random seed. Omit to use a random seed.")
     ap.add_argument("--strategy", type=str, default=DEFAULT_STRATEGY)
+    ap.add_argument(
+        "--skip_pegging_data",
+        action="store_true",
+        help="Generate only discard data (skip pegging logging and files).",
+    )
     ap.add_argument(
         "--pegging_feature_set",
         type=str,
@@ -230,6 +236,11 @@ def build_benchmark_parser() -> argparse.ArgumentParser:
 
 def build_do_everything_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser()
+    ap.add_argument(
+        "--smoke",
+        action="store_true",
+        help="Run a tiny smoke cycle (loops=1, games=1) and skip benchmark_results.txt writes.",
+    )
     ap.add_argument("--il_games", type=int, default=DEFAULT_GAMES_PER_LOOP, help="Games per loop for IL data generation")
     ap.add_argument("--il_workers", type=int, default=DEFAULT_IL_WORKERS, help="Workers for IL data generation")
     ap.add_argument("--il_games_per_worker", type=int, default=DEFAULT_IL_GAMES_PER_WORKER, help="IL games per worker")
@@ -240,6 +251,7 @@ def build_do_everything_parser() -> argparse.ArgumentParser:
         help="Number of generate->train->benchmark cycles.",
     )
     ap.add_argument("--training_dir", type=str, default=TRAINING_DATA_DIR)
+    ap.add_argument("--pegging_data_dir", type=str, default=DEFAULT_PEGGING_DATA_DIR, help="Dataset dir for pegging shards.")
     ap.add_argument("--dataset_version", type=str, default=DEFAULT_DATASET_VERSION)
     ap.add_argument("--dataset_run_id", type=str, default=DEFAULT_DATASET_RUN_ID or None)
     ap.add_argument("--strategy", type=str, default=DEFAULT_STRATEGY)
@@ -290,6 +302,12 @@ def build_do_everything_parser() -> argparse.ArgumentParser:
     ap.add_argument("--model_tag", type=str, default=DEFAULT_MODEL_TAG or None)
     ap.add_argument("--extra_data_dir", type=str, default=None, help="Optional extra dataset to mix in (e.g., self-play).")
     ap.add_argument("--extra_ratio", type=float, default=0.0, help="Fraction of batches to sample from extra_data_dir.")
+    ap.add_argument(
+        "--skip_pegging_data",
+        action="store_true",
+        default=True,
+        help="Generate only discard data (skip pegging logging and files).",
+    )
     return ap
 
 

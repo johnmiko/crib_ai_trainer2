@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from datetime import datetime, timezone
+import argparse
 
 import sys
 sys.path.insert(0, ".")
@@ -64,6 +65,13 @@ def _make_player(models_dir: Path, name_override: str | None = None) -> NeuralRe
 
 def _evaluate(p0, p1, games: int) -> dict:
     return play_multiple_games(games, p0=p0, p1=p1)
+
+
+def _avg_diff(result: dict) -> float:
+    diffs = result.get("diffs", [])
+    if not diffs:
+        return 0.0
+    return float(sum(diffs) / len(diffs))
 
 
 def _get_best_path(best_file: Path, models_dir: Path, model_version: str) -> Path:
@@ -251,7 +259,7 @@ if __name__ == "__main__":
             f"Best vs {label}: wins={_wins(best_vs_medium)}/{_games(best_vs_medium)} "
             f"winrate={best_vs_medium['winrate']:.3f} avg_diff={_avg_diff(best_vs_medium):.2f}\n"
         )
-        with open("benchmark_results.txt", "a", encoding="utf-8") as f:
+        with open("selfplay_results.txt", "a", encoding="utf-8") as f:
             f.write(summary_line)
 
         if args.loops != -1 and i >= args.loops:

@@ -1,3 +1,0 @@
-# Myrmidon Configuration
-# Myrmidon is heuristic-based and requires no trained parameters
-# Default simulations: 5

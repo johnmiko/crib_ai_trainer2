@@ -140,6 +140,10 @@ def _build_player_factory(args, fallback_override: str | None):
             mlp_hidden = meta.get("mlp_hidden", None)
         except Exception:
             pass
+    else:
+        # Fallback: infer model type from files if metadata is missing.
+        if os.path.exists(os.path.join(args.models_dir, "discard_mlp.pt")):
+            model_type = "mlp"
 
     fallback_player_name = fallback_override or args.fallback_player
 
@@ -270,7 +274,7 @@ def _benchmark_single(
     for name in player_names:
         if name.startswith("Neural") and name.endswith("Player") and "Regression" in name:
             tag = model_tag
-            # Prefer version like "discard_v3-001" -> V3.001
+            # Prefer version like "discard_v6-008" -> V6.008 (for linear) or V6 (for mlp)
             version_digits = []
             if "discard_v" in tag:
                 try:
@@ -281,18 +285,27 @@ def _benchmark_single(
                         run_num = "".join(c for c in tag.split("-", 1)[1] if c.isdigit())
                     if v_num:
                         version_digits.append(f"V{v_num}")
-                    if run_num:
+                    if run_num and model_type != "mlp":
                         version_digits.append(run_num)
                 except Exception:
                     version_digits = []
             if version_digits:
-                display_names.append(f"{model_prefix}V{'.'.join(version_digits)}Player")
+                if model_type == "mlp":
+                    display_names.append(f"{model_prefix}{''.join(version_digits)}")
+                else:
+                    display_names.append(f"{model_prefix}V{'.'.join(version_digits[0:])}Player")
             else:
                 version_label = "".join(c for c in tag if c.isdigit())
                 if version_label:
-                    display_names.append(f"{model_prefix}V{version_label}Player")
+                    if model_type == "mlp":
+                        display_names.append(f"{model_prefix}V{version_label}")
+                    else:
+                        display_names.append(f"{model_prefix}V{version_label}Player")
                 else:
-                    display_names.append(f"{model_prefix}{tag.capitalize()}Player")
+                    if model_type == "mlp":
+                        display_names.append(f"{model_prefix}{tag.capitalize()}")
+                    else:
+                        display_names.append(f"{model_prefix}{tag.capitalize()}Player")
         else:
             display_names.append(name)
     return {
@@ -404,8 +417,11 @@ def benchmark_2_players(
             f"wins={wins}/{total_games} winrate={winrate*100:.2f}% "
             f"(95% CI {win_ci_lo*100:.2f}% - {win_ci_hi*100:.2f}%)\n"
         )
-        with open("benchmark_results.txt", "a") as f:
-            f.write(output_str)
+        if getattr(args, "no_benchmark_write", False):
+            logger.info("Skipping benchmark_results.txt write (no_benchmark_write=True).")
+        else:
+            with open("benchmark_results.txt", "a") as f:
+                f.write(output_str)
         print(output_str)
 
         experiment = {
@@ -429,9 +445,12 @@ def benchmark_2_players(
             "seed": args.seed,
         }
         experiments_path = "experiments.jsonl"
-        with open(experiments_path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(experiment) + "\n")
-        logger.info(f"Appended experiment -> {experiments_path}")
+        if getattr(args, "no_benchmark_write", False):
+            logger.info("Skipping experiments.jsonl write (no_benchmark_write=True).")
+        else:
+            with open(experiments_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(experiment) + "\n")
+            logger.info(f"Appended experiment -> {experiments_path}")
         return 0
 
     single = _benchmark_single(args, players_override, fallback_override)
@@ -443,8 +462,11 @@ def benchmark_2_players(
         f"wins={single['wins']}/{single['games_to_play']} winrate={single['winrate']*100:.2f}% "
         f"(95% CI {single['win_ci_lo']*100:.2f}% - {single['win_ci_hi']*100:.2f}%)\n"
     )
-    with open("benchmark_results.txt", "a") as f:
-        f.write(output_str)
+    if getattr(args, "no_benchmark_write", False):
+        logger.info("Skipping benchmark_results.txt write (no_benchmark_write=True).")
+    else:
+        with open("benchmark_results.txt", "a") as f:
+            f.write(output_str)
     print(output_str)
 
     experiment = {
@@ -468,9 +490,12 @@ def benchmark_2_players(
         "seed": single["seed"],
     }
     experiments_path = "experiments.jsonl"
-    with open(experiments_path, "a", encoding="utf-8") as f:
-        f.write(json.dumps(experiment) + "\n")
-    logger.info(f"Appended experiment -> {experiments_path}")
+    if getattr(args, "no_benchmark_write", False):
+        logger.info("Skipping experiments.jsonl write (no_benchmark_write=True).")
+    else:
+        with open(experiments_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(experiment) + "\n")
+        logger.info(f"Appended experiment -> {experiments_path}")
     return 0
 
 

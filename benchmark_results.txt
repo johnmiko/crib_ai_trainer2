@@ -189,8 +189,23 @@ MLPVV5.045Player vs medium [045_large] after 62500 training games avg point diff
 
 new after 1000 self play games, 1000 benchmark games vs best [001] wins=480/1000 winrate=0.480 avg_diff=-0.74, vs beginner: wins=592/1000 winrate=0.592 avg_diff=4.69, Best vs beginner: wins=543/1000 winrate=0.543 avg_diff=2.59
 
-start generating V6 data. 
-.\.venv\Scripts\python.exe .\scripts\do_everything2.py --il_games 1000 --loops 100 --il_workers 10 --il_games_per_worker 100 --benchmark_games 200 --benchmark_workers 10 --benchmark_games_per_worker 100 --dataset_version "discard_v6" --model_version "discard_v6" --strategy regression --discard_loss regression --benchmark_mode full --model_type mlp --mlp_hidden "128,64,32" --players "NeuralRegressionPlayer,beginner" --pegging_ev_mode rollout --win_prob_mode rollout --win_prob_min_score 30
+start generating V6 data. taking too long only generate V6 data for discard
+.\.venv\Scripts\python.exe .\scripts\do_everything2.py --dataset_version "discard_v6" --model_version "discard_v6" --il_games 200 --loops 100 --il_workers 10 --il_games_per_worker 100 --benchmark_games 200 --benchmark_workers 10 --benchmark_games_per_worker 20 --benchmark_mode full --model_type mlp --mlp_hidden "128,64,32"
+
+.\.venv\Scripts\python.exe .\scripts\do_everything2.py --smoke
 
 .\.venv\Scripts\python.exe .\scripts\self_play_loop.py --model_version "discard_v5" --teacher_dataset_version "discard_v5" --selfplay_dataset_version "selfplay_v5"
 
+
+
+MLPVV6.003Player vs beginner [003] after 101 training games avg point diff -22.04 (95% CI -25.60 - -18.48) wins=39/200 winrate=19.50% (95% CI 14.01% - 24.99%)
+MLPVV6.004Player vs beginner [004] after 201 training games avg point diff -22.30 (95% CI -26.04 - -18.55) wins=44/200 winrate=22.00% (95% CI 16.26% - 27.74%)
+MLPVV6.005Player vs beginner [005] after 301 training games avg point diff -22.48 (95% CI -26.34 - -18.63) wins=43/200 winrate=21.50% (95% CI 15.81% - 27.19%)
+MLPVV6.006Player vs beginner [006] after 401 training games avg point diff -22.54 (95% CI -26.18 - -18.90) wins=37/200 winrate=18.50% (95% CI 13.12% - 23.88%)
+
+we are trying to beat 
+  eval_metrics": {
+    "discard_regressor_mse": 0.28760480880737305,
+
+MLPV6 vs medium [010] after 4401 training games avg point diff -1.71 (95% CI -5.04 - 1.62) wins=95/200 winrate=47.50% (95% CI 40.58% - 54.42%)
+MLPV6 vs medium [011] after 5401 training games avg point diff -4.54 (95% CI -8.07 - -1.01) wins=81/200 winrate=40.50% (95% CI 33.70% - 47.30%)

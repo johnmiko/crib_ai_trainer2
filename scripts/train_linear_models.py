@@ -83,20 +83,17 @@ def train_linear_models(args) -> int:
     if args.rank_pairs_per_hand <= 0:
         raise SystemExit("--rank_pairs_per_hand must be > 0.")
     data_dir = Path(args.data_dir)
+    pegging_data_dir = Path(args.pegging_data_dir) if getattr(args, "pegging_data_dir", None) else data_dir
     extra_data_dir = Path(args.extra_data_dir) if args.extra_data_dir else None
     models_dir = Path(args.models_dir)
     models_dir.mkdir(parents=True, exist_ok=True)
     logger.info(f"Loading training data from {data_dir}")
     discard_shards = sorted(data_dir.glob("discard_*.npz"))
-    pegging_shards = sorted(data_dir.glob("pegging_*.npz"))
+    pegging_shards = sorted(pegging_data_dir.glob("pegging_*.npz"))
     if not discard_shards:
         raise SystemExit(f"No discard shards in {data_dir} (expected discard_*.npz)")
     if not pegging_shards:
-        raise SystemExit(f"No pegging shards in {data_dir} (expected pegging_*.npz)")
-    if len(discard_shards) != len(pegging_shards):
-        raise SystemExit(
-            f"Shard count mismatch: {len(discard_shards)} discard vs {len(pegging_shards)} pegging"
-        )
+        raise SystemExit(f"No pegging shards in {pegging_data_dir} (expected pegging_*.npz)")
     extra_discard_shards = []
     extra_pegging_shards = []
     if extra_data_dir:
@@ -104,10 +101,6 @@ def train_linear_models(args) -> int:
         extra_pegging_shards = sorted(extra_data_dir.glob("pegging_*.npz"))
         if not extra_discard_shards or not extra_pegging_shards:
             raise SystemExit(f"No extra shards found in {extra_data_dir}")
-        if len(extra_discard_shards) != len(extra_pegging_shards):
-            raise SystemExit(
-                f"Extra shard count mismatch: {len(extra_discard_shards)} discard vs {len(extra_pegging_shards)} pegging"
-            )
     if args.max_shards is not None:
         if args.max_shards <= 0:
             raise SystemExit("--max_shards must be > 0 if provided")
@@ -313,6 +306,7 @@ def train_linear_models(args) -> int:
         "model_version": model_version,
         "run_id": run_id,
         "data_dir": str(data_dir),
+        "pegging_data_dir": str(pegging_data_dir),
         "extra_data_dir": str(extra_data_dir) if extra_data_dir else None,
         "extra_ratio": extra_ratio if extra_data_dir else 0.0,
         "models_dir": str(models_dir),
@@ -381,6 +375,7 @@ def train_linear_models(args) -> int:
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--data_dir", type=str, default=TRAINING_DATA_DIR)
+    ap.add_argument("--pegging_data_dir", type=str, default=None, help="Optional dataset dir for pegging shards.")
     ap.add_argument("--extra_data_dir", type=str, default=None, help="Optional extra dataset to mix in (e.g., self-play).")
     ap.add_argument("--extra_ratio", type=float, default=0.0, help="Fraction of batches to sample from extra_data_dir.")
     ap.add_argument("--models_dir", type=str, default=MODELS_DIR)

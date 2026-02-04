@@ -1,9 +1,0 @@
-{
-  "perceptron": {
-    "throw_weights": "throw_weights_new.npy",
-    "peg_weights": "peg_weights_new.npy"
-  },
-  "myrmidon": {
-    "config": "config.txt"
-  }
-}
