@@ -31,12 +31,15 @@ from crib_ai_trainer.constants import (
     DEFAULT_EVAL_SAMPLES,
     DEFAULT_MAX_SHARDS,
     DEFAULT_RANK_PAIRS_PER_HAND,
+    DEFAULT_MODEL_TYPE,
+    DEFAULT_MLP_HIDDEN,
 )
 from crib_ai_trainer.players.neural_player import (
     LinearDiscardClassifier,
     LinearValueModel,
     get_discard_feature_indices,
     get_pegging_feature_indices,
+    MLPValueModel,
 )
 import logging
 
@@ -57,6 +60,13 @@ def _resolve_models_dir(base_models_dir: str, model_version: str, run_id: str | 
     if run_id is None:
         run_id = _next_run_id(str(version_dir))
     return str(version_dir / run_id)
+
+def _parse_hidden_sizes(value: str) -> tuple[int, ...]:
+    parts = [p.strip() for p in value.split(",") if p.strip()]
+    if not parts:
+        return (128, 64)
+    return tuple(int(p) for p in parts)
+
 
 def train_linear_models(args) -> int:
     if args.lr <= 0 or args.lr > 0.05:
@@ -105,15 +115,26 @@ def train_linear_models(args) -> int:
 
     discard_feature_indices = get_discard_feature_indices(args.discard_feature_set)
     pegging_feature_indices = get_pegging_feature_indices(args.pegging_feature_set)
+    model_type = args.model_type
+    mlp_hidden = _parse_hidden_sizes(args.mlp_hidden)
+
+    if discard_mode in {"classification", "ranking"} and model_type != "linear":
+        raise SystemExit("Only linear models are supported for classification/ranking at the moment.")
 
     if discard_mode == "classification":
         with np.load(discard_shards[0]) as d0:
             discard_model = LinearDiscardClassifier(int(len(discard_feature_indices)))
     else:
         with np.load(discard_shards[0]) as d0:
-            discard_model = LinearValueModel(int(len(discard_feature_indices)))
+            if model_type == "mlp":
+                discard_model = MLPValueModel(int(len(discard_feature_indices)), mlp_hidden, seed=args.seed)
+            else:
+                discard_model = LinearValueModel(int(len(discard_feature_indices)))
     with np.load(pegging_shards[0]) as p0:
-        pegging_model = LinearValueModel(int(len(pegging_feature_indices)))
+        if model_type == "mlp":
+            pegging_model = MLPValueModel(int(len(pegging_feature_indices)), mlp_hidden, seed=args.seed)
+        else:
+            pegging_model = LinearValueModel(int(len(pegging_feature_indices)))
 
     last_discard_loss = None
     last_pegging_loss = None
@@ -182,10 +203,16 @@ def train_linear_models(args) -> int:
                     "a larger --batch_size (e.g., 2048+), or increase --l2."
                 )
 
-    discard_path = models_dir / "discard_linear.npz"
-    pegging_path = models_dir / "pegging_linear.npz"
-    discard_model.save_npz(str(discard_path))
-    pegging_model.save_npz(str(pegging_path))
+    if model_type == "mlp":
+        discard_path = models_dir / "discard_mlp.pt"
+        pegging_path = models_dir / "pegging_mlp.pt"
+        discard_model.save_pt(str(discard_path))
+        pegging_model.save_pt(str(pegging_path))
+    else:
+        discard_path = models_dir / "discard_linear.npz"
+        pegging_path = models_dir / "pegging_linear.npz"
+        discard_model.save_npz(str(discard_path))
+        pegging_model.save_npz(str(pegging_path))
     # “last loss” = the mean squared error (MSE) from the final training step that ran.
     print(f"Saved discard model -> {discard_path}")
     if last_discard_loss is not None:
@@ -258,11 +285,13 @@ def train_linear_models(args) -> int:
         "run_id": run_id,
         "data_dir": str(data_dir),
         "models_dir": str(models_dir),
+        "model_type": model_type,
         "discard_loss": discard_mode,
         "discard_feature_set": args.discard_feature_set,
         "pegging_feature_set": args.pegging_feature_set,
         "discard_feature_dim": int(len(discard_feature_indices)),
         "pegging_feature_dim": int(len(pegging_feature_indices)),
+        "mlp_hidden": list(mlp_hidden),
         "epochs": args.epochs,
         "lr": args.lr,
         "batch_size": args.batch_size,
@@ -289,11 +318,13 @@ def train_linear_models(args) -> int:
         f"run_id: {model_meta['run_id']}",
         f"data_dir: {model_meta['data_dir']}",
         f"models_dir: {model_meta['models_dir']}",
+        f"model_type: {model_meta['model_type']}",
         f"discard_loss: {model_meta['discard_loss']}",
         f"discard_feature_set: {model_meta['discard_feature_set']}",
         f"pegging_feature_set: {model_meta['pegging_feature_set']}",
         f"discard_feature_dim: {model_meta['discard_feature_dim']}",
         f"pegging_feature_dim: {model_meta['pegging_feature_dim']}",
+        f"mlp_hidden: {model_meta['mlp_hidden']}",
         f"epochs: {model_meta['epochs']}",
         f"lr: {model_meta['lr']}",
         f"batch_size: {model_meta['batch_size']}",
@@ -325,6 +356,8 @@ if __name__ == "__main__":
     ap.add_argument("--discard_loss", type=str, default=DEFAULT_DISCARD_LOSS, choices=["classification", "regression", "ranking"])
     ap.add_argument("--discard_feature_set", type=str, default=DEFAULT_DISCARD_FEATURE_SET, choices=["base", "engineered_no_scores", "full"])
     ap.add_argument("--pegging_feature_set", type=str, default=DEFAULT_PEGGING_MODEL_FEATURE_SET, choices=["base", "full_no_scores", "full"])
+    ap.add_argument("--model_type", type=str, default=DEFAULT_MODEL_TYPE, choices=["linear", "mlp"])
+    ap.add_argument("--mlp_hidden", type=str, default=DEFAULT_MLP_HIDDEN, help="Comma-separated hidden sizes, e.g. 128,64")
     ap.add_argument("--lr", type=float, default=DEFAULT_LR)
     ap.add_argument("--epochs", type=int, default=DEFAULT_EPOCHS)
     ap.add_argument("--batch_size", type=int, default=DEFAULT_BATCH_SIZE)

@@ -41,6 +41,7 @@ from crib_ai_trainer.players.neural_player import (
     NeuralRegressionPlayer,
     NeuralDiscardOnlyPlayer,
     NeuralPegOnlyPlayer,
+    MLPValueModel,
 )
 import logging
 
@@ -105,7 +106,6 @@ def benchmark_2_players(
 ) -> int:
     args.models_dir = _resolve_models_dir(args)
     logger.info("Loading models from %s", args.models_dir)    
-    pegging_model = LinearValueModel.load_npz(f"{args.models_dir}/pegging_linear.npz")
     # print("discard |w|", float(np.linalg.norm(discard_model.w)), "b", float(discard_model.b))
     # print("pegging  |w|", float(np.linalg.norm(pegging_model.w)), "b", float(pegging_model.b))
     # discard and pegging weights after 4000 games
@@ -145,18 +145,33 @@ def benchmark_2_players(
 
     # Load model metadata if available to align feature sets automatically.
     meta_path = os.path.join(args.models_dir, "model_meta.json")
+    model_type = "linear"
+    mlp_hidden = None
     if os.path.exists(meta_path):
         try:
             with open(meta_path, "r", encoding="utf-8") as f:
                 meta = json.load(f)
             args.discard_feature_set = meta.get("discard_feature_set", args.discard_feature_set)
             args.pegging_feature_set = meta.get("pegging_feature_set", args.pegging_feature_set)
+            model_type = meta.get("model_type", model_type)
+            mlp_hidden = meta.get("mlp_hidden", None)
         except Exception:
             pass
 
-    model_tag = resolve_model_tag()
-
     fallback_player_name = fallback_override or args.fallback_player
+
+    def _load_discard_model():
+        if model_type == "mlp":
+            return MLPValueModel.load_pt(f"{args.models_dir}/discard_mlp.pt")
+        return LinearValueModel.load_npz(f"{args.models_dir}/discard_linear.npz")
+
+    def _load_pegging_model():
+        if model_type == "mlp":
+            return MLPValueModel.load_pt(f"{args.models_dir}/pegging_mlp.pt")
+        return LinearValueModel.load_npz(f"{args.models_dir}/pegging_linear.npz")
+
+    model_tag = resolve_model_tag()
+    pegging_model = _load_pegging_model()
 
     def player_factory(name: str):
         if name == "NeuralClassificationPlayer":
@@ -169,7 +184,7 @@ def benchmark_2_players(
                 pegging_feature_set=args.pegging_feature_set,
             )
         if name == "NeuralRegressionPlayer":
-            discard_model = LinearValueModel.load_npz(f"{args.models_dir}/discard_linear.npz")
+            discard_model = _load_discard_model()
             return NeuralRegressionPlayer(
                 discard_model,
                 pegging_model,
@@ -178,7 +193,7 @@ def benchmark_2_players(
                 pegging_feature_set=args.pegging_feature_set,
             )
         if name == "NeuralDiscardOnlyPlayer":
-            discard_model = LinearDiscardClassifier.load_npz(f"{args.models_dir}/discard_linear.npz")
+            discard_model = _load_discard_model()
             fallback = base_player_factory(fallback_player_name)
             return NeuralDiscardOnlyPlayer(
                 discard_model,
@@ -250,6 +265,7 @@ def benchmark_2_players(
         diff_ci_lo = avg_diff
         diff_ci_hi = avg_diff
     display_names = []
+    model_prefix = "MLP" if model_type == "mlp" else "Linear"
     for name in player_names:
         if name.startswith("Neural") and name.endswith("Player") and "Regression" in name:
             tag = model_tag
@@ -269,13 +285,13 @@ def benchmark_2_players(
                 except Exception:
                     version_digits = []
             if version_digits:
-                display_names.append(f"Neural{'.'.join(version_digits)}Player")
+                display_names.append(f"{model_prefix}V{'.'.join(version_digits)}Player")
             else:
                 version_label = "".join(c for c in tag if c.isdigit())
                 if version_label:
-                    display_names.append(f"NeuralV{version_label}Player")
+                    display_names.append(f"{model_prefix}V{version_label}Player")
                 else:
-                    display_names.append(f"Neural{tag.capitalize()}Player")
+                    display_names.append(f"{model_prefix}{tag.capitalize()}Player")
         else:
             display_names.append(name)
     model_dir_label = os.path.basename(os.path.normpath(args.models_dir))

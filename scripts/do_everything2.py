@@ -34,6 +34,8 @@ from crib_ai_trainer.constants import (
     DEFAULT_MODEL_TAG,
     DEFAULT_SEED,
     DEFAULT_USE_RANDOM_SEED,
+    DEFAULT_MODEL_TYPE,
+    DEFAULT_MLP_HIDDEN,
 )
 from scripts.benchmark_2_players import benchmark_2_players
 from scripts.generate_il_data import generate_il_data, _resolve_output_dir
@@ -78,6 +80,8 @@ if __name__ == "__main__":
     ap.add_argument("--discard_loss", type=str, default=DEFAULT_DISCARD_LOSS, choices=["classification", "regression", "ranking"])
     ap.add_argument("--discard_feature_set", type=str, default=DEFAULT_DISCARD_FEATURE_SET, choices=["base", "engineered_no_scores", "full"])
     ap.add_argument("--pegging_model_feature_set", type=str, default=DEFAULT_PEGGING_MODEL_FEATURE_SET, choices=["base", "full_no_scores", "full"])
+    ap.add_argument("--model_type", type=str, default=DEFAULT_MODEL_TYPE, choices=["linear", "mlp"])
+    ap.add_argument("--mlp_hidden", type=str, default=DEFAULT_MLP_HIDDEN)
     ap.add_argument("--lr", type=float, default=DEFAULT_LR)
     ap.add_argument("--batch_size", type=int, default=DEFAULT_BATCH_SIZE)
     ap.add_argument("--l2", type=float, default=DEFAULT_L2)
@@ -164,4 +168,3 @@ if __name__ == "__main__":
 # python .\scripts\do_everything2.py --il_games 2000 --loops -1 --dataset_version "discard_v3" --model_version "discard_v3" --strategy regression --discard_loss regression --benchmark_games 1000 --benchmark_mode full
 # this does the engineered no scores feature set
 # .\.venv\Scripts\python.exe .\scripts\do_everything2.py --il_games 2000 --loops -1 --dataset_version "discard_v3" --model_version "discard_v3" --strategy regression --discard_loss regression --benchmark_games 1000 --benchmark_mode full --discard_feature_set engineered_no_scores --pegging_model_feature_set full_no_scores
-

@@ -22,6 +22,8 @@ These affect all four scripts:
 - `MAX_SHARDS`: limit shard count (0 = all)
 - `RANK_PAIRS_PER_HAND`: ranking loss pairs per hand
 - `SEED`, `USE_RANDOM_SEED`: RNG behavior
+- `MODEL_TYPE`: `linear` or `mlp`
+- `MLP_HIDDEN`: comma-separated hidden sizes for the MLP (e.g., `128,64`)
 
 ## Script Quick Usage (uses defaults)
 Run any of these without flags and they will use `.env`:

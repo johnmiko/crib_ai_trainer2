@@ -88,3 +88,8 @@ Below shows that unmasked is behaving better than masked. But not improving afte
 NeuralV3.020Player vs beginner [020] after 17414 training games avg point diff -5.28 (95% CI -6.01 - -4.56) wins=2052/5000 winrate=41.0%
 NeuralV3.026Player vs beginner [026_masked] after 27414 training games avg point diff -5.55 (95% CI -6.24 - -4.86) wins=2026/5000 winrate=40.5%
 NeuralV3.026Player vs beginner [026] after 27414 training games avg point diff -4.84 (95% CI -5.56 - -4.12) wins=2072/5000 winrate=41.4%
+
+MLPVV3.027Player vs beginner [027] after 27414 training games avg point diff -1.90 (95% CI -5.53 - 1.74) wins=90/200 winrate=45.0%
+NeuralDiscardOnlyPlayer vs beginner [027] after 27414 training games avg point diff 1.77 (95% CI -1.85 - 5.39) wins=103/200 winrate=51.5%
+NeuralPegOnlyPlayer vs beginner [027] after 27414 training games avg point diff 0.10 (95% CI -3.52 - 3.73) wins=102/200 winrate=51.0%
+

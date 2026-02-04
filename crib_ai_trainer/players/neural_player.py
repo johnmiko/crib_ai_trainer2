@@ -687,6 +687,109 @@ class LinearValueModel:
         m.b = b
         return m
 
+
+class MLPValueModel:
+    """Small MLP regressor using PyTorch for nonlinear value prediction."""
+
+    def __init__(self, input_dim: int, hidden_sizes: Tuple[int, ...] = (128, 64), seed: int = 0):
+        import torch
+        import torch.nn as nn
+
+        torch.manual_seed(seed)
+        layers = []
+        prev = input_dim
+        for h in hidden_sizes:
+            layers.append(nn.Linear(prev, h))
+            layers.append(nn.ReLU())
+            prev = h
+        layers.append(nn.Linear(prev, 1))
+        self.model = nn.Sequential(*layers)
+        self.input_dim = input_dim
+        self.hidden_sizes = tuple(int(h) for h in hidden_sizes)
+
+    def predict(self, x: np.ndarray) -> float:
+        import torch
+
+        with torch.no_grad():
+            t = torch.tensor(x, dtype=torch.float32).unsqueeze(0)
+            y = self.model(t).squeeze(0).squeeze(0).item()
+        return float(y)
+
+    def predict_batch(self, X: np.ndarray) -> np.ndarray:
+        import torch
+
+        with torch.no_grad():
+            t = torch.tensor(X, dtype=torch.float32)
+            y = self.model(t).squeeze(1).cpu().numpy()
+        return y.astype(np.float32, copy=False)
+
+    def fit_mse(
+        self,
+        X: np.ndarray,
+        y: np.ndarray,
+        *,
+        lr: float = 0.001,
+        epochs: int = 5,
+        batch_size: int = 1024,
+        l2: float = 0.0,
+        seed: int = 0,
+        shuffle: bool = True,
+    ) -> List[float]:
+        import torch
+        import torch.nn as nn
+        import torch.optim as optim
+
+        torch.manual_seed(seed)
+        X = X.astype(np.float32, copy=False)
+        y = y.astype(np.float32, copy=False)
+        N = X.shape[0]
+
+        optimizer = optim.Adam(self.model.parameters(), lr=lr, weight_decay=l2)
+        loss_fn = nn.MSELoss()
+
+        losses: List[float] = []
+        for _ in range(epochs):
+            idx = np.arange(N)
+            if shuffle:
+                np.random.default_rng(seed).shuffle(idx)
+            epoch_loss = 0.0
+            n_seen = 0
+            for start in range(0, N, batch_size):
+                batch_idx = idx[start:start + batch_size]
+                xb = torch.tensor(X[batch_idx], dtype=torch.float32)
+                yb = torch.tensor(y[batch_idx], dtype=torch.float32)
+                optimizer.zero_grad()
+                pred = self.model(xb).squeeze(1)
+                loss = loss_fn(pred, yb)
+                loss.backward()
+                optimizer.step()
+                epoch_loss += float(loss.item()) * len(batch_idx)
+                n_seen += len(batch_idx)
+            losses.append(epoch_loss / max(1, n_seen))
+        return losses
+
+    def save_pt(self, path: str) -> None:
+        import torch
+
+        torch.save(
+            {
+                "state_dict": self.model.state_dict(),
+                "input_dim": self.input_dim,
+                "hidden_sizes": self.hidden_sizes,
+            },
+            path,
+        )
+
+    @classmethod
+    def load_pt(cls, path: str) -> "MLPValueModel":
+        import torch
+
+        data = torch.load(path, map_location="cpu")
+        m = cls(int(data["input_dim"]), tuple(int(h) for h in data["hidden_sizes"]))
+        m.model.load_state_dict(data["state_dict"])
+        m.model.eval()
+        return m
+
 def select_discard_with_model(discard_model, hand: List[Card], dealer_is_self: bool) -> Tuple[Card, Card]:
     return select_discard_with_model_with_scores(discard_model, hand, dealer_is_self, None, None)
 
