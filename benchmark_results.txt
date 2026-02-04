@@ -153,14 +153,16 @@ MLPVV5.044Player vs medium [044] after 58500 training games avg point diff -0.83
 
 .\.venv\Scripts\python.exe .\scripts\train_linear_models.py --data_dir "il_datasets\discard_v5\001" --models_dir "models\regression" --model_version "discard_v5" --run_id 045_XXL --discard_loss regression --model_type mlp --mlp_hidden "2048,1024"
 .\.venv\Scripts\python.exe .\scripts\train_linear_models.py --data_dir "il_datasets\discard_v5\001" --models_dir "models\regression" --model_version "discard_v5" --run_id 045_extra_large --discard_loss regression --model_type mlp --mlp_hidden "1024,512"
-.\.venv\Scripts\python.exe .\scripts\train_linear_models.py --data_dir "il_datasets\discard_v5\001" --models_dir "models\regression" --model_version "discard_v5" --run_id 045_large --discard_loss regression --model_type mlp --mlp_hidden "512,256"
-.\.venv\Scripts\python.exe .\scripts\train_linear_models.py --data_dir "il_datasets\discard_v5\001" --models_dir "models\regression" --model_version "discard_v5" --run_id 017_medium --discard_loss regression --model_type mlp --mlp_hidden "256,128"
+.\.venv\Scripts\python.exe .\scripts\train_linear_models.py --data_dir "il_datasets\discard_v5\001" --models_dir "models\regression" --model_version "discard_v5" --run_id 045_large3 --discard_loss regression --model_type mlp --mlp_hidden "512,256,128"
+.\.venv\Scripts\python.exe .\scripts\train_linear_models.py --data_dir "il_datasets\discard_v5\001" --models_dir "models\regression" --model_version "discard_v5" --run_id 045_medium3 --discard_loss regression --model_type mlp --mlp_hidden "256,128,64"
 .\.venv\Scripts\python.exe .\scripts\train_linear_models.py --data_dir "il_datasets\discard_v5\001" --models_dir "models\regression" --model_version "discard_v5" --run_id 045_small --discard_loss regression --model_type mlp --mlp_hidden "128,64"
 .\.venv\Scripts\python.exe .\scripts\train_linear_models.py --data_dir "il_datasets\discard_v5\001" --models_dir "models\regression" --model_version "discard_v5" --run_id 045_small3 --discard_loss regression --model_type mlp --mlp_hidden "128,64,32"
-.\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py --players NeuralRegressionPlayer,beginner --benchmark_games 3000 --models_dir "models\regression\discard_v5\045_extra_large" --data_dir "il_datasets\discard_v5\001"
-.\.venv\Scripts\python.exe .\scripts\self_play_loop.py --models_dir "models\regression" --model_version "discard_v5" --teacher_dataset_version "discard_v5" --selfplay_dataset_version "selfplay_v5" --games 500 --benchmark_games 1000 --selfplay_ratio 0.3 --model_type mlp --mlp_hidden "512,256"
+.\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py --players NeuralRegressionPlayer,beginner --benchmark_games 6000 --models_dir "models\regression\discard_v5\045_large3" --data_dir "il_datasets\discard_v5\001" --no_auto_mixed_benchmarks
+
 
 against beginner player
+medium vs beginner avg point diff 3.34 (95% CI 2.69 - 3.98) wins=3330/6000 winrate=55.50% (95% CI 54.24% - 56.75%)
+MLPVV5.0453Player vs beginner [045_small3] after 62500 training games avg point diff 3.12 (95% CI 2.47 - 3.76) wins=3319/6000 winrate=55.32% (95% CI 54.06% - 56.57%)
 MLPVV5.045Player vs beginner [045_large] after 62500 training games avg point diff 3.34 (95% CI 2.70 - 3.98) wins=3319/6000 winrate=55.3%
 MLPVV5.045Player vs beginner [045_extra_large] after 62500 training games avg point diff 2.74 (95% CI 2.09 - 3.38) wins=3246/6000 winrate=54.1%
 
@@ -170,4 +172,6 @@ MLPVV5.045Player vs medium [045_small] after 62500 training games avg point diff
 MLPVV5.0453Player vs medium [045_small3] after 62500 training games avg point diff -0.83 (95% CI -1.72 - 0.05) wins=1480/3000 winrate=49.3%
 MLPVV5.045Player vs medium [045_large] after 62500 training games avg point diff 0.27 (95% CI -0.62 - 1.15) wins=1530/3000 winrate=51.0%
 MLPVV5.045Player vs medium [045_extra_large] after 62500 training games avg point diff -0.60 (95% CI -1.48 - 0.28) wins=1485/3000 winrate=49.5%
+MLPVV5.045Player vs medium [045_large] after 62500 training games avg point diff -0.79 (95% CI -1.41 - -0.16) wins=2891/6000 winrate=48.2%
 
+.\.venv\Scripts\python.exe .\scripts\self_play_loop.py --models_dir "models\regression" --model_version "discard_v5" --teacher_dataset_version "discard_v5" --selfplay_dataset_version "selfplay_v5" --games 1000 --benchmark_games 1000 --selfplay_ratio 0.3 --model_type mlp --mlp_hidden "512,256"

@@ -31,6 +31,7 @@ from crib_ai_trainer.constants import (
 
 from cribbage.utils import play_multiple_games
 from cribbage.players.beginner_player import BeginnerPlayer
+from cribbage.players.medium_player import MediumPlayer
 
 from scripts.generate_self_play_data import generate_self_play_data, _resolve_models_dir, _resolve_output_dir
 from scripts.train_linear_models import train_linear_models
@@ -163,10 +164,10 @@ if __name__ == "__main__":
         best_player = _make_player(best_path, name_override=f"selfplay:best:{best_path.name}")
         new_player = _make_player(new_path, name_override=f"selfplay:new:{new_path.name}")
 
-        print("Benchmark: BEST vs BEGINNER")
-        best_vs_beginner = _evaluate(best_player, BeginnerPlayer(name="beginner"), args.benchmark_games)
-        print("Benchmark: NEW vs BEGINNER")
-        new_vs_beginner = _evaluate(new_player, BeginnerPlayer(name="beginner"), args.benchmark_games)
+        print("Benchmark: BEST vs MEDIUM")
+        best_vs_medium = _evaluate(best_player, MediumPlayer(name="medium"), args.benchmark_games)
+        print("Benchmark: NEW vs MEDIUM")
+        new_vs_medium = _evaluate(new_player, MediumPlayer(name="medium"), args.benchmark_games)
         print("Benchmark: NEW vs BEST")
         new_vs_best = _evaluate(new_player, best_player, args.benchmark_games)
 
@@ -174,15 +175,15 @@ if __name__ == "__main__":
         accept = (
             new_vs_best["winrate"] > 0.5
             and float(sum(new_vs_best["diffs"]) / len(new_vs_best["diffs"])) > 0.0
-            and new_vs_beginner["winrate"] >= best_vs_beginner["winrate"]
+            and new_vs_medium["winrate"] >= best_vs_medium["winrate"]
         )
 
         record = {
             "timestamp_utc": datetime.now(timezone.utc).isoformat(),
             "best_model": str(best_path),
             "new_model": str(new_path),
-            "best_vs_beginner": best_vs_beginner,
-            "new_vs_beginner": new_vs_beginner,
+            "best_vs_medium": best_vs_medium,
+            "new_vs_medium": new_vs_medium,
             "new_vs_best": new_vs_best,
             "accepted": accept,
         }
@@ -213,12 +214,12 @@ if __name__ == "__main__":
         print(f"- Best model: {best_path}")
         print(f"- New model: {new_path}")
         print(
-            f"- Best vs beginner: wins={_wins(best_vs_beginner)}/{_games(best_vs_beginner)} "
-            f"winrate={best_vs_beginner['winrate']:.3f} avg_diff={_avg_diff(best_vs_beginner):.2f}"
+            f"- Best vs medium: wins={_wins(best_vs_medium)}/{_games(best_vs_medium)} "
+            f"winrate={best_vs_medium['winrate']:.3f} avg_diff={_avg_diff(best_vs_medium):.2f}"
         )
         print(
-            f"- New vs beginner: wins={_wins(new_vs_beginner)}/{_games(new_vs_beginner)} "
-            f"winrate={new_vs_beginner['winrate']:.3f} avg_diff={_avg_diff(new_vs_beginner):.2f}"
+            f"- New vs medium: wins={_wins(new_vs_medium)}/{_games(new_vs_medium)} "
+            f"winrate={new_vs_medium['winrate']:.3f} avg_diff={_avg_diff(new_vs_medium):.2f}"
         )
         print(
             f"- New vs best: wins={_wins(new_vs_best)}/{_games(new_vs_best)} "
