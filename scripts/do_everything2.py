@@ -18,8 +18,8 @@ if __name__ == "__main__":
 
     if args.data_dir is None:
         args.data_dir = args.training_dir
-    if args.loops == 0 or args.loops < -1:
-        raise SystemExit("--loops must be >= 1 or -1 for infinite")
+    if args.loops <= 0:
+        raise SystemExit("--loops must be >= 1")
 
     base_models_dir = args.models_dir
     # Resolve dataset directory. If training_dir points to a run folder but a different
@@ -48,10 +48,7 @@ if __name__ == "__main__":
     i = 0
     while True:
         i += 1
-        if args.loops == -1:
-            print(f"\n=== Loop {i}/infinity ===")
-        else:
-            print(f"\n=== Loop {i}/{args.loops} ===")
+        print(f"\n=== Loop {i}/{args.loops} ===")
 
         print(f"dataset_dir: {dataset_dir}", flush=True)
         print(f"next_model_version: {args.model_version}", flush=True)
@@ -62,16 +59,18 @@ if __name__ == "__main__":
             args.seed,
             args.strategy,
             data_pegging_feature_set,
-        args.crib_ev_mode,
-        args.crib_mc_samples,
-        args.pegging_label_mode,
-        args.pegging_rollouts,
-        args.pegging_ev_mode,
-        args.pegging_ev_rollouts,
-        args.win_prob_mode,
-        args.win_prob_rollouts,
-        args.win_prob_min_score,
-    )
+            args.crib_ev_mode,
+            args.crib_mc_samples,
+            args.pegging_label_mode,
+            args.pegging_rollouts,
+            args.pegging_ev_mode,
+            args.pegging_ev_rollouts,
+            args.win_prob_mode,
+            args.win_prob_rollouts,
+            args.win_prob_min_score,
+            args.il_workers,
+            args.il_games_per_worker,
+        )
 
         print("step: train_linear_models", flush=True)
         args.pegging_feature_set = args.pegging_model_feature_set
@@ -94,11 +93,11 @@ if __name__ == "__main__":
             benchmark_2_players(args)
         args.pegging_feature_set = data_pegging_feature_set
 
-        if args.loops != -1 and i >= args.loops:
+        if i >= args.loops:
             break
 
 # python .\scripts\do_everything2.py
 # below does the full feature set
-# python .\scripts\do_everything2.py --il_games 2000 --loops -1 --dataset_version "discard_v3" --model_version "discard_v3" --strategy regression --discard_loss regression --benchmark_games 1000 --benchmark_mode full
+# python .\scripts\do_everything2.py --il_games 2000 --loops 100 --dataset_version "discard_v3" --model_version "discard_v3" --strategy regression --discard_loss regression --benchmark_games 1000 --benchmark_mode full
 # this does the engineered no scores feature set
-# .\.venv\Scripts\python.exe .\scripts\do_everything2.py --il_games 2000 --loops -1 --dataset_version "discard_v3" --model_version "discard_v3" --strategy regression --discard_loss regression --benchmark_games 1000 --benchmark_mode full --discard_feature_set engineered_no_scores --pegging_model_feature_set full_no_scores
+# .\.venv\Scripts\python.exe .\scripts\do_everything2.py --il_games 2000 --loops 100 --dataset_version "discard_v3" --model_version "discard_v3" --strategy regression --discard_loss regression --benchmark_games 1000 --benchmark_mode full --discard_feature_set engineered_no_scores --pegging_model_feature_set full_no_scores

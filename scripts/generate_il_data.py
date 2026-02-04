@@ -15,6 +15,7 @@ upgrade the targets (Monte Carlo / rollout / self-play RL).
 from __future__ import annotations
 import os
 from pathlib import Path
+import multiprocessing as mp
 import sys
 
 from cribbage.cribbagegame import score_hand, score_play as score_play
@@ -1472,35 +1473,21 @@ def play_one_game(players) -> None:
     # Some engines have game.play(), some run rounds internally.
     final_pegging_score = game.start()
 
-def generate_il_data(
-    games,
-    out_dir,
-    seed,
-    strategy,
-    pegging_feature_set: str = "full",
-    crib_ev_mode: str = "mc",
-    crib_mc_samples: int = 32,
-    pegging_label_mode: str = "immediate",
-    pegging_rollouts: int = 32,
-    win_prob_mode: str = "off",
-    win_prob_rollouts: int = 16,
-    win_prob_min_score: int = 90,
-    pegging_ev_mode: str = "off",
-    pegging_ev_rollouts: int = 16,
-) -> int:
-    if seed is None:
-        seed = secrets.randbits(32)
-        logger.info(f"No seed provided, using random seed={seed}")
-    if games < 0:
-        logger.info(f"Generating IL data forever into {out_dir} using 2 medium players")
-    else:
-        logger.info(f"Generating IL data for {games} games into {out_dir} using 2 medium players")
-    rng = np.random.default_rng(seed)
-    
-    # Get starting cumulative count
-    cumulative_games = get_cumulative_game_count(out_dir)
-    save_interval = 2000
-    
+
+def _init_logging_players(
+    strategy: str,
+    seed: int | None,
+    pegging_feature_set: str,
+    crib_ev_mode: str,
+    crib_mc_samples: int,
+    pegging_label_mode: str,
+    pegging_rollouts: int,
+    win_prob_mode: str,
+    win_prob_rollouts: int,
+    win_prob_min_score: int,
+    pegging_ev_mode: str,
+    pegging_ev_rollouts: int,
+):
     if strategy == "classification":
         log = LoggedRegPegClasDiscardData()
         p1 = LoggingMediumPlayer(
@@ -1573,7 +1560,7 @@ def generate_il_data(
             pegging_ev_mode=pegging_ev_mode,
             pegging_ev_rollouts=pegging_ev_rollouts,
         )
-    elif strategy == "regression":  
+    elif strategy == "regression":
         log = LoggedRegPegRegDiscardData()
         p1 = LoggingMediumPlayer(
             "teacher1",
@@ -1607,7 +1594,189 @@ def generate_il_data(
             win_prob_rollouts=win_prob_rollouts,
             win_prob_min_score=win_prob_min_score,
         )
-    
+    else:
+        raise ValueError(f"Unknown strategy: {strategy}")
+    return log, p1, p2
+
+
+def _collect_il_data_worker(
+    games: int,
+    strategy: str,
+    pegging_feature_set: str,
+    crib_ev_mode: str,
+    crib_mc_samples: int,
+    pegging_label_mode: str,
+    pegging_rollouts: int,
+    win_prob_mode: str,
+    win_prob_rollouts: int,
+    win_prob_min_score: int,
+    pegging_ev_mode: str,
+    pegging_ev_rollouts: int,
+    seed: int,
+    worker_id: int,
+) -> dict:
+    log, p1, p2 = _init_logging_players(
+        strategy,
+        seed,
+        pegging_feature_set,
+        crib_ev_mode,
+        crib_mc_samples,
+        pegging_label_mode,
+        pegging_rollouts,
+        win_prob_mode,
+        win_prob_rollouts,
+        win_prob_min_score,
+        pegging_ev_mode,
+        pegging_ev_rollouts,
+    )
+    i = 0
+    while i < games:
+        if (i % 2) == 1:
+            players = [p2, p1]
+        else:
+            players = [p1, p2]
+        play_one_game(players)
+        i += 1
+    result = {
+        "X_discard": log.X_discard,
+        "y_discard": log.y_discard,
+        "y_discard_win": getattr(log, "y_discard_win", None),
+        "X_pegging": log.X_pegging,
+        "y_pegging": log.y_pegging,
+    }
+    return result
+
+def generate_il_data(
+    games,
+    out_dir,
+    seed,
+    strategy,
+    pegging_feature_set: str = "full",
+    crib_ev_mode: str = "mc",
+    crib_mc_samples: int = 32,
+    pegging_label_mode: str = "immediate",
+    pegging_rollouts: int = 32,
+    win_prob_mode: str = "off",
+    win_prob_rollouts: int = 16,
+    win_prob_min_score: int = 90,
+    pegging_ev_mode: str = "off",
+    pegging_ev_rollouts: int = 16,
+    workers: int = 1,
+    games_per_worker: int | None = None,
+) -> int:
+    if seed is None:
+        seed = secrets.randbits(32)
+        logger.info(f"No seed provided, using random seed={seed}")
+    if games < 0:
+        logger.info(f"Generating IL data forever into {out_dir} using 2 medium players")
+    else:
+        logger.info(f"Generating IL data for {games} games into {out_dir} using 2 medium players")
+    if workers < 1:
+        workers = 1
+
+    # Get starting cumulative count
+    cumulative_games = get_cumulative_game_count(out_dir)
+    save_interval = 2000
+
+    if games < 0 and workers > 1:
+        logger.info("Parallel mode is not supported for infinite games. Falling back to 1 worker.")
+        workers = 1
+
+    if workers > 1 and games >= 0:
+        per_worker_games = games_per_worker if games_per_worker is not None else games
+        if per_worker_games <= 0:
+            raise ValueError("games_per_worker must be > 0 when using multiple workers.")
+        total_games = per_worker_games * workers
+        logger.info(
+            f"Generating IL data with {workers} workers x {per_worker_games} games "
+            f"(total {total_games}) into {out_dir}"
+        )
+        worker_args = []
+        for worker_id in range(workers):
+            worker_seed = seed + worker_id if seed is not None else secrets.randbits(32)
+            worker_args.append(
+                (
+                    per_worker_games,
+                    strategy,
+                    pegging_feature_set,
+                    crib_ev_mode,
+                    crib_mc_samples,
+                    pegging_label_mode,
+                    pegging_rollouts,
+                    win_prob_mode,
+                    win_prob_rollouts,
+                    win_prob_min_score,
+                    pegging_ev_mode,
+                    pegging_ev_rollouts,
+                    worker_seed,
+                    worker_id,
+                )
+            )
+        ctx = mp.get_context("spawn")
+        results = []
+        with ctx.Pool(processes=workers) as pool:
+            for result in pool.starmap(_collect_il_data_worker, worker_args):
+                results.append(result)
+
+        log, _, _ = _init_logging_players(
+            strategy,
+            seed,
+            pegging_feature_set,
+            crib_ev_mode,
+            crib_mc_samples,
+            pegging_label_mode,
+            pegging_rollouts,
+            win_prob_mode,
+            win_prob_rollouts,
+            win_prob_min_score,
+            pegging_ev_mode,
+            pegging_ev_rollouts,
+        )
+        for result in results:
+            log.X_discard.extend(result["X_discard"])
+            log.y_discard.extend(result["y_discard"])
+            if hasattr(log, "y_discard_win") and result.get("y_discard_win"):
+                log.y_discard_win.extend(result["y_discard_win"])
+            log.X_pegging.extend(result["X_pegging"])
+            log.y_pegging.extend(result["y_pegging"])
+
+        cumulative_games += total_games
+        save_data(
+            log,
+            out_dir,
+            cumulative_games,
+            strategy,
+            seed,
+            pegging_feature_set,
+            crib_ev_mode,
+            crib_mc_samples,
+            pegging_label_mode,
+            pegging_rollouts,
+            pegging_ev_mode,
+            pegging_ev_rollouts,
+            win_prob_mode,
+            win_prob_rollouts,
+            win_prob_min_score,
+        )
+        return 0
+
+    rng = np.random.default_rng(seed)
+
+    log, p1, p2 = _init_logging_players(
+        strategy,
+        seed,
+        pegging_feature_set,
+        crib_ev_mode,
+        crib_mc_samples,
+        pegging_label_mode,
+        pegging_rollouts,
+        win_prob_mode,
+        win_prob_rollouts,
+        win_prob_min_score,
+        pegging_ev_mode,
+        pegging_ev_rollouts,
+    )
+
     games_since_save = 0
 
     i = 0
@@ -1717,6 +1886,8 @@ if __name__ == "__main__":
         args.win_prob_min_score,
         args.pegging_ev_mode,
         args.pegging_ev_rollouts,
+        args.workers,
+        args.games_per_worker,
     )
 
 # python .\scripts\generate_il_data.py

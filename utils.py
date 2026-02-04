@@ -14,8 +14,12 @@ from crib_ai_trainer.constants import (
     DEFAULT_PEGGING_MODEL_FEATURE_SET,
     DEFAULT_GAMES_PER_LOOP,
     DEFAULT_LOOPS,
+    DEFAULT_IL_WORKERS,
+    DEFAULT_IL_GAMES_PER_WORKER,
     DEFAULT_EPOCHS,
     DEFAULT_BENCHMARK_GAMES,
+    DEFAULT_BENCHMARK_WORKERS,
+    DEFAULT_BENCHMARK_GAMES_PER_WORKER,
     DEFAULT_BENCHMARK_PLAYERS,
     DEFAULT_LR,
     DEFAULT_BATCH_SIZE,
@@ -65,6 +69,18 @@ def build_generate_il_parser() -> argparse.ArgumentParser:
         type=int,
         default=DEFAULT_GAMES_PER_LOOP,
         help="Number of games to simulate. Use -1 to run forever.",
+    )
+    ap.add_argument(
+        "--workers",
+        type=int,
+        default=DEFAULT_IL_WORKERS,
+        help="Number of worker processes for IL generation.",
+    )
+    ap.add_argument(
+        "--games_per_worker",
+        type=int,
+        default=DEFAULT_IL_GAMES_PER_WORKER,
+        help="Games per worker when using multiple workers.",
     )
     ap.add_argument("--out_dir", type=str, default=TRAINING_DATA_DIR)
     ap.add_argument("--dataset_version", type=str, default=DEFAULT_DATASET_VERSION)
@@ -178,6 +194,18 @@ def build_benchmark_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser()
     ap.add_argument("--players", type=str, default=DEFAULT_BENCHMARK_PLAYERS)
     ap.add_argument("--benchmark_games", type=int, default=DEFAULT_BENCHMARK_GAMES)
+    ap.add_argument(
+        "--benchmark_workers",
+        type=int,
+        default=DEFAULT_BENCHMARK_WORKERS,
+        help="Number of worker processes for benchmarking.",
+    )
+    ap.add_argument(
+        "--benchmark_games_per_worker",
+        type=int,
+        default=DEFAULT_BENCHMARK_GAMES_PER_WORKER,
+        help="Games per worker when using multiple benchmark workers.",
+    )
     ap.add_argument("--models_dir", type=str, default=MODELS_DIR, help="Base models dir or explicit run dir")
     ap.add_argument("--model_version", type=str, default=DEFAULT_MODEL_VERSION)
     ap.add_argument("--model_run_id", type=str, default=DEFAULT_MODEL_RUN_ID or None, help="Explicit run id (e.g., 014)")
@@ -203,11 +231,13 @@ def build_benchmark_parser() -> argparse.ArgumentParser:
 def build_do_everything_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser()
     ap.add_argument("--il_games", type=int, default=DEFAULT_GAMES_PER_LOOP, help="Games per loop for IL data generation")
+    ap.add_argument("--il_workers", type=int, default=DEFAULT_IL_WORKERS, help="Workers for IL data generation")
+    ap.add_argument("--il_games_per_worker", type=int, default=DEFAULT_IL_GAMES_PER_WORKER, help="IL games per worker")
     ap.add_argument(
         "--loops",
         type=int,
         default=DEFAULT_LOOPS,
-        help="Number of generate->train->benchmark cycles. Use -1 to loop forever.",
+        help="Number of generate->train->benchmark cycles.",
     )
     ap.add_argument("--training_dir", type=str, default=TRAINING_DATA_DIR)
     ap.add_argument("--dataset_version", type=str, default=DEFAULT_DATASET_VERSION)
@@ -219,6 +249,8 @@ def build_do_everything_parser() -> argparse.ArgumentParser:
     ap.add_argument("--epochs", type=int, default=DEFAULT_EPOCHS)
     ap.add_argument("--players", type=str, default=DEFAULT_BENCHMARK_PLAYERS)
     ap.add_argument("--benchmark_games", type=int, default=DEFAULT_BENCHMARK_GAMES)
+    ap.add_argument("--benchmark_workers", type=int, default=DEFAULT_BENCHMARK_WORKERS)
+    ap.add_argument("--benchmark_games_per_worker", type=int, default=DEFAULT_BENCHMARK_GAMES_PER_WORKER)
     ap.add_argument(
         "--benchmark_mode",
         type=str,

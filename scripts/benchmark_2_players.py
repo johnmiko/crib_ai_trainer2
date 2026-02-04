@@ -10,6 +10,8 @@ import sys
 import numpy as np
 import os
 import json
+import multiprocessing as mp
+from types import SimpleNamespace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -84,13 +86,9 @@ def _resolve_models_dir(args) -> str:
 
 
 
-def benchmark_2_players(
-    args,
-    players_override: str | None = None,
-    fallback_override: str | None = None,
-) -> int:
+def _build_player_factory(args, fallback_override: str | None):
     args.models_dir = _resolve_models_dir(args)
-    logger.info("Loading models from %s", args.models_dir)    
+    logger.info("Loading models from %s", args.models_dir)
     # print("discard |w|", float(np.linalg.norm(discard_model.w)), "b", float(discard_model.b))
     # print("pegging  |w|", float(np.linalg.norm(pegging_model.w)), "b", float(pegging_model.b))
     # discard and pegging weights after 4000 games
@@ -196,22 +194,52 @@ def benchmark_2_players(
             )
         return base_player_factory(name)
     
+    return player_factory, model_tag, model_type
+
+
+def _estimate_training_games(data_dir: Path, max_shards: int | None) -> int:
+    discard_files = sorted(data_dir.glob("discard_*.npz"))
+    if max_shards is not None:
+        if max_shards <= 0:
+            raise ValueError("--max_shards must be > 0 if provided")
+        discard_files = discard_files[: max_shards]
+    if discard_files:
+        max_games = 0
+        for f in discard_files:
+            try:
+                num = int(f.stem.split("_")[1])
+                max_games = max(max_games, num)
+            except (ValueError, IndexError):
+                pass
+        return max_games
+    return 0
+
+
+def _compute_win_ci(winrate: float, total_games: int) -> tuple[float, float]:
+    if total_games <= 1:
+        return winrate, winrate
+    se = float(np.sqrt(winrate * (1.0 - winrate) / total_games))
+    lo = max(0.0, winrate - 1.96 * se)
+    hi = min(1.0, winrate + 1.96 * se)
+    return lo, hi
+
+
+def _benchmark_single(
+    args,
+    players_override: str | None = None,
+    fallback_override: str | None = None,
+    games_override: int | None = None,
+) -> dict:
+    player_factory, model_tag, model_type = _build_player_factory(args, fallback_override)
+
     players_value = players_override or args.players
     player_names = players_value.split(",")
     if len(player_names) != 2:
         raise ValueError("Must specify exactly two players via --players")
-    # temp debugging
-    # o pegging scored 184/500 and discard_model only scored 72/500
-    # p0 = NeuralDiscardPlayer(discard_model, pegging_model, name="neural_discard")
-    # p0 = NeuralPegPlayer(discard_model, pegging_model, name="neural_peg")
-    # p1 = player_factory("reasonable")
-    # player_names = [p0.name, p1.name]
-    # temp end
 
     p0 = player_factory(player_names[0])
     p1 = player_factory(player_names[1])
-    # {"wins":wins, "diffs": diffs, "winrate": winrate, "ci_lo": lo, "ci_hi": hi} 
-    games_to_play = args.benchmark_games
+    games_to_play = games_override or args.benchmark_games
 
     results = play_multiple_games(games_to_play, p0=p0, p1=p1)
     wins = results["wins"]
@@ -221,30 +249,11 @@ def benchmark_2_players(
     win_ci_hi = results.get("ci_hi", winrate)
     diff_ci_lo = results.get("diff_ci_lo")
     diff_ci_hi = results.get("diff_ci_hi")
-    
+
     # Count actual training games from discard file names (which are cumulative)
-    from pathlib import Path
     data_dir = Path(args.data_dir)
-    discard_files = sorted(data_dir.glob("discard_*.npz"))
-    if args.max_shards is not None:
-        if args.max_shards <= 0:
-            raise ValueError("--max_shards must be > 0 if provided")
-        discard_files = discard_files[: args.max_shards]
-    
-    if discard_files:
-        # Get the highest cumulative game count from filenames
-        max_games = 0
-        for f in discard_files:
-            try:
-                # Extract number from filename like "discard_2000.npz"
-                num = int(f.stem.split('_')[1])
-                max_games = max(max_games, num)
-            except (ValueError, IndexError):
-                pass
-        estimated_training_games = max_games
-    else:
-        estimated_training_games = 0
-    
+    estimated_training_games = _estimate_training_games(data_dir, args.max_shards)
+
     logger.info(f"Estimated training games from files: {estimated_training_games}")
     avg_diff = float(np.mean(diffs)) if diffs else 0.0
     if diff_ci_lo is None or diff_ci_hi is None:
@@ -286,37 +295,171 @@ def benchmark_2_players(
                     display_names.append(f"{model_prefix}{tag.capitalize()}Player")
         else:
             display_names.append(name)
-    model_dir_label = os.path.basename(os.path.normpath(args.models_dir))
+    return {
+        "wins": wins,
+        "diffs": diffs,
+        "winrate": winrate,
+        "win_ci_lo": win_ci_lo,
+        "win_ci_hi": win_ci_hi,
+        "diff_ci_lo": diff_ci_lo,
+        "diff_ci_hi": diff_ci_hi,
+        "avg_diff": avg_diff,
+        "player_names": player_names,
+        "display_names": display_names,
+        "model_type": model_type,
+        "model_tag": model_tag,
+        "models_dir": args.models_dir,
+        "data_dir": str(data_dir),
+        "estimated_training_games": estimated_training_games,
+        "discard_feature_set": args.discard_feature_set,
+        "pegging_feature_set": args.pegging_feature_set,
+        "seed": args.seed,
+        "games_to_play": games_to_play,
+    }
+
+
+def _benchmark_worker(
+    args_dict: dict,
+    players_override: str | None,
+    fallback_override: str | None,
+    games_override: int,
+    worker_id: int,
+) -> dict:
+    args = SimpleNamespace(**args_dict)
+    base_seed = args.seed or 0
+    args.seed = int(base_seed) + worker_id
+    return _benchmark_single(args, players_override, fallback_override, games_override)
+
+
+def benchmark_2_players(
+    args,
+    players_override: str | None = None,
+    fallback_override: str | None = None,
+) -> int:
+    if args.benchmark_workers < 1:
+        args.benchmark_workers = 1
+
+    if args.benchmark_workers > 1:
+        per_worker_games = (
+            args.benchmark_games_per_worker
+            if args.benchmark_games_per_worker is not None
+            else args.benchmark_games
+        )
+        if per_worker_games <= 0:
+            raise ValueError("benchmark_games_per_worker must be > 0 when using multiple workers.")
+        total_games = per_worker_games * args.benchmark_workers
+        logger.info(
+            f"Benchmarking with {args.benchmark_workers} workers x {per_worker_games} games "
+            f"(total {total_games})"
+        )
+        args_dict = vars(args).copy()
+        ctx = mp.get_context("spawn")
+        results = []
+        with ctx.Pool(processes=args.benchmark_workers) as pool:
+            for result in pool.starmap(
+                _benchmark_worker,
+                [
+                    (args_dict, players_override, fallback_override, per_worker_games, worker_id)
+                    for worker_id in range(args.benchmark_workers)
+                ],
+            ):
+                results.append(result)
+
+        wins = int(sum(r["wins"] for r in results))
+        diffs = []
+        for r in results:
+            diffs.extend(r["diffs"])
+        winrate = float(wins) / float(total_games) if total_games else 0.0
+        win_ci_lo, win_ci_hi = _compute_win_ci(winrate, total_games)
+        avg_diff = float(np.mean(diffs)) if diffs else 0.0
+        if diffs and len(diffs) > 1:
+            std_diff = float(np.std(diffs, ddof=1))
+            se_diff = std_diff / float(np.sqrt(len(diffs)))
+            diff_ci_lo = avg_diff - 1.96 * se_diff
+            diff_ci_hi = avg_diff + 1.96 * se_diff
+        else:
+            diff_ci_lo = avg_diff
+            diff_ci_hi = avg_diff
+
+        first = results[0]
+        player_names = first["player_names"]
+        display_names = first["display_names"]
+        model_type = first["model_type"]
+        model_tag = first["model_tag"]
+        model_dir_label = os.path.basename(os.path.normpath(first["models_dir"]))
+        estimated_training_games = first["estimated_training_games"]
+        data_dir = first["data_dir"]
+        discard_feature_set = first["discard_feature_set"]
+        pegging_feature_set = first["pegging_feature_set"]
+
+        output_str = (
+            f"{display_names[0]} vs {display_names[1]} [{model_dir_label}] after {estimated_training_games} training games "
+            f"avg point diff {avg_diff:.2f} (95% CI {diff_ci_lo:.2f} - {diff_ci_hi:.2f}) "
+            f"wins={wins}/{total_games} winrate={winrate*100:.2f}% "
+            f"(95% CI {win_ci_lo*100:.2f}% - {win_ci_hi*100:.2f}%)\n"
+        )
+        with open("benchmark_results.txt", "a") as f:
+            f.write(output_str)
+        print(output_str)
+
+        experiment = {
+            "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+            "players": player_names,
+            "display_players": display_names,
+            "models_dir": first["models_dir"],
+            "data_dir": data_dir,
+            "benchmark_games": total_games,
+            "wins": wins,
+            "winrate": winrate,
+            "avg_point_diff": avg_diff,
+            "avg_point_diff_ci_lo": diff_ci_lo,
+            "avg_point_diff_ci_hi": diff_ci_hi,
+            "winrate_ci_lo": win_ci_lo,
+            "winrate_ci_hi": win_ci_hi,
+            "estimated_training_games": estimated_training_games,
+            "discard_feature_set": discard_feature_set,
+            "pegging_feature_set": pegging_feature_set,
+            "model_tag": model_tag,
+            "seed": args.seed,
+        }
+        experiments_path = "experiments.jsonl"
+        with open(experiments_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(experiment) + "\n")
+        logger.info(f"Appended experiment -> {experiments_path}")
+        return 0
+
+    single = _benchmark_single(args, players_override, fallback_override)
+    model_dir_label = os.path.basename(os.path.normpath(single["models_dir"]))
     output_str = (
-        f"{display_names[0]} vs {display_names[1]} [{model_dir_label}] after {estimated_training_games} training games "
-        f"avg point diff {avg_diff:.2f} (95% CI {diff_ci_lo:.2f} - {diff_ci_hi:.2f}) "
-        f"wins={wins}/{games_to_play} winrate={winrate*100:.2f}% "
-        f"(95% CI {win_ci_lo*100:.2f}% - {win_ci_hi*100:.2f}%)\n"
+        f"{single['display_names'][0]} vs {single['display_names'][1]} [{model_dir_label}] "
+        f"after {single['estimated_training_games']} training games "
+        f"avg point diff {single['avg_diff']:.2f} (95% CI {single['diff_ci_lo']:.2f} - {single['diff_ci_hi']:.2f}) "
+        f"wins={single['wins']}/{single['games_to_play']} winrate={single['winrate']*100:.2f}% "
+        f"(95% CI {single['win_ci_lo']*100:.2f}% - {single['win_ci_hi']*100:.2f}%)\n"
     )
     with open("benchmark_results.txt", "a") as f:
         f.write(output_str)
     print(output_str)
 
-    # Structured logging for experiments
     experiment = {
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
-        "players": player_names,
-        "display_players": display_names,
-        "models_dir": args.models_dir,
-        "data_dir": str(data_dir),
-        "benchmark_games": games_to_play,
-        "wins": wins,
-        "winrate": winrate,
-        "avg_point_diff": avg_diff,
-        "avg_point_diff_ci_lo": diff_ci_lo,
-        "avg_point_diff_ci_hi": diff_ci_hi,
-        "winrate_ci_lo": win_ci_lo,
-        "winrate_ci_hi": win_ci_hi,
-        "estimated_training_games": estimated_training_games,
-        "discard_feature_set": args.discard_feature_set,
-        "pegging_feature_set": args.pegging_feature_set,
-        "model_tag": model_tag,
-        "seed": args.seed,
+        "players": single["player_names"],
+        "display_players": single["display_names"],
+        "models_dir": single["models_dir"],
+        "data_dir": single["data_dir"],
+        "benchmark_games": single["games_to_play"],
+        "wins": single["wins"],
+        "winrate": single["winrate"],
+        "avg_point_diff": single["avg_diff"],
+        "avg_point_diff_ci_lo": single["diff_ci_lo"],
+        "avg_point_diff_ci_hi": single["diff_ci_hi"],
+        "winrate_ci_lo": single["win_ci_lo"],
+        "winrate_ci_hi": single["win_ci_hi"],
+        "estimated_training_games": single["estimated_training_games"],
+        "discard_feature_set": single["discard_feature_set"],
+        "pegging_feature_set": single["pegging_feature_set"],
+        "model_tag": single["model_tag"],
+        "seed": single["seed"],
     }
     experiments_path = "experiments.jsonl"
     with open(experiments_path, "a", encoding="utf-8") as f:
