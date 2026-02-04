@@ -1,4 +1,5 @@
 from itertools import combinations
+from functools import lru_cache
 import numpy as np
 from typing import List, Tuple
 
@@ -16,6 +17,7 @@ RANKS = ["a", "2", "3", "4", "5", "6", "7", "8", "9", "10", "j", "q", "k"]
 RANK_TO_I = {r: i for i, r in enumerate(RANKS)}
 TENS_RANKS = {"10", "j", "q", "k"}
 _SUITS = ["h", "d", "c", "s"]
+_FULL_DECK = get_full_deck()
 
 # Base discard features (52 discards + 52 kept + 1 dealer flag)
 BASE_DISCARD_FEATURE_DIM = 105
@@ -81,11 +83,20 @@ def get_pegging_feature_indices(feature_set: str) -> np.ndarray:
     raise ValueError(f"Unknown pegging feature_set: {feature_set}")
 
 
-def _rank_counts(cards: List[Card]) -> np.ndarray:
+def _rank_counts_key(cards: List[Card]) -> tuple[int, ...]:
+    return tuple(sorted(RANK_TO_I[c.get_rank().lower()] for c in cards))
+
+
+@lru_cache(maxsize=100_000)
+def _rank_counts_cached(key: tuple[int, ...]) -> np.ndarray:
     counts = np.zeros(13, dtype=np.float32)
-    for c in cards:
-        counts[RANK_TO_I[c.get_rank().lower()]] += 1.0
+    for idx in key:
+        counts[idx] += 1.0
     return counts
+
+
+def _rank_counts(cards: List[Card]) -> np.ndarray:
+    return _rank_counts_cached(_rank_counts_key(cards))
 
 
 def _value_sum(cards: List[Card]) -> float:
@@ -134,14 +145,20 @@ def _run_counts(cards: List[Card]) -> Tuple[float, float, float, float]:
     return run3, run4, run5, run_max
 
 
-def _count_fifteens(cards: List[Card]) -> float:
-    values = [c.get_value() for c in cards]
+@lru_cache(maxsize=100_000)
+def _count_fifteens_cached(values_key: tuple[int, ...]) -> float:
+    values = list(values_key)
     total = 0
     for r in range(2, len(values) + 1):
         for combo in combinations(values, r):
             if sum(combo) == 15:
                 total += 1
     return float(total)
+
+
+def _count_fifteens(cards: List[Card]) -> float:
+    values_key = tuple(sorted(c.get_value() for c in cards))
+    return _count_fifteens_cached(values_key)
 
 
 def _all_same_suit(cards: List[Card]) -> float:
@@ -377,6 +394,8 @@ def featurize_pegging(
     player_score: int | None = None,
     opponent_score: int | None = None,
     feature_set: str = "full",
+    unseen_value_counts: np.ndarray | None = None,
+    unseen_count: int | None = None,
 ) -> np.ndarray:
     if known_cards is None:
         known_cards = []
@@ -466,13 +485,22 @@ def featurize_pegging(
     known_cards_count = float(len(known_cards))
 
     # Opponent "go" danger: estimate if opponent has any playable card.
-    full_deck = get_full_deck()
-    known_set = set(known_cards) | set(all_played_cards) | set(hand)
-    unseen = [c for c in full_deck if c not in known_set]
-    playable_unseen = [c for c in unseen if c.get_value() <= remaining_to_31]
-    opp_can_play_prob = float(len(playable_unseen) / max(1, len(unseen)))
-    opp_playable_count = float(len(playable_unseen))
-    unseen_count = float(len(unseen))
+    if unseen_value_counts is None or unseen_count is None:
+        known_set = set(known_cards) | set(all_played_cards) | set(hand)
+        unseen = [c for c in _FULL_DECK if c not in known_set]
+        unseen_count = len(unseen)
+        unseen_value_counts = np.zeros(11, dtype=np.int32)
+        for c in unseen:
+            unseen_value_counts[c.get_value()] += 1
+
+    max_val = 10 if remaining_to_31 >= 10 else remaining_to_31
+    if max_val < 1:
+        playable_unseen_count = 0
+    else:
+        playable_unseen_count = int(unseen_value_counts[1 : max_val + 1].sum())
+    opp_can_play_prob = float(playable_unseen_count / max(1, unseen_count))
+    opp_playable_count = float(playable_unseen_count)
+    unseen_count = float(unseen_count)
 
     score_context = _score_context_features(player_score, opponent_score)
 
@@ -1036,14 +1064,22 @@ def regression_pegging_strategy(
     if not playable:
         return None
     best, best_v = None, float("-inf")
+    if known_cards is None:
+        # Known cards include: hand, current table sequence, past table cards, and starter
+        known = hand + table + past_table_cards
+        if starter_card is not None:
+            known = known + [starter_card]
+    else:
+        known = known_cards
+
+    known_set = set(known) | set(all_played_cards or []) | set(hand)
+    unseen = [c for c in _FULL_DECK if c not in known_set]
+    unseen_value_counts = np.zeros(11, dtype=np.int32)
+    for c in unseen:
+        unseen_value_counts[c.get_value()] += 1
+    unseen_count = len(unseen)
+
     for c in playable:
-        if known_cards is None:
-            # Known cards include: hand, current table sequence, past table cards, and starter
-            known = hand + table + past_table_cards
-            if starter_card is not None:
-                known = known + [starter_card]
-        else:
-            known = known_cards
         x = featurize_pegging(
             hand,
             table,
@@ -1055,6 +1091,8 @@ def regression_pegging_strategy(
             player_score=player_score,
             opponent_score=opponent_score,
             feature_set=feature_set,
+            unseen_value_counts=unseen_value_counts,
+            unseen_count=unseen_count,
         )  # np array
         if feature_indices is not None:
             x = x[feature_indices]

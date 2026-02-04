@@ -43,6 +43,7 @@ from crib_ai_trainer.constants import (
     DEFAULT_PEGGING_EV_ROLLOUTS,
 )
 from itertools import combinations
+import itertools
 from dataclasses import dataclass, field
 from typing import Any, List, Tuple, Optional
 
@@ -1638,6 +1639,7 @@ def _collect_il_data_worker(
         play_one_game(players)
         i += 1
     result = {
+        "worker_id": worker_id,
         "X_discard": log.X_discard,
         "y_discard": log.y_discard,
         "y_discard_win": getattr(log, "y_discard_win", None),
@@ -1645,6 +1647,10 @@ def _collect_il_data_worker(
         "y_pegging": log.y_pegging,
     }
     return result
+
+
+def _collect_il_data_worker_star(args):
+    return _collect_il_data_worker(*args)
 
 def generate_il_data(
     games,
@@ -1715,8 +1721,18 @@ def generate_il_data(
         ctx = mp.get_context("spawn")
         results = []
         with ctx.Pool(processes=workers) as pool:
-            for result in pool.starmap(_collect_il_data_worker, worker_args):
+            for idx, result in enumerate(
+                pool.imap_unordered(_collect_il_data_worker_star, worker_args),
+                start=1,
+            ):
                 results.append(result)
+                worker_id = result.get("worker_id")
+                logger.info(
+                    "IL worker %s finished (%d/%d)",
+                    str(worker_id),
+                    idx,
+                    workers,
+                )
 
         log, _, _ = _init_logging_players(
             strategy,
@@ -1781,7 +1797,7 @@ def generate_il_data(
 
     i = 0
     while True:
-        if i % 100 == 0:
+        if i % 10 == 0:
             if games < 0:
                 logger.info(f"Playing games {i} - {i + 100}/∞")
             else:

@@ -318,17 +318,14 @@ def _benchmark_single(
     }
 
 
-def _benchmark_worker(
-    args_dict: dict,
-    players_override: str | None,
-    fallback_override: str | None,
-    games_override: int,
-    worker_id: int,
-) -> dict:
+def _benchmark_worker(args_tuple) -> dict:
+    args_dict, players_override, fallback_override, games_override, worker_id = args_tuple
     args = SimpleNamespace(**args_dict)
     base_seed = args.seed or 0
     args.seed = int(base_seed) + worker_id
-    return _benchmark_single(args, players_override, fallback_override, games_override)
+    result = _benchmark_single(args, players_override, fallback_override, games_override)
+    result["worker_id"] = worker_id
+    return result
 
 
 def benchmark_2_players(
@@ -356,14 +353,23 @@ def benchmark_2_players(
         ctx = mp.get_context("spawn")
         results = []
         with ctx.Pool(processes=args.benchmark_workers) as pool:
-            for result in pool.starmap(
-                _benchmark_worker,
-                [
-                    (args_dict, players_override, fallback_override, per_worker_games, worker_id)
-                    for worker_id in range(args.benchmark_workers)
-                ],
+            for idx, result in enumerate(
+                pool.imap_unordered(
+                    _benchmark_worker,
+                    [
+                        (args_dict, players_override, fallback_override, per_worker_games, worker_id)
+                        for worker_id in range(args.benchmark_workers)
+                    ],
+                ),
+                start=1,
             ):
                 results.append(result)
+                logger.info(
+                    "Benchmark worker %s finished (%d/%d)",
+                    str(result.get("worker_id")),
+                    idx,
+                    args.benchmark_workers,
+                )
 
         wins = int(sum(r["wins"] for r in results))
         diffs = []
