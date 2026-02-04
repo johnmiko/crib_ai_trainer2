@@ -36,6 +36,8 @@ from crib_ai_trainer.constants import (
     DEFAULT_USE_RANDOM_SEED,
     DEFAULT_MODEL_TYPE,
     DEFAULT_MLP_HIDDEN,
+    DEFAULT_CRIB_EV_MODE,
+    DEFAULT_CRIB_MC_SAMPLES,
 )
 from scripts.benchmark_2_players import benchmark_2_players
 from scripts.generate_il_data import generate_il_data, _resolve_output_dir
@@ -82,6 +84,8 @@ if __name__ == "__main__":
     ap.add_argument("--pegging_model_feature_set", type=str, default=DEFAULT_PEGGING_MODEL_FEATURE_SET, choices=["base", "full_no_scores", "full"])
     ap.add_argument("--model_type", type=str, default=DEFAULT_MODEL_TYPE, choices=["linear", "mlp"])
     ap.add_argument("--mlp_hidden", type=str, default=DEFAULT_MLP_HIDDEN)
+    ap.add_argument("--crib_ev_mode", type=str, default=DEFAULT_CRIB_EV_MODE, choices=["min", "mc"])
+    ap.add_argument("--crib_mc_samples", type=int, default=DEFAULT_CRIB_MC_SAMPLES)
     ap.add_argument("--lr", type=float, default=DEFAULT_LR)
     ap.add_argument("--batch_size", type=int, default=DEFAULT_BATCH_SIZE)
     ap.add_argument("--l2", type=float, default=DEFAULT_L2)
@@ -138,6 +142,8 @@ if __name__ == "__main__":
             args.seed,
             args.strategy,
             data_pegging_feature_set,
+            args.crib_ev_mode,
+            args.crib_mc_samples,
         )
 
         print("step: train_linear_models", flush=True)

@@ -24,6 +24,8 @@ These affect all four scripts:
 - `SEED`, `USE_RANDOM_SEED`: RNG behavior
 - `MODEL_TYPE`: `linear` or `mlp`
 - `MLP_HIDDEN`: comma-separated hidden sizes for the MLP (e.g., `128,64`)
+- `CRIB_EV_MODE`: `min` or `mc` for discard label crib EV
+- `CRIB_MC_SAMPLES`: number of MC samples for crib EV (when `CRIB_EV_MODE=mc`)
 
 ## Script Quick Usage (uses defaults)
 Run any of these without flags and they will use `.env`:

@@ -31,6 +31,8 @@ from crib_ai_trainer.constants import (
     DEFAULT_GAMES_PER_LOOP,
     DEFAULT_SEED,
     DEFAULT_USE_RANDOM_SEED,
+    DEFAULT_CRIB_EV_MODE,
+    DEFAULT_CRIB_MC_SAMPLES,
 )
 import argparse
 from itertools import combinations
@@ -184,6 +186,39 @@ def estimate_discard_value_mc_fast_from_remaining(
         total += hand_pts + (crib_ev if dealer_is_self else -crib_ev)
 
     return total / float(k_starters)
+
+
+def estimate_crib_ev_mc_from_remaining(
+    discards: List[Card],
+    remaining: List[Card],
+    rng: random.Random,
+    n_samples: int = 32,
+) -> float:
+    """Estimate crib EV by sampling opponent discards and starter cards."""
+    if n_samples <= 0 or not remaining:
+        return 0.0
+    total = 0.0
+    n = len(remaining)
+    index_of = {c: i for i, c in enumerate(remaining)}
+    for _ in range(n_samples):
+        starter = remaining[rng.randrange(n)]
+        starter_idx = index_of[starter]
+        # sample two opponent discards (distinct from starter)
+        i = rng.randrange(n)
+        while i == starter_idx:
+            i = rng.randrange(n)
+        j = rng.randrange(n - 1)
+        if j >= i:
+            j += 1
+        while j == starter_idx:
+            j = rng.randrange(n - 1)
+            if j >= i:
+                j += 1
+        opp1 = remaining[i]
+        opp2 = remaining[j]
+        crib_cards = [discards[0], discards[1], opp1, opp2, starter]
+        total += score_hand(crib_cards, is_crib=True)
+    return total / float(n_samples)
 
 
 class LoggedData:
@@ -388,7 +423,17 @@ class LoggingBeginnerPlayer(BeginnerPlayer):
 class LoggingMediumPlayer(MediumPlayer):
     """Wrap MediumPlayer so we can collect training data while it plays."""
 
-    def __init__(self, name: str, log: LoggedData, discard_strategy, pegging_strategy, seed: int = 0, pegging_feature_set: str = "full"):
+    def __init__(
+        self,
+        name: str,
+        log: LoggedData,
+        discard_strategy,
+        pegging_strategy,
+        seed: int = 0,
+        pegging_feature_set: str = "full",
+        crib_ev_mode: str = "min",
+        crib_mc_samples: int = 32,
+    ):
         super().__init__(name=name)
         self._rng = random.Random(seed)
         self._full_deck = get_full_deck()
@@ -403,6 +448,8 @@ class LoggingMediumPlayer(MediumPlayer):
             raise ValueError(f"Unknown discard_strategy: {discard_strategy}")        
         self._pegging_strategy = pegging_strategy
         self._pegging_feature_set = pegging_feature_set
+        self._crib_ev_mode = crib_ev_mode
+        self._crib_mc_samples = crib_mc_samples
 
     def select_crib_cards(self, player_state, round_state) -> Tuple[Card, Card]:
         """Override to log training data."""
@@ -492,10 +539,31 @@ class LoggingMediumPlayer(MediumPlayer):
         crib_score_cache = {}        
         hand_results = process_dealt_hand_only_exact([hand, full_deck, hand_score_cache])
         df_hand = pd.DataFrame(hand_results, columns=["hand_key","min_hand_score","max_hand_score","avg_hand_score"])
-        crib_results = calc_crib_min_only_given_6_cards(hand)
-        df_crib = pd.DataFrame(crib_results, columns=["hand_key","crib_key","min_crib_score","avg_crib_score"])
-        df3 = pd.merge(df_hand, df_crib, on=["hand_key"])        
-        df3["avg_total_score"] = df3["avg_hand_score"] + (df3["avg_crib_score"] if dealer_is_self else -df3["avg_crib_score"])
+        if self._crib_ev_mode == "min":
+            crib_results = calc_crib_min_only_given_6_cards(hand)
+            df_crib = pd.DataFrame(crib_results, columns=["hand_key","crib_key","min_crib_score","avg_crib_score"])
+            df3 = pd.merge(df_hand, df_crib, on=["hand_key"])
+            df3["avg_total_score"] = df3["avg_hand_score"] + (df3["avg_crib_score"] if dealer_is_self else -df3["avg_crib_score"])
+        else:
+            # Monte Carlo crib EV
+            hand_set = set(hand)
+            remaining = [c for c in self._full_deck if c not in hand_set]
+            rows = []
+            for kept in combinations(hand, 4):
+                kept_list = list(kept)
+                discards_list_temp = [c for c in hand if c not in kept_list]
+                hand_key = normalize_hand_to_str(kept_list)
+                crib_key = normalize_hand_to_str(discards_list_temp)
+                crib_ev = estimate_crib_ev_mc_from_remaining(
+                    discards_list_temp,
+                    remaining,
+                    self._rng,
+                    n_samples=self._crib_mc_samples,
+                )
+                rows.append([hand_key, crib_key, crib_ev])
+            df_crib = pd.DataFrame(rows, columns=["hand_key","crib_key","avg_crib_score"])
+            df3 = pd.merge(df_hand, df_crib, on=["hand_key"])
+            df3["avg_total_score"] = df3["avg_hand_score"] + (df3["avg_crib_score"] if dealer_is_self else -df3["avg_crib_score"])
         df3["min_total_score"] = df3["min_hand_score"] + (df3["min_crib_score"] if dealer_is_self else -df3["min_crib_score"])
         best_discards_str = df3.loc[df3["avg_total_score"] == df3["avg_total_score"].max()]["crib_key"].values[0]
         best_discards = best_discards_str.lower().replace("t", "10").split("|")
@@ -539,10 +607,30 @@ class LoggingMediumPlayer(MediumPlayer):
         crib_score_cache = {}
         hand_results = process_dealt_hand_only_exact([hand, full_deck, hand_score_cache])
         df_hand = pd.DataFrame(hand_results, columns=["hand_key","min_hand_score","max_hand_score","avg_hand_score"])
-        crib_results = calc_crib_min_only_given_6_cards(hand)
-        df_crib = pd.DataFrame(crib_results, columns=["hand_key","crib_key","min_crib_score","avg_crib_score"])
-        df3 = pd.merge(df_hand, df_crib, on=["hand_key"])
-        df3["avg_total_score"] = df3["avg_hand_score"] + (df3["avg_crib_score"] if dealer_is_self else -df3["avg_crib_score"])
+        if self._crib_ev_mode == "min":
+            crib_results = calc_crib_min_only_given_6_cards(hand)
+            df_crib = pd.DataFrame(crib_results, columns=["hand_key","crib_key","min_crib_score","avg_crib_score"])
+            df3 = pd.merge(df_hand, df_crib, on=["hand_key"])
+            df3["avg_total_score"] = df3["avg_hand_score"] + (df3["avg_crib_score"] if dealer_is_self else -df3["avg_crib_score"])
+        else:
+            hand_set = set(hand)
+            remaining = [c for c in self._full_deck if c not in hand_set]
+            rows = []
+            for kept in combinations(hand, 4):
+                kept_list = list(kept)
+                discards_list_temp = [c for c in hand if c not in kept_list]
+                hand_key = normalize_hand_to_str(kept_list)
+                crib_key = normalize_hand_to_str(discards_list_temp)
+                crib_ev = estimate_crib_ev_mc_from_remaining(
+                    discards_list_temp,
+                    remaining,
+                    self._rng,
+                    n_samples=self._crib_mc_samples,
+                )
+                rows.append([hand_key, crib_key, crib_ev])
+            df_crib = pd.DataFrame(rows, columns=["hand_key","crib_key","avg_crib_score"])
+            df3 = pd.merge(df_hand, df_crib, on=["hand_key"])
+            df3["avg_total_score"] = df3["avg_hand_score"] + (df3["avg_crib_score"] if dealer_is_self else -df3["avg_crib_score"])
 
         Xs: List[np.ndarray] = []
         ys: List[float] = []
@@ -582,11 +670,31 @@ class LoggingMediumPlayer(MediumPlayer):
         crib_score_cache = {}        
         hand_results = process_dealt_hand_only_exact([hand, full_deck, hand_score_cache])
         df_hand = pd.DataFrame(hand_results, columns=["hand_key","min_hand_score","max_hand_score","avg_hand_score"])
-        crib_results = calc_crib_min_only_given_6_cards(hand)
-        df_crib = pd.DataFrame(crib_results, columns=["hand_key","crib_key","min_crib_score","avg_crib_score"])
-        df3 = pd.merge(df_hand, df_crib, on=["hand_key"])        
-        df3["avg_total_score"] = df3["avg_hand_score"] + (df3["avg_crib_score"] if dealer_is_self else -df3["avg_crib_score"])
-        df3["min_total_score"] = df3["min_hand_score"] + (df3["min_crib_score"] if dealer_is_self else -df3["min_crib_score"])
+        if self._crib_ev_mode == "min":
+            crib_results = calc_crib_min_only_given_6_cards(hand)
+            df_crib = pd.DataFrame(crib_results, columns=["hand_key","crib_key","min_crib_score","avg_crib_score"])
+            df3 = pd.merge(df_hand, df_crib, on=["hand_key"])
+            df3["avg_total_score"] = df3["avg_hand_score"] + (df3["avg_crib_score"] if dealer_is_self else -df3["avg_crib_score"])
+            df3["min_total_score"] = df3["min_hand_score"] + (df3["min_crib_score"] if dealer_is_self else -df3["min_crib_score"])
+        else:
+            hand_set = set(hand)
+            remaining = [c for c in self._full_deck if c not in hand_set]
+            rows = []
+            for kept in combinations(hand, 4):
+                kept_list = list(kept)
+                discards_list_temp = [c for c in hand if c not in kept_list]
+                hand_key = normalize_hand_to_str(kept_list)
+                crib_key = normalize_hand_to_str(discards_list_temp)
+                crib_ev = estimate_crib_ev_mc_from_remaining(
+                    discards_list_temp,
+                    remaining,
+                    self._rng,
+                    n_samples=self._crib_mc_samples,
+                )
+                rows.append([hand_key, crib_key, crib_ev])
+            df_crib = pd.DataFrame(rows, columns=["hand_key","crib_key","avg_crib_score"])
+            df3 = pd.merge(df_hand, df_crib, on=["hand_key"])
+            df3["avg_total_score"] = df3["avg_hand_score"] + (df3["avg_crib_score"] if dealer_is_self else -df3["avg_crib_score"])
 
         # Iterate through actual card combinations to get Card objects for featurization
         for kept in combinations(hand, 4):
@@ -612,7 +720,7 @@ class LoggingMediumPlayer(MediumPlayer):
         return tuple(best_discards_cards)
 
 
-def save_data(log, out_dir, cumulative_games, strategy, seed, pegging_feature_set: str):
+def save_data(log, out_dir, cumulative_games, strategy, seed, pegging_feature_set: str, crib_ev_mode: str, crib_mc_samples: int):
     """Save accumulated training data to disk."""
     os.makedirs(out_dir, exist_ok=True)
     
@@ -679,6 +787,8 @@ def save_data(log, out_dir, cumulative_games, strategy, seed, pegging_feature_se
         "dataset_version": dataset_version,
         "run_id": run_id,
         "strategy": strategy,
+        "crib_ev_mode": crib_ev_mode,
+        "crib_mc_samples": crib_mc_samples,
         "cumulative_games": cumulative_games,
         "seed": seed,
         "discard": {
@@ -694,8 +804,8 @@ def save_data(log, out_dir, cumulative_games, strategy, seed, pegging_feature_se
             },
             "label": {
                 "classification": "best option index (0..14)",
-                "regression": "avg_total_score for each option",
-                "ranking": "avg_total_score for each option (15 values)",
+                "regression": f"avg_total_score (crib_ev_mode={crib_ev_mode})",
+                "ranking": f"avg_total_score (crib_ev_mode={crib_ev_mode})",
             }.get(strategy, "unknown"),
         },
         "pegging": {
@@ -729,6 +839,8 @@ def save_data(log, out_dir, cumulative_games, strategy, seed, pegging_feature_se
         f"dataset_version: {dataset_meta['dataset_version']}",
         f"run_id: {dataset_meta['run_id']}",
         f"strategy: {dataset_meta['strategy']}",
+        f"crib_ev_mode: {dataset_meta['crib_ev_mode']}",
+        f"crib_mc_samples: {dataset_meta['crib_mc_samples']}",
         f"cumulative_games: {dataset_meta['cumulative_games']}",
         f"seed: {dataset_meta['seed']}",
         "",
@@ -818,7 +930,15 @@ def play_one_game(players) -> None:
     # Some engines have game.play(), some run rounds internally.
     final_pegging_score = game.start()
 
-def generate_il_data(games, out_dir, seed, strategy, pegging_feature_set: str = "full") -> int:
+def generate_il_data(
+    games,
+    out_dir,
+    seed,
+    strategy,
+    pegging_feature_set: str = "full",
+    crib_ev_mode: str = "mc",
+    crib_mc_samples: int = 32,
+) -> int:
     if seed is None:
         seed = secrets.randbits(32)
         logger.info(f"No seed provided, using random seed={seed}")
@@ -841,6 +961,8 @@ def generate_il_data(games, out_dir, seed, strategy, pegging_feature_set: str = 
             pegging_strategy="regression",
             seed=seed or 0,
             pegging_feature_set=pegging_feature_set,
+            crib_ev_mode=crib_ev_mode,
+            crib_mc_samples=crib_mc_samples,
         )
         p2 = LoggingMediumPlayer(
             "teacher2",
@@ -849,6 +971,8 @@ def generate_il_data(games, out_dir, seed, strategy, pegging_feature_set: str = 
             pegging_strategy="regression",
             seed=seed or 0,
             pegging_feature_set=pegging_feature_set,
+            crib_ev_mode=crib_ev_mode,
+            crib_mc_samples=crib_mc_samples,
         )
     elif strategy == "ranking":
         log = LoggedRegPegRankDiscardData()
@@ -859,6 +983,8 @@ def generate_il_data(games, out_dir, seed, strategy, pegging_feature_set: str = 
             pegging_strategy="regression",
             seed=seed or 0,
             pegging_feature_set=pegging_feature_set,
+            crib_ev_mode=crib_ev_mode,
+            crib_mc_samples=crib_mc_samples,
         )
         p2 = LoggingMediumPlayer(
             "teacher2",
@@ -867,6 +993,8 @@ def generate_il_data(games, out_dir, seed, strategy, pegging_feature_set: str = 
             pegging_strategy="regression",
             seed=seed or 0,
             pegging_feature_set=pegging_feature_set,
+            crib_ev_mode=crib_ev_mode,
+            crib_mc_samples=crib_mc_samples,
         )
     elif strategy == "regression":  
         log = LoggedRegPegRegDiscardData()
@@ -877,6 +1005,8 @@ def generate_il_data(games, out_dir, seed, strategy, pegging_feature_set: str = 
             pegging_strategy="regression",
             seed=seed or 0,
             pegging_feature_set=pegging_feature_set,
+            crib_ev_mode=crib_ev_mode,
+            crib_mc_samples=crib_mc_samples,
         )
         p2 = LoggingMediumPlayer(
             "teacher2",
@@ -885,6 +1015,8 @@ def generate_il_data(games, out_dir, seed, strategy, pegging_feature_set: str = 
             pegging_strategy="regression",
             seed=seed or 0,
             pegging_feature_set=pegging_feature_set,
+            crib_ev_mode=crib_ev_mode,
+            crib_mc_samples=crib_mc_samples,
         )
     
     games_since_save = 0
@@ -910,7 +1042,7 @@ def generate_il_data(games, out_dir, seed, strategy, pegging_feature_set: str = 
         if games_since_save >= save_interval:
             cumulative_games += games_since_save
             logger.info(f"Reached {save_interval} games, saving checkpoint at {cumulative_games} total games")
-            save_data(log, out_dir, cumulative_games, strategy, seed, pegging_feature_set)
+            save_data(log, out_dir, cumulative_games, strategy, seed, pegging_feature_set, crib_ev_mode, crib_mc_samples)
             
             # Clear the logs to save memory
             log.X_discard.clear()
@@ -927,7 +1059,7 @@ def generate_il_data(games, out_dir, seed, strategy, pegging_feature_set: str = 
     if games_since_save > 0:
         cumulative_games += games_since_save
         logger.info(f"Saving final data at {cumulative_games} total games")
-        save_data(log, out_dir, cumulative_games, strategy, seed, pegging_feature_set)
+        save_data(log, out_dir, cumulative_games, strategy, seed, pegging_feature_set, crib_ev_mode, crib_mc_samples)
     
     return 0
 
@@ -965,9 +1097,30 @@ if __name__ == "__main__":
         choices=["basic", "full"],
         help="Which pegging feature set to use.",
     )
+    ap.add_argument(
+        "--crib_ev_mode",
+        type=str,
+        default=DEFAULT_CRIB_EV_MODE,
+        choices=["min", "mc"],
+        help="How to estimate crib EV for discard labels.",
+    )
+    ap.add_argument(
+        "--crib_mc_samples",
+        type=int,
+        default=DEFAULT_CRIB_MC_SAMPLES,
+        help="Number of Monte Carlo samples for crib EV when crib_ev_mode=mc.",
+    )
     args = ap.parse_args()
     resolved_out_dir = _resolve_output_dir(args.out_dir, args.dataset_version, args.run_id, args.new_run)
-    generate_il_data(args.games, resolved_out_dir, args.seed, args.strategy, args.pegging_feature_set)
+    generate_il_data(
+        args.games,
+        resolved_out_dir,
+        args.seed,
+        args.strategy,
+        args.pegging_feature_set,
+        args.crib_ev_mode,
+        args.crib_mc_samples,
+    )
 
 # python .\scripts\generate_il_data.py
 # python .\scripts\generate_il_data.py --games -1 --out_dir "il_datasets" --dataset_version "discard_v2" --strategy regression
