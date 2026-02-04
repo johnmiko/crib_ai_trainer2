@@ -254,6 +254,46 @@ def estimate_pegging_rollout_value(
     return total / float(n_rollouts)
 
 
+def estimate_pegging_rollout_value_2ply(
+    hand: List[Card],
+    table: List[Card],
+    count: int,
+    candidate: Card,
+    known_cards: List[Card],
+    all_played_cards: List[Card],
+    rng: random.Random,
+    n_rollouts: int = 32,
+) -> float:
+    """Two-step rollout: our immediate points - opponent immediate points + our next immediate points."""
+    seq_after = table + [candidate]
+    our_points = float(score_play(seq_after)[0])
+    if n_rollouts <= 0:
+        return our_points
+    full_deck = get_full_deck()
+    known_set = set(known_cards) | set(all_played_cards) | set(hand)
+    unseen = [c for c in full_deck if c not in known_set]
+    if not unseen:
+        return our_points
+    total = 0.0
+    for _ in range(n_rollouts):
+        opp_card = unseen[rng.randrange(len(unseen))]
+        if count + candidate.get_value() + opp_card.get_value() > 31:
+            opp_points = 0.0
+            our_next = 0.0
+        else:
+            seq_after_opp = seq_after + [opp_card]
+            opp_points = float(score_play(seq_after_opp)[0])
+            new_count = count + candidate.get_value() + opp_card.get_value()
+            playable_next = [c for c in hand if c.get_value() + new_count <= 31]
+            if playable_next:
+                next_card = playable_next[rng.randrange(len(playable_next))]
+                our_next = float(score_play(seq_after_opp + [next_card])[0])
+            else:
+                our_next = 0.0
+        total += (our_points - opp_points + our_next)
+    return total / float(n_rollouts)
+
+
 class LoggedData:
     pass
 
@@ -435,7 +475,18 @@ class LoggingBeginnerPlayer(BeginnerPlayer):
         for c in playable:
             sequence = history_since_reset + [c]
             pts, _ = score_play(sequence)
-            if self._pegging_label_mode == "rollout1":
+            if self._pegging_label_mode == "rollout2":
+                y = estimate_pegging_rollout_value_2ply(
+                    hand,
+                    history_since_reset,
+                    count,
+                    c,
+                    known_cards=player_state.known_cards,
+                    all_played_cards=round_state.all_played_cards,
+                    rng=self._rng,
+                    n_rollouts=self._pegging_rollouts,
+                )
+            elif self._pegging_label_mode == "rollout1":
                 y = estimate_pegging_rollout_value(
                     hand,
                     history_since_reset,
@@ -571,7 +622,18 @@ class LoggingMediumPlayer(MediumPlayer):
         
         # Log all playable options
         for card, score in scores.items():
-            if self._pegging_label_mode == "rollout1":
+            if self._pegging_label_mode == "rollout2":
+                y = estimate_pegging_rollout_value_2ply(
+                    full_hand,
+                    history_since_reset,
+                    count,
+                    card,
+                    known_cards=known_cards,
+                    all_played_cards=all_played,
+                    rng=self._rng,
+                    n_rollouts=self._pegging_rollouts,
+                )
+            elif self._pegging_label_mode == "rollout1":
                 y = estimate_pegging_rollout_value(
                     full_hand,
                     history_since_reset,
@@ -1238,7 +1300,7 @@ if __name__ == "__main__":
         "--pegging_label_mode",
         type=str,
         default=DEFAULT_PEGGING_LABEL_MODE,
-        choices=["immediate", "rollout1"],
+        choices=["immediate", "rollout1", "rollout2"],
         help="How to label pegging data.",
     )
     ap.add_argument(

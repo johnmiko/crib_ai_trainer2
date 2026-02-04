@@ -97,3 +97,34 @@ Moving to discard V4. Add monte carlo estimates for crib, and for pegging rollou
 MLPVV4.003Player vs beginner [003] after 501 training games avg point diff -17.39 (95% CI -20.97 - -13.81) wins=49/200 winrate=24.5%
 NeuralDiscardOnlyPlayer vs beginner [003] after 501 training games avg point diff -16.59 (95% CI -20.62 - -12.55) wins=55/200 winrate=27.5%
 NeuralPegOnlyPlayer vs beginner [003] after 501 training games avg point diff -0.28 (95% CI -3.91 - 3.36) wins=100/200 winrate=50.0%
+MLPVV4.004Player vs beginner [004] after 1001 training games avg point diff -10.91 (95% CI -14.62 - -7.21) wins=72/200 winrate=36.0%
+NeuralDiscardOnlyPlayer vs beginner [004] after 1001 training games avg point diff -11.51 (95% CI -15.26 - -7.76) wins=64/200 winrate=32.0%
+NeuralPegOnlyPlayer vs beginner [004] after 1001 training games avg point diff 2.38 (95% CI -1.26 - 6.02) wins=108/200 winrate=54.0%
+
+Change pegging rollout to be 2 layers deep
+MLPVV5.001Player vs beginner [001] after 500 training games avg point diff -13.08 (95% CI -17.06 - -9.10) wins=66/200 winrate=33.0%
+NeuralDiscardOnlyPlayer vs beginner [001] after 500 training games avg point diff -14.81 (95% CI -18.70 - -10.93) wins=54/200 winrate=27.0%
+NeuralPegOnlyPlayer vs beginner [001] after 500 training games avg point diff -1.03 (95% CI -4.72 - 2.65) wins=100/200 winrate=50.0%
+MLPVV5.002Player vs beginner [002] after 1000 training games avg point diff -8.33 (95% CI -11.88 - -4.78) wins=65/200 winrate=32.5%
+MLPVV5.003Player vs beginner [003] after 1500 training games avg point diff -5.09 (95% CI -8.66 - -1.52) wins=83/200 winrate=41.5%
+MLPVV5.004Player vs beginner [004] after 2000 training games avg point diff -0.42 (95% CI -4.03 - 3.18) wins=106/200 winrate=53.0%
+MLPVV5.005Player vs beginner [005] after 2500 training games avg point diff -1.09 (95% CI -4.34 - 2.15) wins=95/200 winrate=47.5%
+MLPVV5.006Player vs beginner [006] after 3000 training games avg point diff 0.11 (95% CI -3.44 - 3.66) wins=103/200 winrate=51.5%
+MLPVV5.007Player vs beginner [007] after 3500 training games avg point diff -1.33 (95% CI -4.68 - 2.01) wins=97/200 winrate=48.5%
+NeuralDiscardOnlyPlayer vs beginner [007] after 3500 training games avg point diff 0.80 (95% CI -2.59 - 4.19) wins=107/200 winrate=53.5%
+NeuralPegOnlyPlayer vs beginner [007] after 3500 training games avg point diff 1.89 (95% CI -1.46 - 5.24) wins=101/200 winrate=50.5%
+MLPVV5.007Player vs beginner [007_medium] after 3500 training games avg point diff -1.39 (95% CI -5.01 - 2.24) wins=95/200 winrate=47.5%
+NeuralDiscardOnlyPlayer vs beginner [007_medium] after 3500 training games avg point diff -3.60 (95% CI -7.22 - 0.01) wins=87/200 winrate=43.5%
+NeuralPegOnlyPlayer vs beginner [007_medium] after 3500 training games avg point diff 0.22 (95% CI -3.16 - 3.60) wins=102/200 winrate=51.0%
+MLPVV5.008Player vs beginner [008] after 4000 training games avg point diff 0.63 (95% CI -0.49 - 1.75) wins=1007/2000 winrate=50.3%
+MLPVV5.009Player vs beginner [009] after 4500 training games avg point diff 0.13 (95% CI -0.96 - 1.23) wins=999/2000 winrate=50.0%
+MLPVV5.010Player vs beginner [010] after 5000 training games avg point diff 0.71 (95% CI -0.40 - 1.83) wins=997/2000 winrate=49.9%
+MLPVV5.011Player vs beginner [011] after 5500 training games avg point diff 1.14 (95% CI 0.04 - 2.23) wins=1027/2000 winrate=51.3%
+
+# Medium model doing better than simpler model after 5500 games (was not doing much better with only 3500 games)
+MLPVV5.011Player vs beginner [011_medium] after 5500 training games avg point diff 2.73 (95% CI 1.63 - 3.83) wins=1083/2000 winrate=54.1%
+MLPVV5.011Player vs beginner [011_large] after 5500 training games avg point diff 2.31 (95% CI 1.18 - 3.43) wins=1095/2000 winrate=54.8%
+
+# Switching default model to medium size
+.\.venv\Scripts\python.exe .\scripts\train_linear_models.py --data_dir "il_datasets\discard_v5\001" --models_dir "models\regression" --model_version "discard_v5" --run_id 011_large --discard_loss regression --model_type mlp --mlp_hidden "512,256"
+.\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py --players NeuralRegressionPlayer,beginner --benchmark_games 2000 --models_dir "models\regression\discard_v5\011_large" --data_dir "il_datasets\discard_v5\001"
