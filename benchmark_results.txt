@@ -126,15 +126,48 @@ MLPVV5.011Player vs beginner [011_medium] after 5500 training games avg point di
 MLPVV5.011Player vs beginner [011_large] after 5500 training games avg point diff 2.31 (95% CI 1.18 - 3.43) wins=1095/2000 winrate=54.8%
  
 .\.venv\Scripts\python.exe .\scripts\do_everything2.py --il_games 1000 --loops -1 --dataset_version "discard_v5" --model_version "discard_v5" --strategy regression --discard_loss regression --benchmark_games 1000 --benchmark_mode full --model_type mlp --mlp_hidden "256,128"
-.\.venv\Scripts\python.exe .\scripts\train_linear_models.py --data_dir "il_datasets\discard_v5\001" --models_dir "models\regression" --model_version "discard_v5" --run_id 017_large --discard_loss regression --model_type mlp --mlp_hidden "512,256"
-.\.venv\Scripts\python.exe .\scripts\train_linear_models.py --data_dir "il_datasets\discard_v5\001" --models_dir "models\regression" --model_version "discard_v5" --run_id 017_medium --discard_loss regression --model_type mlp --mlp_hidden "256,128"
-.\.venv\Scripts\python.exe .\scripts\train_linear_models.py --data_dir "il_datasets\discard_v5\001" --models_dir "models\regression" --model_version "discard_v5" --run_id 017_small --discard_loss regression --model_type mlp --mlp_hidden "128,64"
-.\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py --players NeuralRegressionPlayer,beginner --benchmark_games 2000 --models_dir "models\regression\discard_v5\017_large" --data_dir "il_datasets\discard_v5\001"
 # Switching default model to medium size
 MLPVV5.013Player vs beginner [013] after 6500 training games avg point diff 1.78 (95% CI 0.20 - 3.36) wins=519/1000 winrate=51.9%
 MLPVV5.014Player vs beginner [014] after 8500 training games avg point diff 4.27 (95% CI 2.66 - 5.89) wins=554/1000 winrate=55.4%
 MLPVV5.015Player vs beginner [015] after 9500 training games avg point diff 1.40 (95% CI -0.21 - 3.00) wins=526/1000 winrate=52.6%
 MLPVV5.016Player vs beginner [016] after 10500 training games avg point diff 1.30 (95% CI -0.28 - 2.88) wins=527/1000 winrate=52.7%
-MLPVV5.017Player vs beginner [017_medium] after 11500 training games avg point diff 2.65 (95% CI 1.52 - 3.77) wins=1103/2000 winrate=55.1%
 MLPVV5.017Player vs beginner [017_small] after 11500 training games avg point diff 2.71 (95% CI 1.60 - 3.81) wins=1075/2000 winrate=53.8%
+MLPVV5.017Player vs beginner [017_medium] after 11500 training games avg point diff 2.65 (95% CI 1.52 - 3.77) wins=1103/2000 winrate=55.1%
 MLPVV5.017Player vs beginner [017_large] after 11500 training games avg point diff 3.25 (95% CI 2.15 - 4.36) wins=1111/2000 winrate=55.5%
+
+Change benchmarking to be against medium player since we can beat the beginner player now
+# small=128,64
+# medium=256,128
+# large=512,256
+# xl=1024,512
+.\.venv\Scripts\python.exe .\scripts\do_everything2.py --il_games 1000 --loops -1 --dataset_version "discard_v5" --model_version "discard_v5" --strategy regression --discard_loss regression --benchmark_games 1000 --benchmark_mode full --model_type mlp --mlp_hidden "256,128"
+
+MLPVV5.018Player vs beginner [018] after 12500 training games avg point diff 3.17 (95% CI 1.68 - 4.66) wins=550/1000 winrate=55.0%
+Start playing against medium
+MLPVV5.019Player vs medium [019] after 13500 training games avg point diff -1.40 (95% CI -2.96 - 0.15) wins=473/1000 winrate=47.3%
+MLPVV5.026Player vs medium [026] after 22500 training games avg point diff -0.66 (95% CI -1.75 - 0.44) wins=973/2000 winrate=48.6%
+MLPVV5.031Player vs medium [031] after 32500 training games avg point diff -0.93 (95% CI -2.03 - 0.16) wins=950/2000 winrate=47.5%
+MLPVV5.033Player vs medium [033] after 36500 training games avg point diff -0.29 (95% CI -1.40 - 0.82) wins=1011/2000 winrate=50.5%
+MLPVV5.036Player vs medium [036] after 42500 training games avg point diff -1.87 (95% CI -2.95 - -0.80) wins=941/2000 winrate=47.0%
+MLPVV5.044Player vs medium [044] after 58500 training games avg point diff -0.83 (95% CI -1.90 - 0.24) wins=957/2000 winrate=47.9%
+
+.\.venv\Scripts\python.exe .\scripts\train_linear_models.py --data_dir "il_datasets\discard_v5\001" --models_dir "models\regression" --model_version "discard_v5" --run_id 045_XXL --discard_loss regression --model_type mlp --mlp_hidden "2048,1024"
+.\.venv\Scripts\python.exe .\scripts\train_linear_models.py --data_dir "il_datasets\discard_v5\001" --models_dir "models\regression" --model_version "discard_v5" --run_id 045_extra_large --discard_loss regression --model_type mlp --mlp_hidden "1024,512"
+.\.venv\Scripts\python.exe .\scripts\train_linear_models.py --data_dir "il_datasets\discard_v5\001" --models_dir "models\regression" --model_version "discard_v5" --run_id 045_large --discard_loss regression --model_type mlp --mlp_hidden "512,256"
+.\.venv\Scripts\python.exe .\scripts\train_linear_models.py --data_dir "il_datasets\discard_v5\001" --models_dir "models\regression" --model_version "discard_v5" --run_id 017_medium --discard_loss regression --model_type mlp --mlp_hidden "256,128"
+.\.venv\Scripts\python.exe .\scripts\train_linear_models.py --data_dir "il_datasets\discard_v5\001" --models_dir "models\regression" --model_version "discard_v5" --run_id 045_small --discard_loss regression --model_type mlp --mlp_hidden "128,64"
+.\.venv\Scripts\python.exe .\scripts\train_linear_models.py --data_dir "il_datasets\discard_v5\001" --models_dir "models\regression" --model_version "discard_v5" --run_id 045_small3 --discard_loss regression --model_type mlp --mlp_hidden "128,64,32"
+.\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py --players NeuralRegressionPlayer,beginner --benchmark_games 3000 --models_dir "models\regression\discard_v5\045_extra_large" --data_dir "il_datasets\discard_v5\001"
+.\.venv\Scripts\python.exe .\scripts\self_play_loop.py --models_dir "models\regression" --model_version "discard_v5" --teacher_dataset_version "discard_v5" --selfplay_dataset_version "selfplay_v5" --games 500 --benchmark_games 1000 --selfplay_ratio 0.3 --model_type mlp --mlp_hidden "512,256"
+
+against beginner player
+MLPVV5.045Player vs beginner [045_large] after 62500 training games avg point diff 3.34 (95% CI 2.70 - 3.98) wins=3319/6000 winrate=55.3%
+MLPVV5.045Player vs beginner [045_extra_large] after 62500 training games avg point diff 2.74 (95% CI 2.09 - 3.38) wins=3246/6000 winrate=54.1%
+
+45 is medium size, against medium player
+MLPVV5.045Player vs medium [045] after 60500 training games avg point diff -1.32 (95% CI -2.42 - -0.22) wins=951/2000 winrate=47.5%
+MLPVV5.045Player vs medium [045_small] after 62500 training games avg point diff -1.30 (95% CI -2.19 - -0.40) wins=1431/3000 winrate=47.7%
+MLPVV5.0453Player vs medium [045_small3] after 62500 training games avg point diff -0.83 (95% CI -1.72 - 0.05) wins=1480/3000 winrate=49.3%
+MLPVV5.045Player vs medium [045_large] after 62500 training games avg point diff 0.27 (95% CI -0.62 - 1.15) wins=1530/3000 winrate=51.0%
+MLPVV5.045Player vs medium [045_extra_large] after 62500 training games avg point diff -0.60 (95% CI -1.48 - 0.28) wins=1485/3000 winrate=49.5%
+

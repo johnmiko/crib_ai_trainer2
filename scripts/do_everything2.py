@@ -24,6 +24,7 @@ from crib_ai_trainer.constants import (
     DEFAULT_LOOPS,
     DEFAULT_EPOCHS,
     DEFAULT_BENCHMARK_GAMES,
+    DEFAULT_BENCHMARK_PLAYERS,
     DEFAULT_LR,
     DEFAULT_BATCH_SIZE,
     DEFAULT_L2,
@@ -69,7 +70,7 @@ if __name__ == "__main__":
     ap.add_argument("--seed", type=int, default=default_seed)
     ap.add_argument("--data_dir", type=str, default=None)
     ap.add_argument("--epochs", type=int, default=DEFAULT_EPOCHS)
-    ap.add_argument("--players", type=str, default="NeuralRegressionPlayer,beginner")
+    ap.add_argument("--players", type=str, default=DEFAULT_BENCHMARK_PLAYERS)
     ap.add_argument("--benchmark_games", type=int, default=DEFAULT_BENCHMARK_GAMES)
     ap.add_argument(
         "--benchmark_mode",
@@ -165,12 +166,13 @@ if __name__ == "__main__":
         args.benchmark_games = args.benchmark_games
         args.discard_feature_set = args.discard_feature_set
         args.pegging_feature_set = args.pegging_model_feature_set
-        args.players = "NeuralRegressionPlayer,beginner"
         benchmark_2_players(args)
         if args.benchmark_mode == "all":
-            args.players = "NeuralDiscardOnlyPlayer,beginner"
+            parts = [p.strip() for p in args.players.split(",") if p.strip()]
+            opponent = parts[1] if len(parts) >= 2 else "beginner"
+            args.players = f"NeuralDiscardOnlyPlayer,{opponent}"
             benchmark_2_players(args)
-            args.players = "NeuralPegOnlyPlayer,beginner"
+            args.players = f"NeuralPegOnlyPlayer,{opponent}"
             benchmark_2_players(args)
         args.pegging_feature_set = data_pegging_feature_set
 

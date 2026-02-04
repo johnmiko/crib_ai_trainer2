@@ -54,16 +54,17 @@ def _load_value_model(models_dir: Path, model_type: str):
     return LinearValueModel.load_npz(str(models_dir / "discard_linear.npz")), LinearValueModel.load_npz(str(models_dir / "pegging_linear.npz"))
 
 
-def _make_player(models_dir: Path) -> NeuralRegressionPlayer:
+def _make_player(models_dir: Path, name_override: str | None = None) -> NeuralRegressionPlayer:
     meta = _load_meta(models_dir)
     model_type = meta.get("model_type", "linear")
     discard_feature_set = meta.get("discard_feature_set", "full")
     pegging_feature_set = meta.get("pegging_feature_set", "full")
     discard_model, pegging_model = _load_value_model(models_dir, model_type)
+    name = name_override or f"selfplay:{models_dir.name}"
     return NeuralRegressionPlayer(
         discard_model,
         pegging_model,
-        name=f"selfplay:{models_dir.name}",
+        name=name,
         discard_feature_set=discard_feature_set,
         pegging_feature_set=pegging_feature_set,
     )
@@ -76,9 +77,15 @@ def _evaluate(p0, p1, games: int) -> dict:
 def _get_best_path(best_file: Path, models_dir: Path, model_version: str) -> Path:
     if best_file.exists():
         return Path(best_file.read_text(encoding="utf-8").strip())
-    # fallback to latest
-    latest = _resolve_models_dir(str(models_dir), model_version, None)
-    return Path(latest)
+    # Always resolve under model_version (avoid picking the base models dir)
+    version_dir = models_dir / model_version
+    if not version_dir.exists():
+        return Path(_resolve_models_dir(str(models_dir), model_version, None))
+    run_dirs = [p for p in version_dir.iterdir() if p.is_dir() and p.name.isdigit()]
+    if not run_dirs:
+        return Path(_resolve_models_dir(str(models_dir), model_version, None))
+    run_id = max(int(p.name) for p in run_dirs)
+    return version_dir / f"{run_id:03d}"
 
 
 if __name__ == "__main__":
@@ -109,6 +116,7 @@ if __name__ == "__main__":
         print(f"\n=== Self-play loop {i} ===")
         best_path = _get_best_path(best_file, models_dir, args.model_version)
         print(f"Frozen best: {best_path}")
+        print(f"Best model run: {best_path.name} (version: {best_path.parent.name})")
 
         # 1) Generate self-play data
         generate_self_play_data(
@@ -152,11 +160,14 @@ if __name__ == "__main__":
         print(f"New candidate: {new_path}")
 
         # 3) Benchmarks
-        best_player = _make_player(best_path)
-        new_player = _make_player(new_path)
+        best_player = _make_player(best_path, name_override=f"selfplay:best:{best_path.name}")
+        new_player = _make_player(new_path, name_override=f"selfplay:new:{new_path.name}")
 
+        print("Benchmark: BEST vs BEGINNER")
         best_vs_beginner = _evaluate(best_player, BeginnerPlayer(name="beginner"), args.benchmark_games)
+        print("Benchmark: NEW vs BEGINNER")
         new_vs_beginner = _evaluate(new_player, BeginnerPlayer(name="beginner"), args.benchmark_games)
+        print("Benchmark: NEW vs BEST")
         new_vs_best = _evaluate(new_player, best_player, args.benchmark_games)
 
         # 4) Acceptance: frozen + strict
@@ -184,6 +195,36 @@ if __name__ == "__main__":
             print("Accepted new model.")
         else:
             print("Rejected new model.")
+
+        def _avg_diff(result: dict) -> float:
+            diffs = result.get("diffs", [])
+            if not diffs:
+                return 0.0
+            return float(sum(diffs) / len(diffs))
+
+        def _wins(result: dict) -> int:
+            return int(result.get("wins", 0))
+
+        def _games(result: dict) -> int:
+            return int(result.get("games", args.benchmark_games))
+
+        print("Loop summary:")
+        print(f"- Results log: {Path('selfplay_experiments.jsonl').resolve()}")
+        print(f"- Best model: {best_path}")
+        print(f"- New model: {new_path}")
+        print(
+            f"- Best vs beginner: wins={_wins(best_vs_beginner)}/{_games(best_vs_beginner)} "
+            f"winrate={best_vs_beginner['winrate']:.3f} avg_diff={_avg_diff(best_vs_beginner):.2f}"
+        )
+        print(
+            f"- New vs beginner: wins={_wins(new_vs_beginner)}/{_games(new_vs_beginner)} "
+            f"winrate={new_vs_beginner['winrate']:.3f} avg_diff={_avg_diff(new_vs_beginner):.2f}"
+        )
+        print(
+            f"- New vs best: wins={_wins(new_vs_best)}/{_games(new_vs_best)} "
+            f"winrate={new_vs_best['winrate']:.3f} avg_diff={_avg_diff(new_vs_best):.2f}"
+        )
+        print(f"- Accepted: {accept}")
 
         if args.loops != -1 and i >= args.loops:
             break
