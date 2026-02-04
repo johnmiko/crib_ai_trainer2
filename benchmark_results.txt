@@ -187,3 +187,4 @@ MLPVV5.045Player vs medium [045_large] after 62500 training games avg point diff
   --win_prob_min_score 90
 
 new after 1000 self play games, 1000 benchmark games vs best [001] wins=480/1000 winrate=0.480 avg_diff=-0.74, vs beginner: wins=592/1000 winrate=0.592 avg_diff=4.69, Best vs beginner: wins=543/1000 winrate=0.543 avg_diff=2.59
+MLPVV5.0453Player vs beginner [045_mini3] after 62500 training games avg point diff 2.81 (95% CI 2.18 - 3.45) wins=3241/6000 winrate=54.02% (95% CI 52.75% - 55.27%)

@@ -31,6 +31,11 @@ from crib_ai_trainer.constants import (
     DEFAULT_CRIB_MC_SAMPLES,
     DEFAULT_PEGGING_LABEL_MODE,
     DEFAULT_PEGGING_ROLLOUTS,
+    DEFAULT_PEGGING_EV_MODE,
+    DEFAULT_PEGGING_EV_ROLLOUTS,
+    DEFAULT_WIN_PROB_MODE,
+    DEFAULT_WIN_PROB_ROLLOUTS,
+    DEFAULT_WIN_PROB_MIN_SCORE,
 )
 
 from cribbage.cribbagegame import score_hand, score_play
@@ -141,6 +146,7 @@ class LoggingNeuralPlayer:
 
         self.discard_model = discard_model
         self.pegging_model = pegging_model
+        self.discard_feature_set = discard_feature_set
         self.discard_feature_indices = get_discard_feature_indices(discard_feature_set)
         self.pegging_feature_indices = get_pegging_feature_indices(pegging_feature_set)
         self.pegging_feature_set = pegging_feature_set
@@ -319,6 +325,11 @@ def generate_self_play_data(
     crib_mc_samples: int,
     pegging_label_mode: str,
     pegging_rollouts: int,
+    pegging_ev_mode: str = DEFAULT_PEGGING_EV_MODE,
+    pegging_ev_rollouts: int = DEFAULT_PEGGING_EV_ROLLOUTS,
+    win_prob_mode: str = DEFAULT_WIN_PROB_MODE,
+    win_prob_rollouts: int = DEFAULT_WIN_PROB_ROLLOUTS,
+    win_prob_min_score: int = DEFAULT_WIN_PROB_MIN_SCORE,
 ) -> int:
     if seed is None:
         seed = random.randint(1, 2**31 - 1)
@@ -382,6 +393,11 @@ def generate_self_play_data(
                 crib_mc_samples,
                 pegging_label_mode,
                 pegging_rollouts,
+                pegging_ev_mode,
+                pegging_ev_rollouts,
+                win_prob_mode,
+                win_prob_rollouts,
+                win_prob_min_score,
             )
             log.X_discard.clear()
             log.y_discard.clear()
@@ -402,6 +418,11 @@ def generate_self_play_data(
             crib_mc_samples,
             pegging_label_mode,
             pegging_rollouts,
+            pegging_ev_mode,
+            pegging_ev_rollouts,
+            win_prob_mode,
+            win_prob_rollouts,
+            win_prob_min_score,
         )
     return 0
 
@@ -423,6 +444,11 @@ if __name__ == "__main__":
     ap.add_argument("--crib_mc_samples", type=int, default=DEFAULT_CRIB_MC_SAMPLES)
     ap.add_argument("--pegging_label_mode", type=str, default=DEFAULT_PEGGING_LABEL_MODE, choices=["immediate", "rollout1", "rollout2"])
     ap.add_argument("--pegging_rollouts", type=int, default=DEFAULT_PEGGING_ROLLOUTS)
+    ap.add_argument("--pegging_ev_mode", type=str, default=DEFAULT_PEGGING_EV_MODE, choices=["off", "rollout"])
+    ap.add_argument("--pegging_ev_rollouts", type=int, default=DEFAULT_PEGGING_EV_ROLLOUTS)
+    ap.add_argument("--win_prob_mode", type=str, default=DEFAULT_WIN_PROB_MODE, choices=["off", "rollout"])
+    ap.add_argument("--win_prob_rollouts", type=int, default=DEFAULT_WIN_PROB_ROLLOUTS)
+    ap.add_argument("--win_prob_min_score", type=int, default=DEFAULT_WIN_PROB_MIN_SCORE)
     args = ap.parse_args()
 
     resolved_out_dir = _resolve_output_dir(args.out_dir, args.dataset_version, args.run_id, new_run=False)
@@ -439,4 +465,9 @@ if __name__ == "__main__":
         args.crib_mc_samples,
         args.pegging_label_mode,
         args.pegging_rollouts,
+        args.pegging_ev_mode,
+        args.pegging_ev_rollouts,
+        args.win_prob_mode,
+        args.win_prob_rollouts,
+        args.win_prob_min_score,
     )
