@@ -41,7 +41,6 @@ from crib_ai_trainer.constants import (
     DEFAULT_PEGGING_EV_MODE,
     DEFAULT_PEGGING_EV_ROLLOUTS,
 )
-import argparse
 from itertools import combinations
 from dataclasses import dataclass, field
 from typing import Any, List, Tuple, Optional
@@ -83,6 +82,7 @@ import secrets
 from itertools import combinations
 import json
 from datetime import datetime, timezone
+from utils import build_generate_il_parser, coerce_int_args
 
 RANKS = ["a", "2", "3", "4", "5", "6", "7", "8", "9", "10", "j", "q", "k"]
 RANK_TO_VALUE = {
@@ -497,6 +497,13 @@ def estimate_win_prob_discard_rollout(
     """Estimate win probability by simulating the rest of the round."""
     if n_rollouts <= 0:
         return 0.5
+    if min_score_for_eval is None:
+        min_score_for_eval = 0
+    if not isinstance(min_score_for_eval, int):
+        try:
+            min_score_for_eval = int(min_score_for_eval)
+        except Exception:
+            min_score_for_eval = 0
     if player_score is None:
         player_score = 0
     if opponent_score is None:
@@ -1681,97 +1688,19 @@ def generate_il_data(
 
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser()
-    # ap.add_argument("--games", type=int, default=2000)
-    ap.add_argument(
-        "--games",
-        type=int,
-        default=DEFAULT_GAMES_PER_LOOP,
-        help="Number of games to simulate. Use -1 to run forever.",
+    args = build_generate_il_parser().parse_args()
+    coerce_int_args(
+        args,
+        [
+            "win_prob_min_score",
+            "win_prob_rollouts",
+            "pegging_ev_rollouts",
+            "pegging_rollouts",
+            "crib_mc_samples",
+        ],
     )
-    default_out_dir = TRAINING_DATA_DIR
-    ap.add_argument("--out_dir", type=str, default=default_out_dir)
-    ap.add_argument("--dataset_version", type=str, default=DEFAULT_DATASET_VERSION)
-    ap.add_argument(
-        "--run_id",
-        type=str,
-        default=DEFAULT_DATASET_RUN_ID or None,
-        help="Run id folder (e.g., 001). Omit to append to latest run unless --new_run is set.",
-    )
-    ap.add_argument(
-        "--new_run",
-        action="store_true",
-        help="Create a new run folder even if one already exists for this dataset_version.",
-    )
-    default_seed = None if DEFAULT_USE_RANDOM_SEED else DEFAULT_SEED
-    ap.add_argument("--seed", type=int, default=default_seed, help="Random seed. Omit to use a random seed.")
-    ap.add_argument("--strategy", type=str, default=DEFAULT_STRATEGY)
-    ap.add_argument(
-        "--pegging_feature_set",
-        type=str,
-        default=DEFAULT_PEGGING_FEATURE_SET,
-        choices=["basic", "full"],
-        help="Which pegging feature set to use.",
-    )
-    ap.add_argument(
-        "--crib_ev_mode",
-        type=str,
-        default=DEFAULT_CRIB_EV_MODE,
-        choices=["min", "mc"],
-        help="How to estimate crib EV for discard labels.",
-    )
-    ap.add_argument(
-        "--crib_mc_samples",
-        type=int,
-        default=DEFAULT_CRIB_MC_SAMPLES,
-        help="Number of Monte Carlo samples for crib EV when crib_ev_mode=mc.",
-    )
-    ap.add_argument(
-        "--pegging_label_mode",
-        type=str,
-        default=DEFAULT_PEGGING_LABEL_MODE,
-        choices=["immediate", "rollout1", "rollout2"],
-        help="How to label pegging data.",
-    )
-    ap.add_argument(
-        "--pegging_rollouts",
-        type=int,
-        default=DEFAULT_PEGGING_ROLLOUTS,
-        help="Number of rollouts for pegging_label_mode=rollout1.",
-    )
-    ap.add_argument(
-        "--win_prob_mode",
-        type=str,
-        default=DEFAULT_WIN_PROB_MODE,
-        choices=["off", "rollout"],
-        help="Win-probability label mode for discard (rollout or off).",
-    )
-    ap.add_argument(
-        "--win_prob_rollouts",
-        type=int,
-        default=DEFAULT_WIN_PROB_ROLLOUTS,
-        help="Number of rollouts for win-probability estimation.",
-    )
-    ap.add_argument(
-        "--win_prob_min_score",
-        type=int,
-        default=DEFAULT_WIN_PROB_MIN_SCORE,
-        help="Only estimate win-prob when max(score) >= this threshold (else label 0.5).",
-    )
-    ap.add_argument(
-        "--pegging_ev_mode",
-        type=str,
-        default=DEFAULT_PEGGING_EV_MODE,
-        choices=["off", "rollout"],
-        help="Whether to add pegging EV features to discard (rollout or off).",
-    )
-    ap.add_argument(
-        "--pegging_ev_rollouts",
-        type=int,
-        default=DEFAULT_PEGGING_EV_ROLLOUTS,
-        help="Number of rollouts for pegging EV estimation.",
-    )
-    args = ap.parse_args()
+    if args.win_prob_min_score < 0:
+        raise ValueError("win_prob_min_score must be >= 0")
     resolved_out_dir = _resolve_output_dir(args.out_dir, args.dataset_version, args.run_id, args.new_run)
     generate_il_data(
         args.games,

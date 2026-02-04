@@ -5,108 +5,16 @@ import sys
 
 sys.path.insert(0, ".")
 
-import argparse
 from pathlib import Path
 
-from crib_ai_trainer.constants import (
-    MODELS_DIR,
-    TRAINING_DATA_DIR,
-    DEFAULT_DATASET_VERSION,
-    DEFAULT_DATASET_RUN_ID,
-    DEFAULT_MODEL_VERSION,
-    DEFAULT_MODEL_RUN_ID,
-    DEFAULT_STRATEGY,
-    DEFAULT_DISCARD_LOSS,
-    DEFAULT_PEGGING_FEATURE_SET,
-    DEFAULT_DISCARD_FEATURE_SET,
-    DEFAULT_PEGGING_MODEL_FEATURE_SET,
-    DEFAULT_GAMES_PER_LOOP,
-    DEFAULT_LOOPS,
-    DEFAULT_EPOCHS,
-    DEFAULT_BENCHMARK_GAMES,
-    DEFAULT_BENCHMARK_PLAYERS,
-    DEFAULT_LR,
-    DEFAULT_BATCH_SIZE,
-    DEFAULT_L2,
-    DEFAULT_MAX_SHARDS,
-    DEFAULT_FALLBACK_PLAYER,
-    DEFAULT_RANK_PAIRS_PER_HAND,
-    DEFAULT_EVAL_SAMPLES,
-    DEFAULT_MODEL_TAG,
-    DEFAULT_SEED,
-    DEFAULT_USE_RANDOM_SEED,
-    DEFAULT_MODEL_TYPE,
-    DEFAULT_MLP_HIDDEN,
-    DEFAULT_CRIB_EV_MODE,
-    DEFAULT_CRIB_MC_SAMPLES,
-    DEFAULT_PEGGING_LABEL_MODE,
-    DEFAULT_PEGGING_ROLLOUTS,
-)
 from scripts.benchmark_2_players import benchmark_2_players
 from scripts.generate_il_data import generate_il_data, _resolve_output_dir
 from scripts.train_linear_models import train_linear_models, _resolve_models_dir
+from utils import build_do_everything_parser
 
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--il_games", type=int, default=DEFAULT_GAMES_PER_LOOP, help="Games per loop for IL data generation")
-    ap.add_argument(
-        "--loops",
-        type=int,
-        default=DEFAULT_LOOPS,
-        help="Number of generate->train->benchmark cycles. Use -1 to loop forever.",
-    )
-    ap.add_argument("--training_dir", type=str, default=TRAINING_DATA_DIR)
-    ap.add_argument("--dataset_version", type=str, default=DEFAULT_DATASET_VERSION)
-    ap.add_argument("--dataset_run_id", type=str, default=DEFAULT_DATASET_RUN_ID or None)
-    ap.add_argument("--strategy", type=str, default=DEFAULT_STRATEGY)
-    ap.add_argument(
-        "--pegging_feature_set",
-        type=str,
-        default=DEFAULT_PEGGING_FEATURE_SET,
-        choices=["basic", "full"],
-    )
-    default_seed = None if DEFAULT_USE_RANDOM_SEED else DEFAULT_SEED
-    ap.add_argument("--seed", type=int, default=default_seed)
-    ap.add_argument("--data_dir", type=str, default=None)
-    ap.add_argument("--epochs", type=int, default=DEFAULT_EPOCHS)
-    ap.add_argument("--players", type=str, default=DEFAULT_BENCHMARK_PLAYERS)
-    ap.add_argument("--benchmark_games", type=int, default=DEFAULT_BENCHMARK_GAMES)
-    ap.add_argument(
-        "--benchmark_mode",
-        type=str,
-        default="all",
-        choices=["all", "full"],
-        help="Benchmark all three (full/discard/pegging) or only the full model.",
-    )
-    ap.add_argument("--models_dir", type=str, default=MODELS_DIR)
-    ap.add_argument("--model_version", type=str, default=DEFAULT_MODEL_VERSION)
-    ap.add_argument("--model_run_id", type=str, default=DEFAULT_MODEL_RUN_ID or None)
-    ap.add_argument("--discard_loss", type=str, default=DEFAULT_DISCARD_LOSS, choices=["classification", "regression", "ranking"])
-    ap.add_argument(
-        "--discard_feature_set",
-        type=str,
-        default=DEFAULT_DISCARD_FEATURE_SET,
-        choices=["base", "engineered_no_scores", "engineered_no_scores_pev", "full", "full_pev"],
-    )
-    ap.add_argument("--pegging_model_feature_set", type=str, default=DEFAULT_PEGGING_MODEL_FEATURE_SET, choices=["base", "full_no_scores", "full"])
-    ap.add_argument("--model_type", type=str, default=DEFAULT_MODEL_TYPE, choices=["linear", "mlp"])
-    ap.add_argument("--mlp_hidden", type=str, default=DEFAULT_MLP_HIDDEN)
-    ap.add_argument("--crib_ev_mode", type=str, default=DEFAULT_CRIB_EV_MODE, choices=["min", "mc"])
-    ap.add_argument("--crib_mc_samples", type=int, default=DEFAULT_CRIB_MC_SAMPLES)
-    ap.add_argument("--pegging_label_mode", type=str, default=DEFAULT_PEGGING_LABEL_MODE, choices=["immediate", "rollout1"])
-    ap.add_argument("--pegging_rollouts", type=int, default=DEFAULT_PEGGING_ROLLOUTS)
-    ap.add_argument("--lr", type=float, default=DEFAULT_LR)
-    ap.add_argument("--batch_size", type=int, default=DEFAULT_BATCH_SIZE)
-    ap.add_argument("--l2", type=float, default=DEFAULT_L2)
-    ap.add_argument("--max_shards", type=int, default=(DEFAULT_MAX_SHARDS or None))
-    ap.add_argument("--fallback_player", type=str, default=DEFAULT_FALLBACK_PLAYER)
-    ap.add_argument("--rank_pairs_per_hand", type=int, default=DEFAULT_RANK_PAIRS_PER_HAND)
-    ap.add_argument("--eval_samples", type=int, default=DEFAULT_EVAL_SAMPLES)
-    ap.add_argument("--model_tag", type=str, default=DEFAULT_MODEL_TAG or None)
-    ap.add_argument("--extra_data_dir", type=str, default=None, help="Optional extra dataset to mix in (e.g., self-play).")
-    ap.add_argument("--extra_ratio", type=float, default=0.0, help="Fraction of batches to sample from extra_data_dir.")
-    args = ap.parse_args()
+    args = build_do_everything_parser().parse_args()
 
     if args.data_dir is None:
         args.data_dir = args.training_dir
@@ -154,11 +62,16 @@ if __name__ == "__main__":
             args.seed,
             args.strategy,
             data_pegging_feature_set,
-            args.crib_ev_mode,
-            args.crib_mc_samples,
-            args.pegging_label_mode,
-            args.pegging_rollouts,
-        )
+        args.crib_ev_mode,
+        args.crib_mc_samples,
+        args.pegging_label_mode,
+        args.pegging_rollouts,
+        args.pegging_ev_mode,
+        args.pegging_ev_rollouts,
+        args.win_prob_mode,
+        args.win_prob_rollouts,
+        args.win_prob_min_score,
+    )
 
         print("step: train_linear_models", flush=True)
         args.pegging_feature_set = args.pegging_model_feature_set

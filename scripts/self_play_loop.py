@@ -8,7 +8,6 @@ Workflow:
 """
 from __future__ import annotations
 
-import argparse
 import json
 from pathlib import Path
 from datetime import datetime, timezone
@@ -18,15 +17,6 @@ sys.path.insert(0, ".")
 
 from crib_ai_trainer.constants import (
     TRAINING_DATA_DIR,
-    MODELS_DIR,
-    DEFAULT_DATASET_VERSION,
-    DEFAULT_MODEL_VERSION,
-    DEFAULT_GAMES_PER_LOOP,
-    DEFAULT_BENCHMARK_GAMES,
-    DEFAULT_DISCARD_FEATURE_SET,
-    DEFAULT_PEGGING_MODEL_FEATURE_SET,
-    DEFAULT_MODEL_TYPE,
-    DEFAULT_MLP_HIDDEN,
 )
 
 from cribbage.utils import play_multiple_games
@@ -40,6 +30,7 @@ from crib_ai_trainer.players.neural_player import (
     LinearValueModel,
     MLPValueModel,
 )
+from utils import build_self_play_loop_parser
 
 
 def _load_meta(models_dir: Path) -> dict:
@@ -90,27 +81,7 @@ def _get_best_path(best_file: Path, models_dir: Path, model_version: str) -> Pat
 
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--models_dir", type=str, default=MODELS_DIR)
-    ap.add_argument("--model_version", type=str, default=DEFAULT_MODEL_VERSION)
-    ap.add_argument("--teacher_dataset_version", type=str, default=DEFAULT_DATASET_VERSION)
-    ap.add_argument("--selfplay_dataset_version", type=str, default="selfplay_v1")
-    ap.add_argument("--games", type=int, default=DEFAULT_GAMES_PER_LOOP)
-    ap.add_argument("--benchmark_games", type=int, default=DEFAULT_BENCHMARK_GAMES)
-    ap.add_argument("--benchmark_opponent", type=str, default="medium", choices=["medium", "beginner"])
-    ap.add_argument("--selfplay_ratio", type=float, default=0.3)
-    ap.add_argument("--best_file", type=str, default="best_model.txt")
-    ap.add_argument("--loops", type=int, default=-1)
-    ap.add_argument(
-        "--discard_feature_set",
-        type=str,
-        default=DEFAULT_DISCARD_FEATURE_SET,
-        choices=["base", "engineered_no_scores", "engineered_no_scores_pev", "full", "full_pev"],
-    )
-    ap.add_argument("--pegging_feature_set", type=str, default=DEFAULT_PEGGING_MODEL_FEATURE_SET, choices=["base", "full_no_scores", "full"])
-    ap.add_argument("--model_type", type=str, default=DEFAULT_MODEL_TYPE, choices=["linear", "mlp"])
-    ap.add_argument("--mlp_hidden", type=str, default=DEFAULT_MLP_HIDDEN)
-    args = ap.parse_args()
+    args = build_self_play_loop_parser().parse_args()
 
     models_dir = Path(args.models_dir)
     best_file = Path(args.best_file)
@@ -138,6 +109,11 @@ if __name__ == "__main__":
             32,
             "rollout2",
             32,
+            args.pegging_ev_mode,
+            args.pegging_ev_rollouts,
+            args.win_prob_mode,
+            args.win_prob_rollouts,
+            args.win_prob_min_score,
         )
 
         # 2) Train new model mixing teacher + self-play data

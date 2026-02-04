@@ -6,7 +6,6 @@ Usage:
 
 from __future__ import annotations
 
-import argparse
 import sys
 import numpy as np
 import os
@@ -16,21 +15,6 @@ from pathlib import Path
 
 sys.path.insert(0, ".")
 from cribbage.utils import play_multiple_games
-from crib_ai_trainer.constants import (
-    MODELS_DIR,
-    TRAINING_DATA_DIR,
-    DEFAULT_BENCHMARK_PLAYERS,
-    DEFAULT_BENCHMARK_GAMES,
-    DEFAULT_MAX_SHARDS,
-    DEFAULT_SEED,
-    DEFAULT_FALLBACK_PLAYER,
-    DEFAULT_MODEL_TAG,
-    DEFAULT_DISCARD_FEATURE_SET,
-    DEFAULT_PEGGING_MODEL_FEATURE_SET,
-    DEFAULT_MODEL_VERSION,
-    DEFAULT_MODEL_RUN_ID,
-)
-
 from cribbage.players.random_player import RandomPlayer
 from cribbage.players.medium_player import MediumPlayer
 from cribbage.players.beginner_player import BeginnerPlayer
@@ -43,6 +27,7 @@ from crib_ai_trainer.players.neural_player import (
     NeuralPegOnlyPlayer,
     MLPValueModel,
 )
+from utils import build_benchmark_parser
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -341,33 +326,7 @@ def benchmark_2_players(
 
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--players", type=str, default=DEFAULT_BENCHMARK_PLAYERS)
-    ap.add_argument("--benchmark_games", type=int, default=DEFAULT_BENCHMARK_GAMES)
-    ap.add_argument("--models_dir", type=str, default=MODELS_DIR, help="Base models dir or explicit run dir")
-    ap.add_argument("--model_version", type=str, default=DEFAULT_MODEL_VERSION)
-    ap.add_argument("--model_run_id", type=str, default=DEFAULT_MODEL_RUN_ID or None, help="Explicit run id (e.g., 014)")
-    ap.add_argument("--latest_model", action="store_true", default=True)
-    ap.add_argument("--no_latest_model", dest="latest_model", action="store_false")
-    ap.add_argument("--data_dir", type=str, default=TRAINING_DATA_DIR)
-    ap.add_argument("--max_shards", type=int, default=(DEFAULT_MAX_SHARDS or None))
-    ap.add_argument("--seed", type=int, default=DEFAULT_SEED)
-    ap.add_argument("--fallback_player", type=str, default=DEFAULT_FALLBACK_PLAYER)
-    ap.add_argument("--model_tag", type=str, default=DEFAULT_MODEL_TAG or None)
-    ap.add_argument(
-        "--discard_feature_set",
-        type=str,
-        default=DEFAULT_DISCARD_FEATURE_SET,
-        choices=["base", "engineered_no_scores", "engineered_no_scores_pev", "full", "full_pev"],
-    )
-    ap.add_argument("--pegging_feature_set", type=str, default=DEFAULT_PEGGING_MODEL_FEATURE_SET, choices=["base", "full_no_scores", "full"])
-    ap.add_argument("--auto_mixed_benchmarks", action="store_true", default=True)
-    ap.add_argument(
-        "--no_auto_mixed_benchmarks",
-        dest="auto_mixed_benchmarks",
-        action="store_false",
-    )
-    args = ap.parse_args()
+    args = build_benchmark_parser().parse_args()
     logger.info(f"models dir: {args.models_dir}")
     benchmark_2_players(args)
     if args.auto_mixed_benchmarks:

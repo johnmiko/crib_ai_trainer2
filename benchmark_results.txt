@@ -161,6 +161,7 @@ MLPVV5.044Player vs medium [044] after 58500 training games avg point diff -0.83
 
 against beginner player
 medium vs beginner avg point diff 3.34 (95% CI 2.69 - 3.98) wins=3330/6000 winrate=55.50% (95% CI 54.24% - 56.75%)
+MLPVV5.0453Player vs beginner [045_mini3] after 62500 training games avg point diff 2.81 (95% CI 2.18 - 3.45) wins=3241/6000 winrate=54.02% (95% CI 52.75% - 55.27%)
 MLPVV5.0453Player vs beginner [045_small3] after 62500 training games avg point diff 3.12 (95% CI 2.47 - 3.76) wins=3319/6000 winrate=55.32% (95% CI 54.06% - 56.57%)
 MLPVV5.0173Player vs beginner [045_medium3] after 62500 training games avg point diff 2.88 (95% CI 2.25 - 3.51) wins=3303/6000 winrate=55.05% (95% CI 53.79% - 56.31%)
 MLPVV5.0453Player vs beginner [045_large3] after 62500 training games avg point diff 3.28 (95% CI 2.64 - 3.92) wins=3301/6000 winrate=55.02% (95% CI 53.76% - 56.27%)
@@ -187,4 +188,7 @@ MLPVV5.045Player vs medium [045_large] after 62500 training games avg point diff
   --win_prob_min_score 90
 
 new after 1000 self play games, 1000 benchmark games vs best [001] wins=480/1000 winrate=0.480 avg_diff=-0.74, vs beginner: wins=592/1000 winrate=0.592 avg_diff=4.69, Best vs beginner: wins=543/1000 winrate=0.543 avg_diff=2.59
-MLPVV5.0453Player vs beginner [045_mini3] after 62500 training games avg point diff 2.81 (95% CI 2.18 - 3.45) wins=3241/6000 winrate=54.02% (95% CI 52.75% - 55.27%)
+
+start generating V6 data. 
+.\.venv\Scripts\python.exe .\scripts\do_everything2.py --il_games 1000 --loops -1 --benchmark_games 200 --dataset_version "discard_v6" --model_version "discard_v6" --strategy regression --discard_loss regression  --benchmark_mode full --model_type mlp --mlp_hidden "128,64,32" --players "NeuralRegressionPlayer,beginner" --pegging_ev_mode rollout --win_prob_mode rollout --win_prob_min_score 30
+MLPVV6.001Player vs beginner [001] after 1 training games avg point diff -20.00 (95% CI -20.00 - -20.00) wins=0/1 winrate=0.00% (95% CI -0.00% - 79.35%)

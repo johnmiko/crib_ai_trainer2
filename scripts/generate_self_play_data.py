@@ -5,7 +5,6 @@ come from crib EV (discard) + pegging rollout targets.
 """
 from __future__ import annotations
 
-import argparse
 import json
 import os
 from pathlib import Path
@@ -37,6 +36,7 @@ from crib_ai_trainer.constants import (
     DEFAULT_WIN_PROB_ROLLOUTS,
     DEFAULT_WIN_PROB_MIN_SCORE,
 )
+from utils import build_generate_self_play_parser, coerce_int_args
 
 from cribbage.cribbagegame import score_hand, score_play
 from cribbage.players.rule_based_player import get_full_deck
@@ -428,28 +428,17 @@ def generate_self_play_data(
 
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--games", type=int, default=DEFAULT_GAMES_PER_LOOP)
-    ap.add_argument("--out_dir", type=str, default=TRAINING_DATA_DIR)
-    ap.add_argument("--dataset_version", type=str, default=DEFAULT_DATASET_VERSION)
-    ap.add_argument("--run_id", type=str, default=DEFAULT_DATASET_RUN_ID or None)
-    ap.add_argument("--models_dir", type=str, required=True)
-    ap.add_argument("--model_version", type=str, default=None)
-    ap.add_argument("--model_run_id", type=str, default=None)
-    ap.add_argument("--opponent_models_dir", type=str, default=None)
-    ap.add_argument("--seed", type=int, default=None)
-    ap.add_argument("--strategy", type=str, default=DEFAULT_STRATEGY)
-    ap.add_argument("--pegging_feature_set", type=str, default=DEFAULT_PEGGING_FEATURE_SET, choices=["basic", "full"])
-    ap.add_argument("--crib_ev_mode", type=str, default=DEFAULT_CRIB_EV_MODE, choices=["min", "mc"])
-    ap.add_argument("--crib_mc_samples", type=int, default=DEFAULT_CRIB_MC_SAMPLES)
-    ap.add_argument("--pegging_label_mode", type=str, default=DEFAULT_PEGGING_LABEL_MODE, choices=["immediate", "rollout1", "rollout2"])
-    ap.add_argument("--pegging_rollouts", type=int, default=DEFAULT_PEGGING_ROLLOUTS)
-    ap.add_argument("--pegging_ev_mode", type=str, default=DEFAULT_PEGGING_EV_MODE, choices=["off", "rollout"])
-    ap.add_argument("--pegging_ev_rollouts", type=int, default=DEFAULT_PEGGING_EV_ROLLOUTS)
-    ap.add_argument("--win_prob_mode", type=str, default=DEFAULT_WIN_PROB_MODE, choices=["off", "rollout"])
-    ap.add_argument("--win_prob_rollouts", type=int, default=DEFAULT_WIN_PROB_ROLLOUTS)
-    ap.add_argument("--win_prob_min_score", type=int, default=DEFAULT_WIN_PROB_MIN_SCORE)
-    args = ap.parse_args()
+    args = build_generate_self_play_parser().parse_args()
+    coerce_int_args(
+        args,
+        [
+            "win_prob_min_score",
+            "win_prob_rollouts",
+            "pegging_ev_rollouts",
+            "pegging_rollouts",
+            "crib_mc_samples",
+        ],
+    )
 
     resolved_out_dir = _resolve_output_dir(args.out_dir, args.dataset_version, args.run_id, new_run=False)
     models_dir = _resolve_models_dir(args.models_dir, args.model_version, args.model_run_id)
