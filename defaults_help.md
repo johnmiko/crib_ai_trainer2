@@ -47,6 +47,19 @@ Run any of these without flags and they will use `.env`:
 Benchmark results are also logged in structured form to:
 `C:\Users\johnm\ccode\crib_ai_trainer2\experiments.jsonl`
 
+## Self-Play (On-Policy) Data
+Generate self-play data using the latest model:
+
+```powershell
+.\.venv\Scripts\python.exe .\scripts\generate_self_play_data.py --models_dir "models\regression" --model_version "discard_v5" --dataset_version "discard_v5" --games 500
+```
+
+Run a frozen-best self-play loop (strict acceptance):
+
+```powershell
+.\.venv\Scripts\python.exe .\scripts\self_play_loop.py --models_dir "models\regression" --model_version "discard_v5" --teacher_dataset_version "discard_v5" --selfplay_dataset_version "selfplay_v5" --games 500 --benchmark_games 1000 --selfplay_ratio 0.3
+```
+
 ```powershell
 .\.venv\Scripts\python.exe .\scripts\do_everything2.py
 ```

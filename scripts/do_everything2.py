@@ -98,6 +98,8 @@ if __name__ == "__main__":
     ap.add_argument("--rank_pairs_per_hand", type=int, default=DEFAULT_RANK_PAIRS_PER_HAND)
     ap.add_argument("--eval_samples", type=int, default=DEFAULT_EVAL_SAMPLES)
     ap.add_argument("--model_tag", type=str, default=DEFAULT_MODEL_TAG or None)
+    ap.add_argument("--extra_data_dir", type=str, default=None, help="Optional extra dataset to mix in (e.g., self-play).")
+    ap.add_argument("--extra_ratio", type=float, default=0.0, help="Fraction of batches to sample from extra_data_dir.")
     args = ap.parse_args()
 
     if args.data_dir is None:

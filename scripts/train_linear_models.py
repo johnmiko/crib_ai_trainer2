@@ -83,6 +83,7 @@ def train_linear_models(args) -> int:
     if args.rank_pairs_per_hand <= 0:
         raise SystemExit("--rank_pairs_per_hand must be > 0.")
     data_dir = Path(args.data_dir)
+    extra_data_dir = Path(args.extra_data_dir) if args.extra_data_dir else None
     models_dir = Path(args.models_dir)
     models_dir.mkdir(parents=True, exist_ok=True)
     logger.info(f"Loading training data from {data_dir}")
@@ -96,6 +97,17 @@ def train_linear_models(args) -> int:
         raise SystemExit(
             f"Shard count mismatch: {len(discard_shards)} discard vs {len(pegging_shards)} pegging"
         )
+    extra_discard_shards = []
+    extra_pegging_shards = []
+    if extra_data_dir:
+        extra_discard_shards = sorted(extra_data_dir.glob("discard_*.npz"))
+        extra_pegging_shards = sorted(extra_data_dir.glob("pegging_*.npz"))
+        if not extra_discard_shards or not extra_pegging_shards:
+            raise SystemExit(f"No extra shards found in {extra_data_dir}")
+        if len(extra_discard_shards) != len(extra_pegging_shards):
+            raise SystemExit(
+                f"Extra shard count mismatch: {len(extra_discard_shards)} discard vs {len(extra_pegging_shards)} pegging"
+            )
     if args.max_shards is not None:
         if args.max_shards <= 0:
             raise SystemExit("--max_shards must be > 0 if provided")
@@ -140,9 +152,26 @@ def train_linear_models(args) -> int:
     last_pegging_loss = None
     eval_metrics = {}
 
+    rng = np.random.default_rng(args.seed)
+    extra_ratio = float(args.extra_ratio)
+    if extra_ratio < 0.0 or extra_ratio > 1.0:
+        raise SystemExit("--extra_ratio must be between 0 and 1.")
+
     for epoch in range(args.epochs):
         print(f"Epoch {epoch + 1}/{args.epochs}")
-        for d_path, p_path in zip(discard_shards, pegging_shards):
+        extra_idx = 0
+        primary_idx = 0
+        steps = len(discard_shards)
+        for _ in range(steps):
+            use_extra = extra_data_dir is not None and rng.random() < extra_ratio
+            if use_extra:
+                d_path = extra_discard_shards[extra_idx % len(extra_discard_shards)]
+                p_path = extra_pegging_shards[extra_idx % len(extra_pegging_shards)]
+                extra_idx += 1
+            else:
+                d_path = discard_shards[primary_idx % len(discard_shards)]
+                p_path = pegging_shards[primary_idx % len(pegging_shards)]
+                primary_idx += 1
             logger.debug(f"  Training on shard {d_path.name} and {p_path.name}")
             with np.load(d_path) as d:
                 if discard_mode == "classification":
@@ -284,6 +313,8 @@ def train_linear_models(args) -> int:
         "model_version": model_version,
         "run_id": run_id,
         "data_dir": str(data_dir),
+        "extra_data_dir": str(extra_data_dir) if extra_data_dir else None,
+        "extra_ratio": extra_ratio if extra_data_dir else 0.0,
         "models_dir": str(models_dir),
         "model_type": model_type,
         "discard_loss": discard_mode,
@@ -350,6 +381,8 @@ def train_linear_models(args) -> int:
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--data_dir", type=str, default=TRAINING_DATA_DIR)
+    ap.add_argument("--extra_data_dir", type=str, default=None, help="Optional extra dataset to mix in (e.g., self-play).")
+    ap.add_argument("--extra_ratio", type=float, default=0.0, help="Fraction of batches to sample from extra_data_dir.")
     ap.add_argument("--models_dir", type=str, default=MODELS_DIR)
     ap.add_argument("--model_version", type=str, default=DEFAULT_MODEL_VERSION)
     ap.add_argument("--run_id", type=str, default=DEFAULT_MODEL_RUN_ID or None, help="Run id folder (e.g., 001). Omit to auto-increment.")
