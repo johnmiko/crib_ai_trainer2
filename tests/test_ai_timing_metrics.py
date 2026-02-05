@@ -142,3 +142,41 @@ def test_generate_il_data_timing_smoke():
 def test_generate_il_data_timing_10_games():
     elapsed = _run_timing(10, "10")
     assert elapsed > 0.0
+
+
+def test_generate_il_data_timing_expensive_v6():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        start = time.perf_counter()
+        generate_il_data(
+            games=1,
+            out_dir=tmpdir,
+            seed=0,
+            strategy="regression",
+            pegging_feature_set="full",
+            crib_ev_mode="mc",
+            crib_mc_samples=128,
+            pegging_label_mode="rollout2",
+            pegging_rollouts=64,
+            win_prob_mode="rollout",
+            win_prob_rollouts=64,
+            win_prob_min_score=30,
+            pegging_ev_mode="rollout",
+            pegging_ev_rollouts=64,
+            workers=1,
+            games_per_worker=None,
+            save_pegging=True,
+        )
+        elapsed = time.perf_counter() - start
+
+    timestamp = datetime.now(timezone.utc).isoformat()
+    payload = {"seconds": float(elapsed), "timestamp_utc": timestamp}
+
+    base = Path(__file__).parent
+    baseline_path = base / "il_timing_baseline_expensive_v6.json"
+    latest_path = base / "il_timing_latest_expensive_v6.json"
+
+    if not baseline_path.exists():
+        _write_json(baseline_path, payload)
+    _write_json(latest_path, payload)
+
+    assert elapsed > 0.0

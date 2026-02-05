@@ -20,6 +20,7 @@ from cribbage.utils import play_multiple_games
 from cribbage.players.random_player import RandomPlayer
 from cribbage.players.medium_player import MediumPlayer
 from cribbage.players.beginner_player import BeginnerPlayer
+from cribbage.players.hard_player import HardPlayer
 from crib_ai_trainer.players.neural_player import (
     LinearDiscardClassifier,
     LinearValueModel,
@@ -104,6 +105,8 @@ def _build_player_factory(args, fallback_override: str | None):
             return RandomPlayer(name=name, seed=args.seed)
         if name == "medium":
             return MediumPlayer(name=name)
+        if name == "hard":
+            return HardPlayer(name=name)
         raise ValueError(f"Unknown fallback player type: {name}")
 
     def resolve_model_tag() -> str:
@@ -346,22 +349,41 @@ def benchmark_2_players(
     players_override: str | None = None,
     fallback_override: str | None = None,
 ) -> int:
+    if args.seed is None:
+        args.seed = 42
     if args.benchmark_workers < 1:
         args.benchmark_workers = 1
 
     if args.benchmark_workers > 1:
-        per_worker_games = (
-            args.benchmark_games_per_worker
-            if args.benchmark_games_per_worker is not None
-            else args.benchmark_games
-        )
-        if per_worker_games <= 0:
-            raise ValueError("benchmark_games_per_worker must be > 0 when using multiple workers.")
-        total_games = per_worker_games * args.benchmark_workers
+        total_games = args.benchmark_games
+        if total_games <= 0:
+            raise ValueError("--benchmark_games must be > 0.")
+
+        if args.benchmark_games_per_worker is not None:
+            per_worker_games = args.benchmark_games_per_worker
+            if per_worker_games <= 0:
+                raise ValueError("benchmark_games_per_worker must be > 0 when using multiple workers.")
+            total_games = per_worker_games * args.benchmark_workers
+            games_per_worker = [per_worker_games] * args.benchmark_workers
+        else:
+            base = total_games // args.benchmark_workers
+            remainder = total_games % args.benchmark_workers
+            if base == 0:
+                raise ValueError(
+                    "benchmark_games is smaller than benchmark_workers. "
+                    "Reduce workers or increase games."
+                )
+            games_per_worker = [
+                base + (1 if i < remainder else 0) for i in range(args.benchmark_workers)
+            ]
+
         logger.info(
-            f"Benchmarking with {args.benchmark_workers} workers x {per_worker_games} games "
-            f"(total {total_games})"
+            "Benchmarking with %d workers for %d total games (%s per worker)",
+            args.benchmark_workers,
+            total_games,
+            ",".join(str(g) for g in games_per_worker),
         )
+
         args_dict = vars(args).copy()
         ctx = mp.get_context("spawn")
         results = []
@@ -370,7 +392,7 @@ def benchmark_2_players(
                 pool.imap_unordered(
                     _benchmark_worker,
                     [
-                        (args_dict, players_override, fallback_override, per_worker_games, worker_id)
+                        (args_dict, players_override, fallback_override, games_per_worker[worker_id], worker_id)
                         for worker_id in range(args.benchmark_workers)
                     ],
                 ),

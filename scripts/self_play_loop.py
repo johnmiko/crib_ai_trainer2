@@ -74,9 +74,36 @@ def _avg_diff(result: dict) -> float:
     return float(sum(diffs) / len(diffs))
 
 
+def _winrate(result: dict | None) -> float:
+    if result is None:
+        return 0.0
+    return float(result.get("winrate", 0.0))
+
+
+def _load_best_record(best_file: Path) -> dict:
+    if not best_file.exists():
+        return {}
+    raw = best_file.read_text(encoding="utf-8").strip()
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw)
+        if isinstance(data, dict) and "path" in data:
+            return data
+    except Exception:
+        pass
+    # Backward compatibility: plain path
+    return {"path": raw, "benchmarks": {}}
+
+
+def _write_best_record(best_file: Path, record: dict) -> None:
+    best_file.write_text(json.dumps(record, indent=2), encoding="utf-8")
+
+
 def _get_best_path(best_file: Path, models_dir: Path, model_version: str) -> Path:
-    if best_file.exists():
-        return Path(best_file.read_text(encoding="utf-8").strip())
+    record = _load_best_record(best_file)
+    if record.get("path"):
+        return Path(str(record["path"]).strip())
     # Always resolve under model_version (avoid picking the base models dir)
     version_dir = models_dir / model_version
     if not version_dir.exists():
@@ -100,6 +127,7 @@ if __name__ == "__main__":
     while True:
         i += 1
         print(f"\n=== Self-play loop {i} ===")
+        best_record = _load_best_record(best_file)
         best_path = _get_best_path(best_file, models_dir, args.model_version)
         print(f"Frozen best: {best_path}")
         print(f"Best model run: {best_path.name} (version: {best_path.parent.name})")
@@ -160,32 +188,6 @@ if __name__ == "__main__":
         best_player = _make_player(best_path, name_override=f"selfplay:best:{best_path.name}")
         new_player = _make_player(new_path, name_override=f"selfplay:new:{new_path.name}")
 
-        if args.benchmark_opponent == "beginner":
-            print("Benchmark: BEST vs BEGINNER")
-            best_vs_medium = _evaluate(best_player, BeginnerPlayer(name="beginner"), args.benchmark_games)
-            print(
-                f"  -> wins={best_vs_medium['wins']}/{args.benchmark_games} "
-                f"winrate={best_vs_medium['winrate']:.3f} avg_diff={_avg_diff(best_vs_medium):.2f}"
-            )
-            print("Benchmark: NEW vs BEGINNER")
-            new_vs_medium = _evaluate(new_player, BeginnerPlayer(name="beginner"), args.benchmark_games)
-            print(
-                f"  -> wins={new_vs_medium['wins']}/{args.benchmark_games} "
-                f"winrate={new_vs_medium['winrate']:.3f} avg_diff={_avg_diff(new_vs_medium):.2f}"
-            )
-        else:
-            print("Benchmark: BEST vs MEDIUM")
-            best_vs_medium = _evaluate(best_player, MediumPlayer(name="medium"), args.benchmark_games)
-            print(
-                f"  -> wins={best_vs_medium['wins']}/{args.benchmark_games} "
-                f"winrate={best_vs_medium['winrate']:.3f} avg_diff={_avg_diff(best_vs_medium):.2f}"
-            )
-            print("Benchmark: NEW vs MEDIUM")
-            new_vs_medium = _evaluate(new_player, MediumPlayer(name="medium"), args.benchmark_games)
-            print(
-                f"  -> wins={new_vs_medium['wins']}/{args.benchmark_games} "
-                f"winrate={new_vs_medium['winrate']:.3f} avg_diff={_avg_diff(new_vs_medium):.2f}"
-            )
         print("Benchmark: NEW vs BEST")
         new_vs_best = _evaluate(new_player, best_player, args.benchmark_games)
         print(
@@ -193,11 +195,48 @@ if __name__ == "__main__":
             f"winrate={new_vs_best['winrate']:.3f} avg_diff={_avg_diff(new_vs_best):.2f}"
         )
 
+        label = "beginner" if args.benchmark_opponent == "beginner" else "medium"
+        best_vs_medium = None
+        new_vs_medium = None
+
+        if new_vs_best["winrate"] > 0.5:
+            # Best vs opponent (cached)
+            cached = (best_record.get("benchmarks") or {}).get(label, {})
+            if cached and cached.get("benchmark_games") == args.benchmark_games:
+                best_vs_medium = cached
+                print(f"Using cached BEST vs {label.upper()} results.")
+            else:
+                if args.benchmark_opponent == "beginner":
+                    print("Benchmark: BEST vs BEGINNER")
+                    best_vs_medium = _evaluate(best_player, BeginnerPlayer(name="beginner"), args.benchmark_games)
+                else:
+                    print("Benchmark: BEST vs MEDIUM")
+                    best_vs_medium = _evaluate(best_player, MediumPlayer(name="medium"), args.benchmark_games)
+                print(
+                    f"  -> wins={best_vs_medium['wins']}/{args.benchmark_games} "
+                    f"winrate={best_vs_medium['winrate']:.3f} avg_diff={_avg_diff(best_vs_medium):.2f}"
+                )
+                best_record.setdefault("benchmarks", {})[label] = {
+                    **best_vs_medium,
+                    "benchmark_games": args.benchmark_games,
+                }
+                _write_best_record(best_file, best_record)
+
+            if args.benchmark_opponent == "beginner":
+                print("Benchmark: NEW vs BEGINNER")
+                new_vs_medium = _evaluate(new_player, BeginnerPlayer(name="beginner"), args.benchmark_games)
+            else:
+                print("Benchmark: NEW vs MEDIUM")
+                new_vs_medium = _evaluate(new_player, MediumPlayer(name="medium"), args.benchmark_games)
+            print(
+                f"  -> wins={new_vs_medium['wins']}/{args.benchmark_games} "
+                f"winrate={new_vs_medium['winrate']:.3f} avg_diff={_avg_diff(new_vs_medium):.2f}"
+            )
+
         # 4) Acceptance: frozen + strict
-        accept = (
-            new_vs_best["winrate"] > 0.5
-            and new_vs_medium["winrate"] >= best_vs_medium["winrate"]
-        )
+        accept = False
+        if new_vs_best["winrate"] > 0.5 and best_vs_medium is not None and new_vs_medium is not None:
+            accept = new_vs_medium["winrate"] >= best_vs_medium["winrate"]
 
         record = {
             "timestamp_utc": datetime.now(timezone.utc).isoformat(),
@@ -213,51 +252,62 @@ if __name__ == "__main__":
             f.write(json.dumps(record) + "\n")
 
         if accept:
-            best_file.write_text(str(new_path), encoding="utf-8")
+            new_record = {
+                "path": str(new_path),
+                "benchmarks": {},
+            }
+            if new_vs_medium is not None:
+                new_record["benchmarks"][label] = {
+                    **new_vs_medium,
+                    "benchmark_games": args.benchmark_games,
+                }
+            _write_best_record(best_file, new_record)
             print("Accepted new model.")
         else:
             print("Rejected new model.")
 
-        def _avg_diff(result: dict) -> float:
-            diffs = result.get("diffs", [])
-            if not diffs:
-                return 0.0
-            return float(sum(diffs) / len(diffs))
-
-        def _wins(result: dict) -> int:
+        def _wins(result: dict | None) -> int:
+            if result is None:
+                return 0
             return int(result.get("wins", 0))
 
-        def _games(result: dict) -> int:
+        def _games(result: dict | None) -> int:
+            if result is None:
+                return 0
             return int(result.get("games", args.benchmark_games))
 
         print("Loop summary:")
         print(f"- Results log: {Path('selfplay_experiments.jsonl').resolve()}")
         print(f"- Best model: {best_path}")
         print(f"- New model: {new_path}")
-        label = "beginner" if args.benchmark_opponent == "beginner" else "medium"
-        print(
-            f"- Best vs {label}: wins={_wins(best_vs_medium)}/{_games(best_vs_medium)} "
-            f"winrate={best_vs_medium['winrate']:.3f} avg_diff={_avg_diff(best_vs_medium):.2f}"
-        )
-        print(
-            f"- New vs {label}: wins={_wins(new_vs_medium)}/{_games(new_vs_medium)} "
-            f"winrate={new_vs_medium['winrate']:.3f} avg_diff={_avg_diff(new_vs_medium):.2f}"
-        )
+        if best_vs_medium is not None:
+            print(
+                f"- Best vs {label}: wins={_wins(best_vs_medium)}/{_games(best_vs_medium)} "
+                f"winrate={best_vs_medium['winrate']:.3f} avg_diff={_avg_diff(best_vs_medium):.2f}"
+            )
+        else:
+            print(f"- Best vs {label}: skipped")
+        if new_vs_medium is not None:
+            print(
+                f"- New vs {label}: wins={_wins(new_vs_medium)}/{_games(new_vs_medium)} "
+                f"winrate={new_vs_medium['winrate']:.3f} avg_diff={_avg_diff(new_vs_medium):.2f}"
+            )
+        else:
+            print(f"- New vs {label}: skipped")
         print(
             f"- New vs best: wins={_wins(new_vs_best)}/{_games(new_vs_best)} "
             f"winrate={new_vs_best['winrate']:.3f} avg_diff={_avg_diff(new_vs_best):.2f}"
         )
         print(f"- Accepted: {accept}")
 
-        label = "beginner" if args.benchmark_opponent == "beginner" else "medium"
         summary_line = (
             f"new after {args.games} self play games, {args.benchmark_games} benchmark games vs best "
             f"[{best_path.name}] wins={_wins(new_vs_best)}/{_games(new_vs_best)} "
             f"winrate={new_vs_best['winrate']:.3f} avg_diff={_avg_diff(new_vs_best):.2f}, "
             f"vs {label}: wins={_wins(new_vs_medium)}/{_games(new_vs_medium)} "
-            f"winrate={new_vs_medium['winrate']:.3f} avg_diff={_avg_diff(new_vs_medium):.2f}, "
+            f"winrate={_winrate(new_vs_medium):.3f} avg_diff={_avg_diff(new_vs_medium) if new_vs_medium else 0.0:.2f}, "
             f"Best vs {label}: wins={_wins(best_vs_medium)}/{_games(best_vs_medium)} "
-            f"winrate={best_vs_medium['winrate']:.3f} avg_diff={_avg_diff(best_vs_medium):.2f}\n"
+            f"winrate={_winrate(best_vs_medium):.3f} avg_diff={_avg_diff(best_vs_medium) if best_vs_medium else 0.0:.2f}\n"
         )
         with open("selfplay_results.txt", "a", encoding="utf-8") as f:
             f.write(summary_line)

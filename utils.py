@@ -209,8 +209,8 @@ def build_benchmark_parser() -> argparse.ArgumentParser:
     ap.add_argument(
         "--benchmark_games_per_worker",
         type=int,
-        default=DEFAULT_BENCHMARK_GAMES_PER_WORKER,
-        help="Games per worker when using multiple benchmark workers.",
+        default=None,
+        help="Games per worker when using multiple benchmark workers (omit to split total).",
     )
     ap.add_argument("--models_dir", type=str, default=MODELS_DIR, help="Base models dir or explicit run dir")
     ap.add_argument("--model_version", type=str, default=DEFAULT_MODEL_VERSION)
@@ -262,11 +262,16 @@ def build_do_everything_parser() -> argparse.ArgumentParser:
     ap.add_argument("--players", type=str, default=DEFAULT_BENCHMARK_PLAYERS)
     ap.add_argument("--benchmark_games", type=int, default=DEFAULT_BENCHMARK_GAMES)
     ap.add_argument("--benchmark_workers", type=int, default=DEFAULT_BENCHMARK_WORKERS)
-    ap.add_argument("--benchmark_games_per_worker", type=int, default=DEFAULT_BENCHMARK_GAMES_PER_WORKER)
+    ap.add_argument(
+        "--benchmark_games_per_worker",
+        type=int,
+        default=None,
+        help="Games per worker when using multiple benchmark workers (omit to split total).",
+    )
     ap.add_argument(
         "--benchmark_mode",
         type=str,
-        default="all",
+        default="full",
         choices=["all", "full"],
         help="Benchmark all three (full/discard/pegging) or only the full model.",
     )
@@ -305,7 +310,7 @@ def build_do_everything_parser() -> argparse.ArgumentParser:
     ap.add_argument(
         "--skip_pegging_data",
         action="store_true",
-        default=True,
+        default=False,
         help="Generate only discard data (skip pegging logging and files).",
     )
     return ap

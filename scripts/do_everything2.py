@@ -124,6 +124,9 @@ if __name__ == "__main__":
         args.benchmark_games = args.benchmark_games
         args.discard_feature_set = args.discard_feature_set
         args.pegging_feature_set = args.pegging_model_feature_set
+        _orig_seed = args.seed
+        if _orig_seed is None:
+            args.seed = 42
         _t0 = time.perf_counter()
         _start = datetime.now()
         _log_step_start("benchmark", _start)
@@ -136,6 +139,7 @@ if __name__ == "__main__":
             args.players = f"NeuralPegOnlyPlayer,{opponent}"
             benchmark_2_players(args)
         args.pegging_feature_set = data_pegging_feature_set
+        args.seed = _orig_seed
         _end = datetime.now()
         _log_step_end("benchmark", _end, time.perf_counter() - _t0)
 
