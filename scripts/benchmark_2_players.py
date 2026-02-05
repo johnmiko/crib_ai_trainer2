@@ -539,7 +539,7 @@ if __name__ == "__main__":
 
 # .\.venv\Scripts\python.exe .\scripts\generate_il_data.py --games 4000 --out_dir "il_datasets" --dataset_version "discard_v2" --run_id 001 --strategy regression
 
-# .\.venv\Scripts\python.exe .\scripts\train_linear_models.py --data_dir "il_datasets\discard_v3\001" --models_dir "models" --model_version "discard_v3" --run_id 002 --discard_loss regression --epochs 5 --eval_samples 2048 --lr 0.00005 --l2 0.001 --batch_size 2048
+# .\.venv\Scripts\python.exe .\scripts\train_models.py --data_dir "il_datasets\discard_v3\001" --models_dir "models" --model_version "discard_v3" --run_id 002 --discard_loss regression --epochs 5 --eval_samples 2048 --lr 0.00005 --l2 0.001 --batch_size 2048
 
 # .\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py --players NeuralRegressionPlayer,beginner --benchmark_games 200 --models_dir "models\regression\" --data_dir "il_datasets\discard_v3\001"
 # .\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py

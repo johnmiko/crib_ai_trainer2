@@ -1,5 +1,5 @@
 # python .\scripts\generate_il_data.py --games 2000 --out_dir "il_datasets/"
-# python .\scripts\train_linear_models.py --data_dir "il_datasets/" --out_dir models --epochs 20
+# python .\scripts\train_models.py --data_dir "il_datasets/" --out_dir models --epochs 20
 # python .\scripts\benchmark_2_players.py --players neural,random --games 500 --models_dir models
 import sys
 import time

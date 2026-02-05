@@ -82,6 +82,8 @@ def _train_mlp(args, dataset_dir: str, hidden: str, models_dir: str) -> str:
         batch_size=args.batch_size,
         l2=args.l2,
         seed=args.seed,
+        torch_threads=args.torch_threads,
+        parallel_heads=args.parallel_heads,
         eval_samples=args.eval_samples,
         max_shards=args.max_shards,
         rank_pairs_per_hand=args.rank_pairs_per_hand,
@@ -134,10 +136,22 @@ if __name__ == "__main__":
     ap.add_argument("--benchmark_games", type=int, default=3000)
     ap.add_argument("--benchmark_workers", type=int, default=DEFAULT_BENCHMARK_WORKERS)
     ap.add_argument("--pegging_data_dir", type=str, default=DEFAULT_PEGGING_DATA_DIR)
+    ap.add_argument("--torch_threads", type=int, default=8, help="Torch CPU thread count (intra/inter-op).")
+    ap.add_argument(
+        "--parallel_heads",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Train discard and pegging heads in parallel.",
+    )
     ap.add_argument(
         "--benchmark_only",
         action="store_true",
         help="Skip training and only benchmark existing model dirs.",
+    )
+    ap.add_argument(
+        "--run_latest_benchmark",
+        action="store_true",
+        help="Benchmark the latest run_id_* variant folders for the configured model_version.",
     )
     ap.add_argument(
         "--benchmark_dirs",
@@ -171,13 +185,22 @@ if __name__ == "__main__":
                 raise SystemExit(f"Invalid --benchmark_dirs entry: {part!r}")
             label, path = part.split("=", 1)
             benchmark_dirs[label.strip()] = path.strip()
-    elif args.benchmark_only:
+    elif args.benchmark_only or args.run_latest_benchmark:
         base = Path(args.models_dir)
         version_dir = base / args.model_version if args.model_version else base
+        latest_run = _find_latest_run_id(version_dir)
+        if latest_run is None:
+            raise SystemExit(f"No run folders found under {version_dir}")
         for label in variants:
-            benchmark_dirs[label] = _resolve_variant_dir(args.models_dir, args.model_version, label)
+            path = version_dir / f"{latest_run}_{label}"
+            if not path.exists():
+                raise SystemExit(f"Missing model dir for {label}: {path}")
+            benchmark_dirs[label] = str(path)
 
     trained_dirs: dict[str, str] = {}
+    if args.run_latest_benchmark:
+        args.benchmark_only = True
+
     if not args.benchmark_only:
         variant_jobs: list[tuple[str, str, str]] = []
         for label, hidden in variants.items():

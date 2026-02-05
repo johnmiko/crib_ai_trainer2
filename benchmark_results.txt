@@ -119,14 +119,19 @@ MLPV7 vs beginner [016] after 62000 training games avg point diff 2.68 (95% CI 1
 MLPV7 vs beginner [017] after 67000 training games avg point diff 2.40 (95% CI 1.70 - 3.10) wins=2694/5000 winrate=53.88% (95% CI 52.50% - 55.26%)
 MLPV7 vs beginner [018] after 72000 training games avg point diff 2.73 (95% CI 2.03 - 3.43) wins=2718/5000 winrate=54.36% (95% CI 52.98% - 55.74%)
 
-
+I had a crash yesterday when running do_everything, I'm not sure where because the error message was so long, but I was creating 10k training data and benchmarking for 10k games and the computer ran out of memory and crashed. Is there a way to prevent this or at least make the error more informative so I can see where it ran out of memory?
 
 The next thing I want to optimize is benchmarking 2 players. I believe to optimize this though we actually just need to modify cribbage game and cribbage round. I'm not 100% sure though so can you please take a look at benchmark_2_players, create a timing test for it, run it once so it fails, copy the results of the test to hardcode what the minimum speed is, then make changes to cribbage game and cribbage round to try and improve the speed when benchmarking 2 players
 
+.\.venv\Scripts\python.exe .\scripts\mlp_size_sweep.py --benchmark_only --benchmark_games 10000 --benchmark_workers 10 --model_version "discard_v7" --benchmark_dirs "small=models\regression\discard_v7\018_small;medium=models\regression\discard_v7\018_medium;large=models\regression\discard_v7\018_large;xl=models\regression\discard_v7\018_xl;small3=models\regression\discard_v7\018_small3;mini3=models\regression\discard_v7\018_mini3"
+
 Trying out different MLP models, Not seeded comparison
-MLPV3 vs beginner [018_mini3] after 72000 training games avg point diff 2.39 (95% CI 1.74 - 3.04) wins=3215/6000 winrate=53.58% (95% CI 52.32% - 54.85%)
-MLPSmall vs beginner [018_small] after 72000 training games avg point diff 2.77 (95% CI 2.13 - 3.41) wins=3337/6000 winrate=55.62% (95% CI 54.36% - 56.87%)
-MLPMedium vs beginner [018_medium] after 72000 training games avg point diff 2.77 (95% CI 2.13 - 3.41) wins=3238/6000 winrate=53.97% (95% CI 52.71% - 55.23%)
-MLPV3 vs beginner [018_small3] after 72000 training games avg point diff 2.25 (95% CI 1.60 - 2.89) wins=3241/6000 winrate=54.02% (95% CI 52.76% - 55.28%)
-MLPLarge vs beginner [018_large] after 72000 training games avg point diff 2.78 (95% CI 2.14 - 3.42) wins=3272/6000 winrate=54.53% (95% CI 53.27% - 55.79%)
-MLPXl vs beginner [018_xl] after 72000 training games avg point diff 2.69 (95% CI 2.04 - 3.33) wins=3289/6000 winrate=54.82% (95% CI 53.56% - 56.08%)
+MLPV3[018_mini3] vs beginner after 72000 training games avg point diff 2.39 (95% CI 1.74 - 3.04) wins=3215/6000 winrate=53.58% (95% CI 52.32% - 54.85%)
+MLPSmall[018_small] vs beginner after 72000 training games avg point diff 2.77 (95% CI 2.13 - 3.41) wins=3337/6000 winrate=55.62% (95% CI 54.36% - 56.87%)
+MLPMedium [018_medium] vs beginnerafter 72000 training games avg point diff 2.77 (95% CI 2.13 - 3.41) wins=3238/6000 winrate=53.97% (95% CI 52.71% - 55.23%)
+MLPV3[018_small3] vs beginner after 72000 training games avg point diff 2.25 (95% CI 1.60 - 2.89) wins=3241/6000 winrate=54.02% (95% CI 52.76% - 55.28%)
+MLPLarge[018_large] vs beginner after 72000 training games avg point diff 2.78 (95% CI 2.14 - 3.42) wins=3272/6000 winrate=54.53% (95% CI 53.27% - 55.79%)
+MLPXl[018_xl] vs beginner after 72000 training games avg point diff 2.69 (95% CI 2.04 - 3.33) wins=3289/6000 winrate=54.82% (95% CI 53.56% - 56.08%)
+
+Seeded
+MLPV7[018_small] vs beginner after 77000 training games avg point diff 2.78 (95% CI 2.28 - 3.28) wins=5548/10000 winrate=55.48% (95% CI 54.51% - 56.45%)

@@ -281,6 +281,13 @@ def build_do_everything_parser() -> argparse.ArgumentParser:
     ap.add_argument("--lr", type=float, default=DEFAULT_LR)
     ap.add_argument("--batch_size", type=int, default=DEFAULT_BATCH_SIZE)
     ap.add_argument("--l2", type=float, default=DEFAULT_L2)
+    ap.add_argument("--torch_threads", type=int, default=8, help="Torch CPU thread count (intra/inter-op).")
+    ap.add_argument(
+        "--parallel_heads",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Train discard and pegging heads in parallel.",
+    )
     ap.add_argument("--max_shards", type=int, default=(DEFAULT_MAX_SHARDS or None))
     ap.add_argument("--fallback_player", type=str, default=DEFAULT_FALLBACK_PLAYER)
     ap.add_argument("--rank_pairs_per_hand", type=int, default=DEFAULT_RANK_PAIRS_PER_HAND)

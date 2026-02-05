@@ -5,9 +5,9 @@ from pathlib import Path
 import tempfile
 
 from scripts.generate_il_data import generate_il_data
-from scripts.do_everything2 import benchmark_2_players, generate_il_data as _gen_il, train_linear_models
+from scripts.do_everything2 import benchmark_2_players, generate_il_data as _gen_il, train_models
 from scripts.generate_il_data import _resolve_output_dir
-from scripts.train_linear_models import _resolve_models_dir
+from scripts.train_models import _resolve_models_dir
 from utils import build_do_everything_parser
 
 
@@ -68,7 +68,7 @@ def _run_do_everything_smoke(training_dir: str, models_dir: str) -> None:
 
     args.pegging_feature_set = args.pegging_model_feature_set
     args.models_dir = _resolve_models_dir(base_models_dir, args.model_version, args.model_run_id)
-    train_linear_models(args)
+    train_models(args)
 
     args.games = args.benchmark_games
     args.benchmark_games = args.benchmark_games

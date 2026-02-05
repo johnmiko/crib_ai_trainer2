@@ -37,7 +37,7 @@ Run any of these without flags and they will use `.env`:
 ```
 
 ```powershell
-.\.venv\Scripts\python.exe .\scripts\train_linear_models.py
+.\.venv\Scripts\python.exe .\scripts\train_models.py
 ```
 
 ```powershell

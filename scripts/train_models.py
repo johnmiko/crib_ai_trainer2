@@ -13,6 +13,7 @@ import numpy as np
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 
 sys.path.insert(0, ".")
 from crib_ai_trainer.constants import (
@@ -69,6 +70,11 @@ def _parse_hidden_sizes(value: str) -> tuple[int, ...]:
 
 
 def train_models(args) -> int:
+    if args.torch_threads is not None:
+        import torch
+
+        torch.set_num_threads(int(args.torch_threads))
+        torch.set_num_interop_threads(int(args.torch_threads))
     if args.lr <= 0 or args.lr > 0.05:
         raise SystemExit(
             f"Invalid --lr={args.lr}. For stability with engineered features, use 0 < lr <= 0.05 "
@@ -183,39 +189,51 @@ def train_models(args) -> int:
                 Xp = p["X"].astype(np.float32)
                 yp = p["y"].astype(np.float32)
             Xp = Xp[:, pegging_feature_indices]
-            if discard_mode == "classification":
-                logger.debug(f"Training discard model {discard_model}")
-                discard_losses = discard_model.fit_ce( # type: ignore
-                Xd, yd, lr=args.lr, epochs=args.epochs,
-                batch_size=args.batch_size, l2=args.l2, seed=args.seed
-            )
-            elif discard_mode == "ranking":
-                discard_losses = discard_model.fit_rank_pairwise( # type: ignore
+            def _train_discard():
+                if discard_mode == "classification":
+                    logger.debug(f"Training discard model {discard_model}")
+                    return discard_model.fit_ce( # type: ignore
+                        Xd, yd, lr=args.lr, epochs=args.epochs,
+                        batch_size=args.batch_size, l2=args.l2, seed=args.seed
+                    )
+                if discard_mode == "ranking":
+                    return discard_model.fit_rank_pairwise( # type: ignore
+                        Xd, yd,
+                        lr=args.lr,
+                        epochs=1,
+                        batch_size=args.batch_size,
+                        l2=args.l2,
+                        seed=args.seed,
+                        pairs_per_hand=args.rank_pairs_per_hand,
+                    )
+                return discard_model.fit_mse( # type: ignore
                     Xd, yd,
                     lr=args.lr,
                     epochs=1,
                     batch_size=args.batch_size,
                     l2=args.l2,
                     seed=args.seed,
-                    pairs_per_hand=args.rank_pairs_per_hand,
                 )
+
+            def _train_pegging():
+                return pegging_model.fit_mse(
+                    Xp, yp,
+                    lr=args.lr,
+                    epochs=1,
+                    batch_size=args.batch_size,
+                    l2=args.l2,
+                    seed=args.seed,
+                )
+
+            if args.parallel_heads:
+                with ThreadPoolExecutor(max_workers=2) as pool:
+                    f_discard = pool.submit(_train_discard)
+                    f_pegging = pool.submit(_train_pegging)
+                    discard_losses = f_discard.result()
+                    pegging_losses = f_pegging.result()
             else:
-                discard_losses = discard_model.fit_mse( # type: ignore
-                    Xd, yd,
-                    lr=args.lr,
-                    epochs=1,
-                    batch_size=args.batch_size,
-                    l2=args.l2,
-                    seed=args.seed,
-                )
-            pegging_losses = pegging_model.fit_mse(
-                Xp, yp,
-                lr=args.lr,
-                epochs=1,
-                batch_size=args.batch_size,
-                l2=args.l2,
-                seed=args.seed,
-            )
+                discard_losses = _train_discard()
+                pegging_losses = _train_pegging()
 
             last_discard_loss = float(discard_losses[-1]) if discard_losses else last_discard_loss
             last_pegging_loss = float(pegging_losses[-1]) if pegging_losses else last_pegging_loss
@@ -396,6 +414,18 @@ if __name__ == "__main__":
     ap.add_argument("--batch_size", type=int, default=DEFAULT_BATCH_SIZE)
     ap.add_argument("--l2", type=float, default=DEFAULT_L2)
     ap.add_argument("--seed", type=int, default=DEFAULT_SEED)
+    ap.add_argument(
+        "--torch_threads",
+        type=int,
+        default=8,
+        help="Torch CPU thread count (intra/inter-op).",
+    )
+    ap.add_argument(
+        "--parallel_heads",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Train discard and pegging heads in parallel.",
+    )
     ap.add_argument("--eval_samples", type=int, default=DEFAULT_EVAL_SAMPLES)
     ap.add_argument("--max_shards", type=int, default=(DEFAULT_MAX_SHARDS or None))
     ap.add_argument("--rank_pairs_per_hand", type=int, default=DEFAULT_RANK_PAIRS_PER_HAND)

@@ -25,7 +25,7 @@ from cribbage.players.beginner_player import BeginnerPlayer
 from cribbage.players.medium_player import MediumPlayer
 
 from scripts.generate_self_play_data import generate_self_play_data, _resolve_models_dir, _resolve_output_dir
-from scripts.train_linear_models import train_linear_models
+from scripts.train_models import train_models
 from crib_ai_trainer.players.neural_player import (
     NeuralRegressionPlayer,
     LinearValueModel,
@@ -176,11 +176,13 @@ if __name__ == "__main__":
             batch_size=2048,
             l2=0.001,
             seed=0,
+            torch_threads=8,
+            parallel_heads=True,
             eval_samples=2048,
             max_shards=None,
             rank_pairs_per_hand=20,
         )
-        train_linear_models(train_args)
+        train_models(train_args)
         new_path = Path(train_args.models_dir)
         print(f"New candidate: {new_path}")
 
