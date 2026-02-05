@@ -43,6 +43,7 @@ from crib_ai_trainer.constants import (
     DEFAULT_WIN_PROB_MODE,
     DEFAULT_WIN_PROB_ROLLOUTS,
     DEFAULT_WIN_PROB_MIN_SCORE,
+    DEFAULT_MAX_BUFFER_GAMES,
 )
 
 
@@ -162,6 +163,12 @@ def build_generate_il_parser() -> argparse.ArgumentParser:
         default=DEFAULT_PEGGING_EV_ROLLOUTS,
         help="Number of rollouts for pegging EV estimation.",
     )
+    ap.add_argument(
+        "--max_buffer_games",
+        type=int,
+        default=DEFAULT_MAX_BUFFER_GAMES,
+        help="Max games to buffer in memory before saving when using multi-worker IL generation.",
+    )
     return ap
 
 
@@ -187,6 +194,7 @@ def build_generate_self_play_parser() -> argparse.ArgumentParser:
     ap.add_argument("--win_prob_mode", type=str, default=DEFAULT_WIN_PROB_MODE, choices=["off", "rollout"])
     ap.add_argument("--win_prob_rollouts", type=int, default=DEFAULT_WIN_PROB_ROLLOUTS)
     ap.add_argument("--win_prob_min_score", type=int, default=DEFAULT_WIN_PROB_MIN_SCORE)
+    ap.add_argument("--max_buffer_games", type=int, default=DEFAULT_MAX_BUFFER_GAMES)
     return ap
 
 
@@ -219,6 +227,7 @@ def build_benchmark_parser() -> argparse.ArgumentParser:
     ap.add_argument("--pegging_feature_set", type=str, default=DEFAULT_PEGGING_MODEL_FEATURE_SET, choices=["base", "full_no_scores", "full"])
     ap.add_argument("--auto_mixed_benchmarks", action="store_true", default=True)
     ap.add_argument("--no_auto_mixed_benchmarks", dest="auto_mixed_benchmarks", action="store_false")
+    ap.add_argument("--max_buffer_games", type=int, default=DEFAULT_MAX_BUFFER_GAMES)
     return ap
 
 
@@ -278,6 +287,7 @@ def build_do_everything_parser() -> argparse.ArgumentParser:
     ap.add_argument("--win_prob_mode", type=str, default=DEFAULT_WIN_PROB_MODE, choices=["off", "rollout"])
     ap.add_argument("--win_prob_rollouts", type=int, default=DEFAULT_WIN_PROB_ROLLOUTS)
     ap.add_argument("--win_prob_min_score", type=int, default=DEFAULT_WIN_PROB_MIN_SCORE)
+    ap.add_argument("--max_buffer_games", type=int, default=DEFAULT_MAX_BUFFER_GAMES)
     ap.add_argument("--lr", type=float, default=DEFAULT_LR)
     ap.add_argument("--batch_size", type=int, default=DEFAULT_BATCH_SIZE)
     ap.add_argument("--l2", type=float, default=DEFAULT_L2)

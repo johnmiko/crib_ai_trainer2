@@ -9,6 +9,7 @@ def _run_benchmark(data_dir: str, models_dir: str) -> None:
         players="beginner,medium",
         benchmark_games=2,
         benchmark_workers=1,
+        max_buffer_games=500,
         models_dir=models_dir,
         model_version="seed_test",
         model_run_id=None,

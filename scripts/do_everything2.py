@@ -83,6 +83,7 @@ if __name__ == "__main__":
         _t0 = time.perf_counter()
         _start = datetime.now()
         _log_step_start("generate_il_data", _start)
+        try:
         generate_il_data(
             args.il_games,
             dataset_dir,
@@ -100,7 +101,11 @@ if __name__ == "__main__":
             args.win_prob_min_score,
             args.il_workers,
             not args.skip_pegging_data,
+            args.max_buffer_games,
         )
+        except MemoryError as exc:
+            print("MemoryError during generate_il_data. This likely ran out of RAM.", flush=True)
+            raise
         _end = datetime.now()
         _log_step_end("generate_il_data", _end, time.perf_counter() - _t0)
 
@@ -112,7 +117,11 @@ if __name__ == "__main__":
         _t0 = time.perf_counter()
         _start = datetime.now()
         _log_step_start("train_models", _start)
-        train_models(args)
+        try:
+            train_models(args)
+        except MemoryError as exc:
+            print("MemoryError during train_models. This likely ran out of RAM.", flush=True)
+            raise
         _end = datetime.now()
         _log_step_end("train_models", _end, time.perf_counter() - _t0)
 
@@ -127,14 +136,18 @@ if __name__ == "__main__":
         _t0 = time.perf_counter()
         _start = datetime.now()
         _log_step_start("benchmark", _start)
-        benchmark_2_players(args)
-        if args.benchmark_mode == "all":
-            parts = [p.strip() for p in args.players.split(",") if p.strip()]
-            opponent = parts[1] if len(parts) >= 2 else "beginner"
-            args.players = f"NeuralDiscardOnlyPlayer,{opponent}"
+        try:
             benchmark_2_players(args)
-            args.players = f"NeuralPegOnlyPlayer,{opponent}"
-            benchmark_2_players(args)
+            if args.benchmark_mode == "all":
+                parts = [p.strip() for p in args.players.split(",") if p.strip()]
+                opponent = parts[1] if len(parts) >= 2 else "beginner"
+                args.players = f"NeuralDiscardOnlyPlayer,{opponent}"
+                benchmark_2_players(args)
+                args.players = f"NeuralPegOnlyPlayer,{opponent}"
+                benchmark_2_players(args)
+        except MemoryError as exc:
+            print("MemoryError during benchmark_2_players. This likely ran out of RAM.", flush=True)
+            raise
         args.pegging_feature_set = data_pegging_feature_set
         args.seed = _orig_seed
         _end = datetime.now()

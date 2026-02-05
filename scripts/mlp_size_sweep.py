@@ -98,6 +98,7 @@ def _benchmark_model(args, models_dir: str, label: str, data_dir: str) -> None:
         players="NeuralRegressionPlayer,beginner",
         benchmark_games=args.benchmark_games,
         benchmark_workers=args.benchmark_workers,
+        max_buffer_games=args.max_buffer_games,
         models_dir=models_dir,
         model_version=args.model_version,
         model_run_id=None,
@@ -143,6 +144,7 @@ if __name__ == "__main__":
         default=True,
         help="Train discard and pegging heads in parallel.",
     )
+    ap.add_argument("--max_buffer_games", type=int, default=500)
     ap.add_argument(
         "--benchmark_only",
         action="store_true",

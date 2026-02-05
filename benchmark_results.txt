@@ -119,7 +119,6 @@ MLPV7 vs beginner [016] after 62000 training games avg point diff 2.68 (95% CI 1
 MLPV7 vs beginner [017] after 67000 training games avg point diff 2.40 (95% CI 1.70 - 3.10) wins=2694/5000 winrate=53.88% (95% CI 52.50% - 55.26%)
 MLPV7 vs beginner [018] after 72000 training games avg point diff 2.73 (95% CI 2.03 - 3.43) wins=2718/5000 winrate=54.36% (95% CI 52.98% - 55.74%)
 
-I had a crash yesterday when running do_everything, I'm not sure where because the error message was so long, but I was creating 10k training data and benchmarking for 10k games and the computer ran out of memory and crashed. Is there a way to prevent this or at least make the error more informative so I can see where it ran out of memory?
 
 The next thing I want to optimize is benchmarking 2 players. I believe to optimize this though we actually just need to modify cribbage game and cribbage round. I'm not 100% sure though so can you please take a look at benchmark_2_players, create a timing test for it, run it once so it fails, copy the results of the test to hardcode what the minimum speed is, then make changes to cribbage game and cribbage round to try and improve the speed when benchmarking 2 players
 
@@ -133,5 +132,10 @@ MLPV3[018_small3] vs beginner after 72000 training games avg point diff 2.25 (95
 MLPLarge[018_large] vs beginner after 72000 training games avg point diff 2.78 (95% CI 2.14 - 3.42) wins=3272/6000 winrate=54.53% (95% CI 53.27% - 55.79%)
 MLPXl[018_xl] vs beginner after 72000 training games avg point diff 2.69 (95% CI 2.04 - 3.33) wins=3289/6000 winrate=54.82% (95% CI 53.56% - 56.08%)
 
+medium vs beginner avg point diff 3.34 (95% CI 2.69 - 3.98) wins=3330/6000 winrate=55.50% (95% CI 54.24% - 56.75%)
+MLPVV5.0453Player vs beginner [045_small3] after 62500 training games avg point diff 3.12 (95% CI 2.47 - 3.76) wins=3319/6000 winrate=55.32% (95% CI 54.06% - 56.57%)
+
 Seeded
-MLPV7[018_small] vs beginner after 77000 training games avg point diff 2.78 (95% CI 2.28 - 3.28) wins=5548/10000 winrate=55.48% (95% CI 54.51% - 56.45%)
+MLPV7[018_small] vs beginner after 77000 training games avg point diff 2.78 (95% CI 2.28 - 3.28) wins=5548/10000 winrate=55.48% (95% CI 54.51% - 56.45%)MLPV7[018_medium] vs beginner after 77000 training games avg point diff 2.94 (95% CI 2.44 - 3.44) wins=5530/10000 winrate=55.30% (95% CI 54.33% - 56.27%)
+MLPV7[018_large] vs beginner after 77000 training games avg point diff 3.04 (95% CI 2.54 - 3.53) wins=5483/10000 winrate=54.83% (95% CI 53.85% - 55.81%)
+MLPV7[018_xl] vs beginner after 77000 training games avg point diff 2.94 (95% CI 2.44 - 3.43) wins=5533/10000 winrate=55.33% (95% CI 54.36% - 56.30%)

@@ -1637,42 +1637,49 @@ def _collect_il_data_worker(
     worker_id: int,
     log_pegging: bool,
 ) -> dict:
-    log, p1, p2 = _init_logging_players(
-        strategy,
-        seed,
-        pegging_feature_set,
-        crib_ev_mode,
-        crib_mc_samples,
-        pegging_label_mode,
-        pegging_rollouts,
-        win_prob_mode,
-        win_prob_rollouts,
-        win_prob_min_score,
-        pegging_ev_mode,
-        pegging_ev_rollouts,
-        log_pegging,
-    )
-    if not log_pegging:
-        # Avoid collecting pegging data when skipping pegging generation.
-        log.X_pegging.clear()
-        log.y_pegging.clear()
-    i = 0
-    while i < games:
-        if (i % 2) == 1:
-            players = [p2, p1]
-        else:
-            players = [p1, p2]
-        play_one_game(players)
-        i += 1
-    result = {
-        "worker_id": worker_id,
-        "X_discard": log.X_discard,
-        "y_discard": log.y_discard,
-        "y_discard_win": getattr(log, "y_discard_win", None),
-        "X_pegging": log.X_pegging,
-        "y_pegging": log.y_pegging,
-    }
-    return result
+    try:
+        log, p1, p2 = _init_logging_players(
+            strategy,
+            seed,
+            pegging_feature_set,
+            crib_ev_mode,
+            crib_mc_samples,
+            pegging_label_mode,
+            pegging_rollouts,
+            win_prob_mode,
+            win_prob_rollouts,
+            win_prob_min_score,
+            pegging_ev_mode,
+            pegging_ev_rollouts,
+            log_pegging,
+        )
+        if not log_pegging:
+            # Avoid collecting pegging data when skipping pegging generation.
+            log.X_pegging.clear()
+            log.y_pegging.clear()
+        i = 0
+        while i < games:
+            if (i % 2) == 1:
+                players = [p2, p1]
+            else:
+                players = [p1, p2]
+            play_one_game(players)
+            i += 1
+        result = {
+            "worker_id": worker_id,
+            "games": games,
+            "X_discard": log.X_discard,
+            "y_discard": log.y_discard,
+            "y_discard_win": getattr(log, "y_discard_win", None),
+            "X_pegging": log.X_pegging,
+            "y_pegging": log.y_pegging,
+        }
+        return result
+    except MemoryError as exc:
+        raise MemoryError(
+            f"MemoryError in IL data worker {worker_id} while generating {games} games. "
+            f"Consider reducing --il_games or --il_workers."
+        ) from exc
 
 
 def _collect_il_data_worker_star(args):
@@ -1695,6 +1702,7 @@ def generate_il_data(
     pegging_ev_rollouts: int = 16,
     workers: int = 1,
     save_pegging: bool = True,
+    max_buffer_games: int | None = 500,
 ) -> int:
     if seed is None:
         seed = secrets.randbits(32)
@@ -1704,15 +1712,17 @@ def generate_il_data(
     else:
         logger.info(f"Generating IL data for {games} games into {out_dir} using 2 medium players")
     if workers < 1:
-        workers = 1
+        raise ValueError("workers must be >= 1.")
 
     # Get starting cumulative count
     cumulative_games = get_cumulative_game_count(out_dir)
     save_interval = 2000
+    if max_buffer_games is None or max_buffer_games <= 0:
+        raise ValueError("max_buffer_games must be > 0.")
+    save_interval = min(save_interval, max_buffer_games)
 
     if games < 0 and workers > 1:
-        logger.info("Parallel mode is not supported for infinite games. Falling back to 1 worker.")
-        workers = 1
+        raise ValueError("Parallel mode is not supported for infinite games.")
 
     if games == 0:
         logger.info("No IL games requested (games=0). Skipping generation.")
@@ -1721,17 +1731,19 @@ def generate_il_data(
     if workers > 1 and games >= 0:
         if games < workers:
             workers = max(1, games)
-        base_games = games // workers
-        remainder = games % workers
-        games_per_worker = [base_games] * workers
-        if remainder:
-            games_per_worker[-1] += remainder
+        chunk_size = min(max_buffer_games, games)
+        tasks = []
+        remaining = games
+        while remaining > 0:
+            chunk_games = min(chunk_size, remaining)
+            tasks.append(chunk_games)
+            remaining -= chunk_games
         logger.info(
             f"Generating IL data with {workers} workers for {games} total games "
-            f"({','.join(str(g) for g in games_per_worker)} per worker) into {out_dir}"
+            f"in chunks of {chunk_size} into {out_dir}"
         )
         worker_args = []
-        for worker_id, worker_games in enumerate(games_per_worker):
+        for worker_id, worker_games in enumerate(tasks):
             worker_seed = seed + worker_id if seed is not None else secrets.randbits(32)
             worker_args.append(
                 (
@@ -1753,64 +1765,59 @@ def generate_il_data(
                 )
             )
         ctx = mp.get_context("spawn")
-        results = []
         with ctx.Pool(processes=workers) as pool:
             for idx, result in enumerate(
                 pool.imap_unordered(_collect_il_data_worker_star, worker_args),
                 start=1,
             ):
-                results.append(result)
                 worker_id = result.get("worker_id")
                 logger.info(
-                    "IL worker %s finished (%d/%d)",
+                    "IL worker %s finished chunk (%d/%d)",
                     str(worker_id),
                     idx,
-                    workers,
+                    len(worker_args),
                 )
-
-        log, _, _ = _init_logging_players(
-            strategy,
-            seed,
-            pegging_feature_set,
-            crib_ev_mode,
-            crib_mc_samples,
-            pegging_label_mode,
-            pegging_rollouts,
-            win_prob_mode,
-            win_prob_rollouts,
-            win_prob_min_score,
-            pegging_ev_mode,
-            pegging_ev_rollouts,
-            save_pegging,
-        )
-        for result in results:
-            log.X_discard.extend(result["X_discard"])
-            log.y_discard.extend(result["y_discard"])
-            if hasattr(log, "y_discard_win") and result.get("y_discard_win"):
-                log.y_discard_win.extend(result["y_discard_win"])
-            if save_pegging:
-                log.X_pegging.extend(result["X_pegging"])
-                log.y_pegging.extend(result["y_pegging"])
-
-        cumulative_games += games
-        save_data(
-            log,
-            out_dir,
-            cumulative_games,
-            strategy,
-            seed,
-            pegging_feature_set,
-            crib_ev_mode,
-            crib_mc_samples,
-            pegging_label_mode,
-            pegging_rollouts,
-            pegging_ev_mode,
-            pegging_ev_rollouts,
-            win_prob_mode,
-            win_prob_rollouts,
-            win_prob_min_score,
-            save_pegging,
-        )
+                log, _, _ = _init_logging_players(
+                    strategy,
+                    seed,
+                    pegging_feature_set,
+                    crib_ev_mode,
+                    crib_mc_samples,
+                    pegging_label_mode,
+                    pegging_rollouts,
+                    win_prob_mode,
+                    win_prob_rollouts,
+                    win_prob_min_score,
+                    pegging_ev_mode,
+                    pegging_ev_rollouts,
+                    save_pegging,
+                )
+                log.X_discard.extend(result["X_discard"])
+                log.y_discard.extend(result["y_discard"])
+                if hasattr(log, "y_discard_win") and result.get("y_discard_win"):
+                    log.y_discard_win.extend(result["y_discard_win"])
+                if save_pegging:
+                    log.X_pegging.extend(result["X_pegging"])
+                    log.y_pegging.extend(result["y_pegging"])
+                cumulative_games += int(result.get("games", 0))
+                save_data(
+                    log,
+                    out_dir,
+                    cumulative_games,
+                    strategy,
+                    seed,
+                    pegging_feature_set,
+                    crib_ev_mode,
+                    crib_mc_samples,
+                    pegging_label_mode,
+                    pegging_rollouts,
+                    pegging_ev_mode,
+                    pegging_ev_rollouts,
+                    win_prob_mode,
+                    win_prob_rollouts,
+                    win_prob_min_score,
+                    save_pegging,
+                )
         return 0
 
     rng = np.random.default_rng(seed)
@@ -1923,6 +1930,7 @@ if __name__ == "__main__":
             "pegging_ev_rollouts",
             "pegging_rollouts",
             "crib_mc_samples",
+            "max_buffer_games",
         ],
     )
     if args.win_prob_min_score < 0:
@@ -1945,6 +1953,7 @@ if __name__ == "__main__":
         args.pegging_ev_rollouts,
         args.workers,
         not args.skip_pegging_data,
+        args.max_buffer_games,
     )
 
 # python .\scripts\generate_il_data.py

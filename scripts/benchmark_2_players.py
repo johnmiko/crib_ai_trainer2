@@ -336,12 +336,12 @@ def _benchmark_single(
 
 
 def _benchmark_worker(args_tuple) -> dict:
-    args_dict, players_override, fallback_override, games_override, worker_id = args_tuple
+    args_dict, players_override, fallback_override, games_override, task_id = args_tuple
     args = SimpleNamespace(**args_dict)
     base_seed = args.seed or 0
-    args.seed = int(base_seed) + worker_id
+    args.seed = int(base_seed) + task_id
     result = _benchmark_single(args, players_override, fallback_override, games_override)
-    result["worker_id"] = worker_id
+    result["worker_id"] = task_id
     return result
 
 
@@ -353,43 +353,45 @@ def benchmark_2_players(
     if args.seed is None:
         args.seed = 67
     if args.benchmark_workers < 1:
-        args.benchmark_workers = 1
+        raise ValueError("benchmark_workers must be >= 1.")
+    if args.max_buffer_games is None or args.max_buffer_games <= 0:
+        raise ValueError("max_buffer_games must be > 0.")
 
-    if args.benchmark_workers > 1:
-        total_games = args.benchmark_games
-        if total_games <= 0:
-            raise ValueError("--benchmark_games must be > 0.")
+    total_games = args.benchmark_games
+    if total_games <= 0:
+        raise ValueError("--benchmark_games must be > 0.")
 
-        if total_games < args.benchmark_workers:
-            args.benchmark_workers = total_games
-        base = total_games // args.benchmark_workers
-        remainder = total_games % args.benchmark_workers
-        if base == 0:
-            raise ValueError(
-                "benchmark_games is smaller than benchmark_workers. "
-                "Reduce workers or increase games."
-            )
-        games_per_worker = [base] * args.benchmark_workers
-        if remainder:
-            games_per_worker[-1] += remainder
+    if args.benchmark_workers > 1 or total_games > args.max_buffer_games:
+        chunk_size = min(args.max_buffer_games, total_games)
+        tasks = []
+        remaining = total_games
+        while remaining > 0:
+            chunk_games = min(chunk_size, remaining)
+            tasks.append(chunk_games)
+            remaining -= chunk_games
+        workers = min(args.benchmark_workers, len(tasks))
+        if total_games < workers:
+            workers = total_games
+        if workers <= 0:
+            raise ValueError("--benchmark_workers must be >= 1 for the requested games.")
 
         logger.info(
-            "Benchmarking with %d workers for %d total games (%s per worker)",
-            args.benchmark_workers,
+            "Benchmarking with %d workers for %d total games (%s per task)",
+            workers,
             total_games,
-            ",".join(str(g) for g in games_per_worker),
+            ",".join(str(g) for g in tasks),
         )
 
         args_dict = vars(args).copy()
         ctx = mp.get_context("spawn")
         results = []
-        with ctx.Pool(processes=args.benchmark_workers) as pool:
+        with ctx.Pool(processes=workers) as pool:
             for idx, result in enumerate(
                 pool.imap_unordered(
                     _benchmark_worker,
                     [
-                        (args_dict, players_override, fallback_override, games_per_worker[worker_id], worker_id)
-                        for worker_id in range(args.benchmark_workers)
+                        (args_dict, players_override, fallback_override, tasks[task_id], task_id)
+                        for task_id in range(len(tasks))
                     ],
                 ),
                 start=1,
@@ -399,7 +401,7 @@ def benchmark_2_players(
                     "Benchmark worker %s finished (%d/%d)",
                     str(result.get("worker_id")),
                     idx,
-                    args.benchmark_workers,
+                    len(tasks),
                 )
 
         wins = int(sum(r["wins"] for r in results))
@@ -429,12 +431,21 @@ def benchmark_2_players(
         discard_feature_set = first["discard_feature_set"]
         pegging_feature_set = first["pegging_feature_set"]
 
-        output_str = (
-            f"{display_names[0]}[{model_dir_label}] vs {display_names[1]} after {estimated_training_games} training games "
-            f"avg point diff {avg_diff:.2f} (95% CI {diff_ci_lo:.2f} - {diff_ci_hi:.2f}) "
-            f"wins={wins}/{total_games} winrate={winrate*100:.2f}% "
-            f"(95% CI {win_ci_lo*100:.2f}% - {win_ci_hi*100:.2f}%)\n"
-        )
+        is_neural = any(name.startswith("Neural") for name in player_names)
+        if is_neural:
+            output_str = (
+                f"{display_names[0]}[{model_dir_label}] vs {display_names[1]} after {estimated_training_games} training games "
+                f"avg point diff {avg_diff:.2f} (95% CI {diff_ci_lo:.2f} - {diff_ci_hi:.2f}) "
+                f"wins={wins}/{total_games} winrate={winrate*100:.2f}% "
+                f"(95% CI {win_ci_lo*100:.2f}% - {win_ci_hi*100:.2f}%)\n"
+            )
+        else:
+            output_str = (
+                f"{display_names[0]} vs {display_names[1]} "
+                f"avg point diff {avg_diff:.2f} (95% CI {diff_ci_lo:.2f} - {diff_ci_hi:.2f}) "
+                f"wins={wins}/{total_games} winrate={winrate*100:.2f}% "
+                f"(95% CI {win_ci_lo*100:.2f}% - {win_ci_hi*100:.2f}%)\n"
+            )
         if getattr(args, "no_benchmark_write", False):
             logger.info("Skipping benchmark_results.txt write (no_benchmark_write=True).")
         else:
@@ -471,15 +482,27 @@ def benchmark_2_players(
             logger.info(f"Appended experiment -> {experiments_path}")
         return 0
 
+    if total_games < args.benchmark_workers:
+        raise ValueError("benchmark_games is smaller than benchmark_workers. Reduce workers or increase games.")
+
     single = _benchmark_single(args, players_override, fallback_override)
     model_dir_label = os.path.basename(os.path.normpath(single["models_dir"]))
-    output_str = (
-        f"{single['display_names'][0]}[{model_dir_label}] vs {single['display_names'][1]} "
-        f"after {single['estimated_training_games']} training games "
-        f"avg point diff {single['avg_diff']:.2f} (95% CI {single['diff_ci_lo']:.2f} - {single['diff_ci_hi']:.2f}) "
-        f"wins={single['wins']}/{single['games_to_play']} winrate={single['winrate']*100:.2f}% "
-        f"(95% CI {single['win_ci_lo']*100:.2f}% - {single['win_ci_hi']*100:.2f}%)\n"
-    )
+    is_neural = any(name.startswith("Neural") for name in single["player_names"])
+    if is_neural:
+        output_str = (
+            f"{single['display_names'][0]}[{model_dir_label}] vs {single['display_names'][1]} "
+            f"after {single['estimated_training_games']} training games "
+            f"avg point diff {single['avg_diff']:.2f} (95% CI {single['diff_ci_lo']:.2f} - {single['diff_ci_hi']:.2f}) "
+            f"wins={single['wins']}/{single['games_to_play']} winrate={single['winrate']*100:.2f}% "
+            f"(95% CI {single['win_ci_lo']*100:.2f}% - {single['win_ci_hi']*100:.2f}%)\n"
+        )
+    else:
+        output_str = (
+            f"{single['display_names'][0]} vs {single['display_names'][1]} "
+            f"avg point diff {single['avg_diff']:.2f} (95% CI {single['diff_ci_lo']:.2f} - {single['diff_ci_hi']:.2f}) "
+            f"wins={single['wins']}/{single['games_to_play']} winrate={single['winrate']*100:.2f}% "
+            f"(95% CI {single['win_ci_lo']*100:.2f}% - {single['win_ci_hi']*100:.2f}%)\n"
+        )
     if getattr(args, "no_benchmark_write", False):
         logger.info("Skipping benchmark_results.txt write (no_benchmark_write=True).")
     else:
