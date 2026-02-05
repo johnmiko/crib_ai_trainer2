@@ -63,6 +63,7 @@ from cribbage.database import normalize_hand_to_str
 
 from cribbage.players.beginner_player import BeginnerPlayer
 from cribbage.players.medium_player import MediumPlayer
+from cribbage.players.hard_player import HardPlayer
 from crib_ai_trainer.players.neural_player import (
     featurize_discard,
     featurize_pegging,
@@ -918,7 +919,83 @@ class LoggingMediumPlayer(MediumPlayer):
         self._current_opponent_score = int(player_state.opponent_score)
         self._current_pegging_feature_set = self._pegging_feature_set
         return self.play_pegging(playable_cards, round_state.count, round_state.table_cards)
-    
+
+
+class LoggingHardPlayer(HardPlayer):
+    """Wrap HardPlayer so we can collect training data while it plays."""
+
+    def __init__(
+        self,
+        name: str,
+        log: LoggedData,
+        discard_strategy,
+        pegging_strategy,
+        seed: int = 0,
+        pegging_feature_set: str = "full",
+        crib_ev_mode: str = "min",
+        crib_mc_samples: int = 32,
+        pegging_label_mode: str = "immediate",
+        pegging_rollouts: int = 32,
+        win_prob_mode: str = "off",
+        win_prob_rollouts: int = 16,
+        win_prob_min_score: int = 90,
+        pegging_ev_mode: str = "off",
+        pegging_ev_rollouts: int = 16,
+        log_pegging: bool = True,
+    ):
+        super().__init__(name=name)
+        self._rng = random.Random(seed)
+        self._full_deck = get_full_deck()
+        self._log = log
+        self._log_pegging = log_pegging
+        if discard_strategy == "classification":
+            self._discard_strategy_mode = "classification"
+        elif discard_strategy == "ranking":
+            self._discard_strategy_mode = "ranking"
+        elif discard_strategy == "regression":
+            self._discard_strategy_mode = "regression"
+        else:
+            raise ValueError(f"Unknown discard_strategy: {discard_strategy}")
+        self._pegging_strategy = pegging_strategy
+        self._pegging_feature_set = pegging_feature_set
+        self._crib_ev_mode = crib_ev_mode
+        self._crib_mc_samples = crib_mc_samples
+        self._pegging_label_mode = pegging_label_mode
+        self._pegging_rollouts = pegging_rollouts
+        self._win_prob_mode = win_prob_mode
+        self._win_prob_rollouts = win_prob_rollouts
+        self._win_prob_min_score = win_prob_min_score
+        self._pegging_ev_mode = pegging_ev_mode
+        self._pegging_ev_rollouts = pegging_ev_rollouts
+        self._rng_np = np.random.default_rng(seed)
+
+    def select_crib_cards(self, player_state, round_state) -> Tuple[Card, Card]:
+        hand = player_state.hand
+        dealer_is_self = player_state.is_dealer
+        your_score = player_state.score
+        opponent_score = player_state.opponent_score
+
+        if self._discard_strategy_mode == "classification":
+            self.select_crib_cards_classifier(hand, dealer_is_self, your_score, opponent_score)
+        elif self._discard_strategy_mode == "ranking":
+            self.select_crib_cards_ranking(hand, dealer_is_self, your_score, opponent_score)
+        else:
+            self.select_crib_cards_regresser(hand, dealer_is_self, your_score, opponent_score)
+        return super().select_crib_cards(player_state, round_state)
+
+    def select_card_to_play(self, player_state, round_state) -> Optional[Card]:
+        playable_cards = [c for c in player_state.hand if c.get_value() + round_state.count <= 31]
+        if not playable_cards:
+            return None
+        self._current_known_cards = player_state.known_cards
+        self._current_hand = list(player_state.hand)
+        self._current_opponent_known_hand = list(player_state.opponent_known_hand)
+        self._current_all_played_cards = list(round_state.all_played_cards)
+        self._current_player_score = int(player_state.score)
+        self._current_opponent_score = int(player_state.opponent_score)
+        self._current_pegging_feature_set = self._pegging_feature_set
+        return LoggingMediumPlayer.play_pegging(self, playable_cards, round_state.count, round_state.table_cards)
+
     def play_pegging(self, playable: List[Card], count: int, history_since_reset: List[Card]) -> Optional[Card]:
         """Override to log training data."""
         if not playable:
@@ -1303,18 +1380,18 @@ def save_data(
     out_path_discard = os.path.join(out_dir, f"discard_{cumulative_games}.npz")
     out_path_pegging = os.path.join(out_dir, f"pegging_{cumulative_games}.npz")
     if save_pegging:
-        logger.info(f"Saving to {out_path_discard} and {out_path_pegging}")
+        logger.debug(f"Saving to {out_path_discard} and {out_path_pegging}")
     else:
-        logger.info(f"Saving to {out_path_discard} (pegging skipped)")
+        logger.debug(f"Saving to {out_path_discard} (pegging skipped)")
     if y_discard_win is not None and y_discard_win.shape[0] == yd.shape[0]:
         np.savez(out_path_discard, X=Xd, y=yd, y_win=y_discard_win)
     else:
         np.savez(out_path_discard, X=Xd, y=yd)
     if save_pegging:
         np.savez(out_path_pegging, X=Xp, y=yp)
-    logger.info(f"Saved discard: X={Xd.shape} y={yd.shape}")
+    logger.debug(f"Saved discard: X={Xd.shape} y={yd.shape}")
     if save_pegging:
-        logger.info(f"Saved pegging: X={Xp.shape} y={yp.shape}")
+        logger.debug(f"Saved pegging: X={Xp.shape} y={yp.shape}")
 
     # Write/update dataset metadata for easy inspection.
     # This overwrites each time with the latest shard info.
@@ -1379,7 +1456,7 @@ def save_data(
     meta_path = os.path.join(out_dir, "dataset_meta.json")
     with open(meta_path, "w", encoding="utf-8") as f:
         json.dump(dataset_meta, f, indent=2)
-    logger.info(f"Saved dataset metadata -> {meta_path}")
+    logger.debug(f"Saved dataset metadata -> {meta_path}")
 
     # Also write a human-readable summary.
     txt_path = os.path.join(out_dir, "dataset_meta.txt")
@@ -1430,7 +1507,7 @@ def save_data(
     ]
     with open(txt_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
-    logger.info(f"Saved dataset summary -> {txt_path}")
+    logger.debug(f"Saved dataset summary -> {txt_path}")
 
 def _next_run_id(base_dir: str) -> str:
     base = Path(base_dir)
@@ -1502,10 +1579,15 @@ def _init_logging_players(
     pegging_ev_mode: str,
     pegging_ev_rollouts: int,
     log_pegging: bool = True,
+    teacher_player: str = "medium",
 ):
+    if teacher_player == "hard":
+        PlayerCls = LoggingHardPlayer
+    else:
+        PlayerCls = LoggingMediumPlayer
     if strategy == "classification":
         log = LoggedRegPegClasDiscardData()
-        p1 = LoggingMediumPlayer(
+        p1 = PlayerCls(
             "teacher1",
             log,
             discard_strategy="classification",
@@ -1523,7 +1605,7 @@ def _init_logging_players(
             pegging_ev_rollouts=pegging_ev_rollouts,
             log_pegging=log_pegging,
         )
-        p2 = LoggingMediumPlayer(
+        p2 = PlayerCls(
             "teacher2",
             log,
             discard_strategy="classification",
@@ -1543,7 +1625,7 @@ def _init_logging_players(
         )
     elif strategy == "ranking":
         log = LoggedRegPegRankDiscardData()
-        p1 = LoggingMediumPlayer(
+        p1 = PlayerCls(
             "teacher1",
             log,
             discard_strategy="ranking",
@@ -1561,7 +1643,7 @@ def _init_logging_players(
             pegging_ev_rollouts=pegging_ev_rollouts,
             log_pegging=log_pegging,
         )
-        p2 = LoggingMediumPlayer(
+        p2 = PlayerCls(
             "teacher2",
             log,
             discard_strategy="ranking",
@@ -1581,7 +1663,7 @@ def _init_logging_players(
         )
     elif strategy == "regression":
         log = LoggedRegPegRegDiscardData()
-        p1 = LoggingMediumPlayer(
+        p1 = PlayerCls(
             "teacher1",
             log,
             discard_strategy="regression",
@@ -1599,7 +1681,7 @@ def _init_logging_players(
             pegging_ev_rollouts=pegging_ev_rollouts,
             log_pegging=log_pegging,
         )
-        p2 = LoggingMediumPlayer(
+        p2 = PlayerCls(
             "teacher2",
             log,
             discard_strategy="regression",
@@ -1636,6 +1718,7 @@ def _collect_il_data_worker(
     seed: int,
     worker_id: int,
     log_pegging: bool,
+    teacher_player: str,
 ) -> dict:
     try:
         log, p1, p2 = _init_logging_players(
@@ -1652,6 +1735,7 @@ def _collect_il_data_worker(
             pegging_ev_mode,
             pegging_ev_rollouts,
             log_pegging,
+            teacher_player,
         )
         if not log_pegging:
             # Avoid collecting pegging data when skipping pegging generation.
@@ -1703,14 +1787,15 @@ def generate_il_data(
     workers: int = 1,
     save_pegging: bool = True,
     max_buffer_games: int | None = 500,
+    teacher_player: str = "medium",
 ) -> int:
     if seed is None:
         seed = secrets.randbits(32)
         logger.info(f"No seed provided, using random seed={seed}")
     if games < 0:
-        logger.info(f"Generating IL data forever into {out_dir} using 2 medium players")
+        logger.info(f"Generating IL data forever into {out_dir} using 2 {teacher_player} players")
     else:
-        logger.info(f"Generating IL data for {games} games into {out_dir} using 2 medium players")
+        logger.info(f"Generating IL data for {games} games into {out_dir} using 2 {teacher_player} players")
     if workers < 1:
         raise ValueError("workers must be >= 1.")
 
@@ -1762,6 +1847,7 @@ def generate_il_data(
                     worker_seed,
                     worker_id,
                     save_pegging,
+                    teacher_player,
                 )
             )
         ctx = mp.get_context("spawn")
@@ -1791,6 +1877,7 @@ def generate_il_data(
                     pegging_ev_mode,
                     pegging_ev_rollouts,
                     save_pegging,
+                    teacher_player,
                 )
                 log.X_discard.extend(result["X_discard"])
                 log.y_discard.extend(result["y_discard"])
@@ -1836,6 +1923,7 @@ def generate_il_data(
         pegging_ev_mode,
         pegging_ev_rollouts,
         save_pegging,
+        teacher_player,
     )
 
     games_since_save = 0
@@ -1954,6 +2042,7 @@ if __name__ == "__main__":
         args.workers,
         not args.skip_pegging_data,
         args.max_buffer_games,
+        args.teacher_player,
     )
 
 # python .\scripts\generate_il_data.py

@@ -20,11 +20,13 @@ from crib_ai_trainer.constants import (
     TRAINING_DATA_DIR,
 )
 
-from cribbage.utils import play_multiple_games
+from cribbage.utils import play_multiple_games, wilson_ci, mean_ci
 from cribbage.players.beginner_player import BeginnerPlayer
 from cribbage.players.medium_player import MediumPlayer
+from cribbage.players.hard_player import HardPlayer
 
 from scripts.generate_self_play_data import generate_self_play_data, _resolve_models_dir, _resolve_output_dir
+import multiprocessing as mp
 from scripts.train_models import train_models
 from crib_ai_trainer.players.neural_player import (
     AIPlayer,
@@ -69,8 +71,81 @@ def _make_player(models_dir: Path, name_override: str | None = None) -> AIPlayer
     )
 
 
-def _evaluate(p0, p1, games: int, seed: int | None = None) -> dict:
-    return play_multiple_games(games, p0=p0, p1=p1, seed=seed)
+def _split_games(total_games: int, workers: int) -> list[int]:
+    if total_games <= 0:
+        raise SystemExit("--benchmark_games must be > 0.")
+    if workers <= 0:
+        raise SystemExit("--benchmark_workers must be >= 1.")
+    workers = min(workers, total_games)
+    base, rem = divmod(total_games, workers)
+    tasks = [base] * workers
+    for i in range(rem):
+        tasks[i] += 1
+    return tasks
+
+
+def _build_player_from_spec(spec: dict):
+    kind = spec["type"]
+    if kind == "ai":
+        return _make_player(Path(spec["path"]), name_override=spec.get("name"))
+    if kind == "beginner":
+        return BeginnerPlayer(name="beginner")
+    if kind == "medium":
+        return MediumPlayer(name="medium")
+    if kind == "hard":
+        return HardPlayer(name="hard")
+    raise SystemExit(f"Unknown player spec: {spec}")
+
+
+def _benchmark_worker(args: tuple[dict, dict, int, int | None, int]) -> dict:
+    p0_spec, p1_spec, games, seed, start_index = args
+    worker_seed = None if seed is None else int(seed) + int(start_index)
+    p0 = _build_player_from_spec(p0_spec)
+    p1 = _build_player_from_spec(p1_spec)
+    result = play_multiple_games(games, p0=p0, p1=p1, seed=worker_seed)
+    return result
+
+
+def _evaluate_multi(p0_spec: dict, p1_spec: dict, games: int, seed: int | None, workers: int) -> dict:
+    tasks = _split_games(games, workers)
+    if len(tasks) == 1:
+        return _benchmark_worker((p0_spec, p1_spec, tasks[0], seed, 0))
+
+    start_indices = []
+    acc = 0
+    for t in tasks:
+        start_indices.append(acc)
+        acc += t
+
+    args_list = [
+        (p0_spec, p1_spec, tasks[i], seed, start_indices[i]) for i in range(len(tasks))
+    ]
+
+    ctx = mp.get_context("spawn")
+    results = []
+    with ctx.Pool(processes=len(tasks)) as pool:
+        for result in pool.imap_unordered(_benchmark_worker, args_list):
+            results.append(result)
+
+    wins = int(sum(r["wins"] for r in results))
+    ties = int(sum(r.get("ties", 0) for r in results))
+    diffs = []
+    for r in results:
+        diffs.extend(r["diffs"])
+    denom = max(1, games - ties)
+    winrate = float(wins) / float(denom)
+    win_lo, win_hi = wilson_ci(wins, denom)
+    diff_lo, diff_hi = mean_ci(diffs)
+    return {
+        "wins": wins,
+        "diffs": diffs,
+        "winrate": winrate,
+        "ci_lo": win_lo,
+        "ci_hi": win_hi,
+        "diff_ci_lo": diff_lo,
+        "diff_ci_hi": diff_hi,
+        "ties": ties,
+    }
 
 
 def _avg_diff(result: dict) -> float:
@@ -122,8 +197,16 @@ def _next_run_id(version_dir: Path) -> str:
     return f"{run_id + 1:03d}"
 
 
+def _next_candidate_id(best_path: Path) -> str:
+    if not best_path.name.isdigit():
+        raise SystemExit(f"Best model path must end with numeric run id (got {best_path})")
+    return f"{int(best_path.name) + 1:03d}"
+
+
 def _selfplay_version_from_model_version(model_version: str) -> str:
     if not model_version.startswith("discard_v"):
+        if model_version.startswith("selfplayv"):
+            return model_version
         raise SystemExit(f"model_version must start with 'discard_v' (got {model_version!r})")
     suffix = model_version.split("discard_v", 1)[1]
     if not suffix.isdigit():
@@ -133,6 +216,12 @@ def _selfplay_version_from_model_version(model_version: str) -> str:
 
 if __name__ == "__main__":
     args = build_self_play_loop_parser().parse_args()
+    if args.smoke:
+        args.loops = 1
+        args.games = 1
+        args.selfplay_workers = 1
+        args.benchmark_games = 2
+        args.benchmark_workers = 1
     if not args.best_file:
         args.best_file = f"best_model_{args.model_version}.txt"
     if not args.selfplay_dataset_version:
@@ -145,6 +234,7 @@ if __name__ == "__main__":
 
     i = 0
     no_improve_streak = 0
+    last_selfplay_shards_used = None
     while True:
         i += 1
         print(f"\n=== Self-play loop {i} ===")
@@ -182,14 +272,49 @@ if __name__ == "__main__":
             print(f"Using model_version={model_version_for_training} to keep accepted models in the same series.")
 
         selfplay_version = _selfplay_version_from_model_version(model_version_for_training)
-        models_root = Path(args.models_dir) / "regression" / selfplay_version
-        run_id = _next_run_id(models_root)
+        base_models_dir = Path(args.models_dir)
+        if base_models_dir.name == "regression":
+            models_root = base_models_dir / selfplay_version
+        else:
+            models_root = base_models_dir / "regression" / selfplay_version
+        run_id = _next_candidate_id(best_path)
         models_dir = models_root / run_id
 
+        if args.incremental:
+            if last_selfplay_shards_used is None:
+                if "selfplay_data_dir" not in best_record or "selfplay_shards_used" not in best_record:
+                    shards = sorted(Path(selfplay_dir).glob("discard_*.npz"))
+                    if not shards:
+                        raise SystemExit(f"No self-play discard shards found in {selfplay_dir}")
+                    best_record["selfplay_data_dir"] = str(selfplay_dir)
+                    best_record["selfplay_shards_used"] = len(shards)
+                    _write_best_record(best_file, best_record)
+                if Path(best_record["selfplay_data_dir"]) != Path(selfplay_dir):
+                    raise SystemExit(
+                        f"best_model selfplay_data_dir={best_record['selfplay_data_dir']} "
+                        f"does not match current selfplay_dir={selfplay_dir}."
+                    )
+                last_selfplay_shards_used = int(best_record["selfplay_shards_used"])
+            selfplay_shards = sorted(Path(selfplay_dir).glob("discard_*.npz"))
+            if not selfplay_shards:
+                raise SystemExit(f"No self-play discard shards found in {selfplay_dir}")
+            if last_selfplay_shards_used >= len(selfplay_shards):
+                raise SystemExit(
+                    f"No new self-play shards to train (have {len(selfplay_shards)}, "
+                    f"already used {last_selfplay_shards_used})."
+                )
+
+            teacher_ratio = 1.0 - float(args.selfplay_ratio)
+            if teacher_ratio < 0.0 or teacher_ratio > 1.0:
+                raise SystemExit("--selfplay_ratio must be between 0 and 1.")
+            best_record["selfplay_data_dir"] = str(selfplay_dir)
+            best_record["selfplay_shards_used"] = len(selfplay_shards)
+            _write_best_record(best_file, best_record)
+
         train_args = argparse.Namespace(
-            data_dir=teacher_dir,
-            extra_data_dir=selfplay_dir,
-            extra_ratio=args.selfplay_ratio,
+            data_dir=selfplay_dir if args.incremental else teacher_dir,
+            extra_data_dir=teacher_dir if args.incremental else selfplay_dir,
+            extra_ratio=(1.0 - float(args.selfplay_ratio)) if args.incremental else args.selfplay_ratio,
             models_dir=str(models_dir),
             model_version=model_version_for_training,
             run_id=None,
@@ -208,26 +333,39 @@ if __name__ == "__main__":
             eval_samples=2048,
             max_shards=None,
             rank_pairs_per_hand=20,
+            incremental=args.incremental,
+            incremental_from=str(best_path) if args.incremental else None,
+            incremental_start_shard=last_selfplay_shards_used if args.incremental else 0,
+            incremental_epochs=args.incremental_epochs,
+            max_train_samples=None,
         )
         train_models(train_args)
         new_path = Path(train_args.models_dir)
         print(f"New candidate: {new_path}")
 
         # 3) Benchmarks
-        best_player = _make_player(best_path, name_override=f"selfplay:best:{best_path.name}")
-        new_player = _make_player(new_path, name_override=f"selfplay:new:{new_path.name}")
-
         if args.benchmark_seed is None:
             args.benchmark_seed = int(datetime.now(timezone.utc).timestamp()) % 2_000_000_000
         print(f"Benchmark seed: {args.benchmark_seed}")
         print("Benchmark: NEW vs BEST")
-        new_vs_best = _evaluate(new_player, best_player, args.benchmark_games, seed=args.benchmark_seed)
+        new_vs_best = _evaluate_multi(
+            {"type": "ai", "path": str(new_path), "name": f"selfplay:new:{new_path.name}"},
+            {"type": "ai", "path": str(best_path), "name": f"selfplay:best:{best_path.name}"},
+            args.benchmark_games,
+            args.benchmark_seed,
+            args.benchmark_workers,
+        )
         print(
             f"  -> wins={new_vs_best['wins']}/{args.benchmark_games} "
             f"winrate={new_vs_best['winrate']:.3f} avg_diff={_avg_diff(new_vs_best):.2f}"
         )
 
-        label = "beginner" if args.benchmark_opponent == "beginner" else "medium"
+        if args.benchmark_opponent == "beginner":
+            label = "beginner"
+        elif args.benchmark_opponent == "medium":
+            label = "medium"
+        else:
+            label = "hard"
         best_vs_medium = None
         new_vs_medium = None
 
@@ -240,10 +378,31 @@ if __name__ == "__main__":
             else:
                 if args.benchmark_opponent == "beginner":
                     print("Benchmark: BEST vs BEGINNER")
-                    best_vs_medium = _evaluate(best_player, BeginnerPlayer(name="beginner"), args.benchmark_games, seed=args.benchmark_seed)
-                else:
+                    best_vs_medium = _evaluate_multi(
+                        {"type": "ai", "path": str(best_path), "name": f"selfplay:best:{best_path.name}"},
+                        {"type": "beginner"},
+                        args.benchmark_games,
+                        args.benchmark_seed,
+                        args.benchmark_workers,
+                    )
+                elif args.benchmark_opponent == "medium":
                     print("Benchmark: BEST vs MEDIUM")
-                    best_vs_medium = _evaluate(best_player, MediumPlayer(name="medium"), args.benchmark_games, seed=args.benchmark_seed)
+                    best_vs_medium = _evaluate_multi(
+                        {"type": "ai", "path": str(best_path), "name": f"selfplay:best:{best_path.name}"},
+                        {"type": "medium"},
+                        args.benchmark_games,
+                        args.benchmark_seed,
+                        args.benchmark_workers,
+                    )
+                else:
+                    print("Benchmark: BEST vs HARD")
+                    best_vs_medium = _evaluate_multi(
+                        {"type": "ai", "path": str(best_path), "name": f"selfplay:best:{best_path.name}"},
+                        {"type": "hard"},
+                        args.benchmark_games,
+                        args.benchmark_seed,
+                        args.benchmark_workers,
+                    )
                 print(
                     f"  -> wins={best_vs_medium['wins']}/{args.benchmark_games} "
                     f"winrate={best_vs_medium['winrate']:.3f} avg_diff={_avg_diff(best_vs_medium):.2f}"
@@ -256,19 +415,40 @@ if __name__ == "__main__":
 
             if args.benchmark_opponent == "beginner":
                 print("Benchmark: NEW vs BEGINNER")
-                new_vs_medium = _evaluate(new_player, BeginnerPlayer(name="beginner"), args.benchmark_games, seed=args.benchmark_seed)
-            else:
+                new_vs_medium = _evaluate_multi(
+                    {"type": "ai", "path": str(new_path), "name": f"selfplay:new:{new_path.name}"},
+                    {"type": "beginner"},
+                    args.benchmark_games,
+                    args.benchmark_seed,
+                    args.benchmark_workers,
+                )
+            elif args.benchmark_opponent == "medium":
                 print("Benchmark: NEW vs MEDIUM")
-                new_vs_medium = _evaluate(new_player, MediumPlayer(name="medium"), args.benchmark_games, seed=args.benchmark_seed)
+                new_vs_medium = _evaluate_multi(
+                    {"type": "ai", "path": str(new_path), "name": f"selfplay:new:{new_path.name}"},
+                    {"type": "medium"},
+                    args.benchmark_games,
+                    args.benchmark_seed,
+                    args.benchmark_workers,
+                )
+            else:
+                print("Benchmark: NEW vs HARD")
+                new_vs_medium = _evaluate_multi(
+                    {"type": "ai", "path": str(new_path), "name": f"selfplay:new:{new_path.name}"},
+                    {"type": "hard"},
+                    args.benchmark_games,
+                    args.benchmark_seed,
+                    args.benchmark_workers,
+                )
             print(
                 f"  -> wins={new_vs_medium['wins']}/{args.benchmark_games} "
                 f"winrate={new_vs_medium['winrate']:.3f} avg_diff={_avg_diff(new_vs_medium):.2f}"
             )
 
         # 4) Acceptance: winrate only
-        if best_vs_medium is None or new_vs_medium is None:
-            raise RuntimeError("Missing benchmark results for acceptance.")
-        accept = new_vs_medium["winrate"] > best_vs_medium["winrate"]
+        accept = False
+        if best_vs_medium is not None and new_vs_medium is not None:
+            accept = new_vs_medium["winrate"] > best_vs_medium["winrate"]
 
         record = {
             "timestamp_utc": datetime.now(timezone.utc).isoformat(),
@@ -279,9 +459,10 @@ if __name__ == "__main__":
             "new_vs_best": new_vs_best,
             "accepted": accept,
         }
-        Path("selfplay_experiments.jsonl").write_text("", encoding="utf-8") if not Path("selfplay_experiments.jsonl").exists() else None
-        with open("selfplay_experiments.jsonl", "a", encoding="utf-8") as f:
-            f.write(json.dumps(record) + "\n")
+        if not args.smoke:
+            Path("selfplay_experiments.jsonl").write_text("", encoding="utf-8") if not Path("selfplay_experiments.jsonl").exists() else None
+            with open("selfplay_experiments.jsonl", "a", encoding="utf-8") as f:
+                f.write(json.dumps(record) + "\n")
 
         if accept:
             new_record = {
@@ -293,7 +474,8 @@ if __name__ == "__main__":
                     **new_vs_medium,
                     "benchmark_games": args.benchmark_games,
                 }
-            _write_best_record(best_file, new_record)
+            if not args.smoke:
+                _write_best_record(best_file, new_record)
             print("Accepted new model.")
             no_improve_streak = 0
         else:
@@ -334,17 +516,21 @@ if __name__ == "__main__":
         )
         print(f"- Accepted: {accept}")
 
+        best_label = best_path.name
+        if not best_label.isdigit():
+            raise SystemExit(f"Best model path must end with numeric run id (got {best_path})")
         summary_line = (
             f"{new_path.name} after {args.games} self play games, {args.benchmark_games} benchmark games vs best "
-            f"[{best_path.name}] wins={_wins(new_vs_best)}/{_games(new_vs_best)} "
+            f"[{best_label}] wins={_wins(new_vs_best)}/{_games(new_vs_best)} "
             f"winrate={new_vs_best['winrate']:.3f} avg_diff={_avg_diff(new_vs_best):.2f}, "
             f"vs {label}: wins={_wins(new_vs_medium)}/{_games(new_vs_medium)} "
             f"winrate={_winrate(new_vs_medium):.3f} avg_diff={_avg_diff(new_vs_medium):.2f}, "
             f"Best vs {label}: wins={_wins(best_vs_medium)}/{_games(best_vs_medium)} "
             f"winrate={_winrate(best_vs_medium):.3f} avg_diff={_avg_diff(best_vs_medium):.2f}\n"
         )
-        with open("selfplay_results.txt", "a", encoding="utf-8") as f:
-            f.write(summary_line)
+        if not args.smoke:
+            with open("selfplay_results.txt", "a", encoding="utf-8") as f:
+                f.write(summary_line)
 
         if no_improve_streak >= args.max_no_improve:
             print(f"Stopping after {no_improve_streak} non-improving loops.")

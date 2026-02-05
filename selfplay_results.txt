@@ -5,3 +5,5 @@ Starting V7 self play with small model
 new after 250 self play games, 200 benchmark games vs best [018_small] wins=108/200 winrate=0.540 avg_diff=3.40, vs medium: wins=98/200 winrate=0.490 avg_diff=-1.45, Best vs medium: wins=100/200 winrate=0.500 avg_diff=-0.66
 new after 250 self play games, 200 benchmark games vs best [018_small] wins=112/200 winrate=0.560 avg_diff=3.94, vs medium: wins=112/200 winrate=0.560 avg_diff=2.17, Best vs medium: wins=100/200 winrate=0.500 avg_diff=-0.66
 new after 250 self play games, 200 benchmark games vs best [regression] wins=109/200 winrate=0.545 avg_diff=3.84, vs medium: wins=112/200 winrate=0.560 avg_diff=1.93, Best vs medium: wins=112/200 winrate=0.560 avg_diff=2.17
+002 after 250 self play games, 1000 benchmark games vs best [001] wins=513/1000 winrate=0.513 avg_diff=0.93, vs hard: wins=488/1000 winrate=0.488 avg_diff=-1.04, Best vs hard: wins=492/1000 winrate=0.492 avg_diff=-0.75
+002 after 250 self play games, 1000 benchmark games vs best [001] wins=505/1000 winrate=0.505 avg_diff=-0.26, vs hard: wins=458/1000 winrate=0.458 avg_diff=-2.42, Best vs hard: wins=492/1000 winrate=0.492 avg_diff=-0.75

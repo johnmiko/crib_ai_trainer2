@@ -1,0 +1,1 @@
+MLPV7[023_128_64] vs beginner after 1 training games avg point diff -44.50 (95% CI -57.24 - -31.76) wins=0/2 winrate=0.00% (95% CI 0.00% - 65.76%)

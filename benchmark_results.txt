@@ -132,46 +132,8 @@ Change benchmarking to be against medium player since we can beat the beginner p
 # medium3=256,128,64
 # mini=64,32
 
-medium vs beginner avg point diff 3.34 (95% CI 2.69 - 3.98) wins=3330/6000 winrate=55.50% (95% CI 54.24% - 56.75%)
+
 MLPVV5.0453Player vs beginner [045_small3] after 62500 training games avg point diff 3.12 (95% CI 2.47 - 3.76) wins=3319/6000 winrate=55.32% (95% CI 54.06% - 56.57%)
-
-.\.venv\Scripts\python.exe .\scripts\train_models.py `
-  --data_dir "il_datasets\discard_v7\001" `
-  --models_dir "models\regression" `
-  --model_version "discard_v7" `
-  --model_type gbt `
-  --epochs 200
-
-.\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py `
-  --players GBTPlayer,beginner `
-  --benchmark_games 10000 `
-  --models_dir "models\regression\discard_v7" `
-  --data_dir "il_datasets\discard_v7\001" `
-  --no_auto_mixed_benchmarks
-
-.\.venv\Scripts\python.exe .\scripts\train_models.py `
-  --data_dir "il_datasets\discard_v7\001" `
-  --models_dir "models\regression" `
-  --model_version "discard_v7" `
-  --model_type rf `
-  --epochs 500
-
-.\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py `
-  --players RandomForestPlayer,beginner `
-  --benchmark_games 10000 `
-  --models_dir "models\regression\discard_v7" `
-  --data_dir "il_datasets\discard_v7\001" `
-  --no_auto_mixed_benchmarks
-
-
-.\.venv\Scripts\python.exe .\scripts\mlp_size_sweep.py `
-  --dataset_version "discard_v7" `
-  --model_version "discard_v7" `
-  --mlp_variants "mini=64,32" `
-  --benchmark_games 10000
-
-
-.\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py --players AIPlayer,beginner --benchmark_games 10000 --models_dir "models\regression\discard_v7\018_mini" --data_dir "il_datasets\discard_v7\001" --no_auto_mixed_benchmarks
 
 Seeded comparison (played the same games against beginner)
 MLPV7[018_small] vs beginner after 77000 training games avg point diff 2.78 (95% CI 2.28 - 3.28) wins=5548/10000 winrate=55.48% (95% CI 54.51% - 56.45%)
@@ -182,3 +144,17 @@ MLPV7[018_mini3] vs beginner after 77000 training games avg point diff 2.50 (95%
 MLPV7[018_small3] vs beginner after 77000 training games avg point diff 2.61 (95% CI 2.11 - 3.11) wins=5443/10000 winrate=54.43% (95% CI 53.45% - 55.41%)
 MLPV7[018_medium3] vs beginner after 77000 training games avg point diff 2.35 (95% CI 1.85 - 2.86) wins=5370/10000 winrate=53.70% (95% CI 52.72% - 54.68%)
 MLPV7[022_mini] vs beginner after 77000 training games avg point diff 2.48 (95% CI 1.98 - 2.98) wins=5333/10000 winrate=53.33% (95% CI 52.35% - 54.31%)
+
+hard vs medium avg point diff 1.35 (95% CI 0.87 - 1.83) wins=5114/10000 winrate=51.14% (95% CI 50.16% - 52.12%)
+medium vs beginner avg point diff 3.34 (95% CI 2.69 - 3.98) wins=3330/6000 winrate=55.50% (95% CI 54.24% - 56.75%)
+hard vs beginner avg point diff 4.57 (95% CI 4.08 - 5.07) wins=5749/10000 winrate=57.49% (95% CI 56.52% - 58.46%)
+
+
+.\.venv\Scripts\python.exe .\scripts\autopilot.py `
+  --dataset_version "discard_v8" `
+  --model_version "discard_v8" `
+  --teacher_player hard `
+  --il_games 10000 `
+  --benchmark_games 10000 `
+  --mlp_hidden "64,32" `
+  --model_tag_suffix "001_mini"

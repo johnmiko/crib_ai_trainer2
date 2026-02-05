@@ -102,6 +102,7 @@ if __name__ == "__main__":
             args.il_workers,
             not args.skip_pegging_data,
             args.max_buffer_games,
+            args.teacher_player,
         )
         except MemoryError as exc:
             print("MemoryError during generate_il_data. This likely ran out of RAM.", flush=True)

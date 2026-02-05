@@ -505,7 +505,7 @@ def generate_self_play_data(
                 win_prob_rollouts,
                 win_prob_min_score,
             )
-            logger.info("Self-play worker %d/%d saved %d games.", idx, workers, games_played)
+            logger.debug("Self-play worker %d/%d saved %d games.", idx, workers, games_played)
     return 0
 
 

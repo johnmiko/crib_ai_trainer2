@@ -94,6 +94,20 @@ def build_generate_il_parser() -> argparse.ArgumentParser:
     ap.add_argument("--seed", type=int, default=_default_seed(), help="Random seed. Omit to use a random seed.")
     ap.add_argument("--strategy", type=str, default=DEFAULT_STRATEGY)
     ap.add_argument(
+        "--teacher_player",
+        type=str,
+        default="hard",
+        choices=["medium", "hard"],
+        help="Which teacher player to use for IL generation.",
+    )
+    ap.add_argument(
+        "--teacher_player",
+        type=str,
+        default="medium",
+        choices=["medium", "hard"],
+        help="Which teacher player to use for IL generation.",
+    )
+    ap.add_argument(
         "--skip_pegging_data",
         action="store_true",
         help="Generate only discard data (skip pegging logging and files).",
@@ -203,6 +217,7 @@ def build_benchmark_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser()
     ap.add_argument("--players", type=str, default=DEFAULT_BENCHMARK_PLAYERS)
     ap.add_argument("--benchmark_games", type=int, default=DEFAULT_BENCHMARK_GAMES)
+    ap.add_argument("--benchmark_workers", type=int, default=DEFAULT_BENCHMARK_WORKERS)
     ap.add_argument(
         "--benchmark_workers",
         type=int,
@@ -308,6 +323,10 @@ def build_do_everything_parser() -> argparse.ArgumentParser:
     ap.add_argument("--model_tag", type=str, default=DEFAULT_MODEL_TAG or None)
     ap.add_argument("--extra_data_dir", type=str, default=None, help="Optional extra dataset to mix in (e.g., self-play).")
     ap.add_argument("--extra_ratio", type=float, default=0.0, help="Fraction of batches to sample from extra_data_dir.")
+    ap.add_argument("--incremental", action=argparse.BooleanOptionalAction, default=False)
+    ap.add_argument("--incremental_from", type=str, default=None)
+    ap.add_argument("--incremental_start_shard", type=int, default=0)
+    ap.add_argument("--incremental_epochs", type=int, default=None)
     ap.add_argument(
         "--skip_pegging_data",
         action="store_true",
@@ -326,8 +345,9 @@ def build_self_play_loop_parser() -> argparse.ArgumentParser:
     ap.add_argument("--games", type=int, default=DEFAULT_GAMES_PER_LOOP)
     ap.add_argument("--selfplay_workers", type=int, default=1, help="Worker processes for self-play generation.")
     ap.add_argument("--benchmark_games", type=int, default=DEFAULT_BENCHMARK_GAMES)
+    ap.add_argument("--benchmark_workers", type=int, default=DEFAULT_BENCHMARK_WORKERS)
     ap.add_argument("--benchmark_seed", type=int, default=None, help="Seed used for self-play benchmarks (random if omitted).")
-    ap.add_argument("--benchmark_opponent", type=str, default="medium", choices=["medium", "beginner"])
+    ap.add_argument("--benchmark_opponent", type=str, default="medium", choices=["medium", "beginner", "hard"])
     ap.add_argument("--selfplay_ratio", type=float, default=0.3)
     ap.add_argument("--max_no_improve", type=int, default=3, help="Stop after this many non-improving loops.")
     ap.add_argument("--best_file", type=str, default=None)
@@ -346,4 +366,7 @@ def build_self_play_loop_parser() -> argparse.ArgumentParser:
     ap.add_argument("--win_prob_mode", type=str, default=DEFAULT_WIN_PROB_MODE, choices=["off", "rollout"])
     ap.add_argument("--win_prob_rollouts", type=int, default=DEFAULT_WIN_PROB_ROLLOUTS)
     ap.add_argument("--win_prob_min_score", type=int, default=DEFAULT_WIN_PROB_MIN_SCORE)
+    ap.add_argument("--incremental", action=argparse.BooleanOptionalAction, default=True)
+    ap.add_argument("--incremental_epochs", type=int, default=None)
+    ap.add_argument("--smoke", action="store_true", help="Run 1 loop with tiny settings and skip all writes.")
     return ap

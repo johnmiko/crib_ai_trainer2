@@ -27,7 +27,7 @@ from crib_ai_trainer.constants import (
     DEFAULT_BENCHMARK_GAMES,
     DEFAULT_BENCHMARK_WORKERS,
     DEFAULT_PEGGING_DATA_DIR,
-    DEFAULT_GAMES,
+    DEFAULT_GAMES_PER_LOOP,
 )
 from scripts.generate_il_data import generate_il_data, _resolve_output_dir
 from scripts.train_models import train_models, _resolve_models_dir
@@ -65,6 +65,7 @@ if __name__ == "__main__":
     ap.add_argument("--pegging_feature_set", type=str, default=DEFAULT_PEGGING_MODEL_FEATURE_SET, choices=["base", "full_no_scores", "full"])
     ap.add_argument("--model_type", type=str, default="mlp", choices=["linear", "mlp", "gbt", "rf"])
     ap.add_argument("--mlp_hidden", type=str, default="128,64")
+    ap.add_argument("--model_tag_suffix", type=str, default=None, help="Optional suffix for benchmark display tag.")
     ap.add_argument("--lr", type=float, default=DEFAULT_LR)
     ap.add_argument("--epochs", type=int, default=DEFAULT_EPOCHS)
     ap.add_argument("--batch_size", type=int, default=DEFAULT_BATCH_SIZE)
@@ -73,6 +74,10 @@ if __name__ == "__main__":
     ap.add_argument("--eval_samples", type=int, default=DEFAULT_EVAL_SAMPLES)
     ap.add_argument("--max_shards", type=int, default=(DEFAULT_MAX_SHARDS or None))
     ap.add_argument("--rank_pairs_per_hand", type=int, default=DEFAULT_RANK_PAIRS_PER_HAND)
+    ap.add_argument("--incremental", action=argparse.BooleanOptionalAction, default=False)
+    ap.add_argument("--incremental_from", type=str, default=None)
+    ap.add_argument("--incremental_start_shard", type=int, default=0)
+    ap.add_argument("--incremental_epochs", type=int, default=None)
     ap.add_argument("--benchmark_games", type=int, default=DEFAULT_BENCHMARK_GAMES)
     ap.add_argument("--benchmark_workers", type=int, default=DEFAULT_BENCHMARK_WORKERS)
     ap.add_argument("--benchmark_opponent", type=str, default="beginner", choices=["beginner", "medium"])
@@ -89,13 +94,15 @@ if __name__ == "__main__":
     ap.add_argument("--max_no_improve", type=int, default=3)
     ap.add_argument("--generate_il", action=argparse.BooleanOptionalAction, default=True)
     ap.add_argument("--generate_il_each_loop", action=argparse.BooleanOptionalAction, default=True)
-    ap.add_argument("--il_games", type=int, default=DEFAULT_GAMES)
+    ap.add_argument("--il_games", type=int, default=DEFAULT_GAMES_PER_LOOP)
     ap.add_argument("--il_workers", type=int, default=10)
     ap.add_argument("--win_prob_mode", type=str, default="off", choices=["off", "rollout"])
     ap.add_argument("--win_prob_rollouts", type=int, default=16)
     ap.add_argument("--win_prob_min_score", type=int, default=90)
     ap.add_argument("--pegging_ev_mode", type=str, default="off", choices=["off", "rollout"])
     ap.add_argument("--pegging_ev_rollouts", type=int, default=16)
+    ap.add_argument("--teacher_player", type=str, default="hard", choices=["medium", "hard"])
+    ap.add_argument("--smoke", action="store_true", help="Run 1 tiny loop to smoke test the pipeline.")
     args = ap.parse_args()
 
     results_path = Path(args.results_output_path)
@@ -106,6 +113,12 @@ if __name__ == "__main__":
     no_improve = 0
 
     dataset_dir = None
+    if args.smoke:
+        args.loops = 1
+        args.il_games = 1
+        args.il_workers = 1
+        args.benchmark_games = 2
+        args.benchmark_workers = 1
     for loop_idx in range(1, args.loops + 1):
         _log(log_path, f"=== Autopilot loop {loop_idx} ===")
         if args.generate_il and (args.generate_il_each_loop or loop_idx == 1):
@@ -129,6 +142,7 @@ if __name__ == "__main__":
                 args.il_workers,
                 True,
                 args.max_buffer_games,
+                args.teacher_player,
             )
         if dataset_dir is None:
             dataset_dir = _resolve_output_dir(args.data_dir, args.dataset_version, args.dataset_run_id, new_run=False)
@@ -158,12 +172,19 @@ if __name__ == "__main__":
             eval_samples=args.eval_samples,
             max_shards=args.max_shards,
             rank_pairs_per_hand=args.rank_pairs_per_hand,
+            incremental=args.incremental,
+            incremental_from=args.incremental_from,
+            incremental_start_shard=args.incremental_start_shard,
+            incremental_epochs=args.incremental_epochs,
         )
         train_models(train_args)
 
         opponent = "beginner" if args.benchmark_opponent == "beginner" else "medium"
         players = f"AIPlayer,{opponent}"
         _log(log_path, f"Benchmarking {players} for {args.benchmark_games} games (seed={args.benchmark_seed})")
+        model_tag = args.model_tag_suffix
+        if model_tag is None:
+            model_tag = f"{args.model_version}-{Path(model_dir).name}_{args.mlp_hidden.replace(',', '_')}"
         bench_args = argparse.Namespace(
             players=players,
             benchmark_games=args.benchmark_games,
@@ -177,7 +198,7 @@ if __name__ == "__main__":
             max_shards=args.max_shards,
             seed=args.benchmark_seed,
             fallback_player="beginner",
-            model_tag=None,
+            model_tag=model_tag,
             discard_feature_set=args.discard_feature_set,
             pegging_feature_set=args.pegging_feature_set,
             auto_mixed_benchmarks=False,

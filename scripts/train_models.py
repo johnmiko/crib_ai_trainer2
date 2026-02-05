@@ -71,6 +71,26 @@ def _parse_hidden_sizes(value: str) -> tuple[int, ...]:
     return tuple(int(p) for p in parts)
 
 
+def _load_incremental_models(model_dir: Path, model_type: str):
+    if model_type == "mlp":
+        discard_path = model_dir / "discard_mlp.pt"
+        pegging_path = model_dir / "pegging_mlp.pt"
+        if not discard_path.exists() or not pegging_path.exists():
+            raise SystemExit(f"Missing MLP model files in {model_dir}")
+        discard_model = MLPValueModel.load_pt(str(discard_path))
+        pegging_model = MLPValueModel.load_pt(str(pegging_path))
+        return discard_model, pegging_model
+    if model_type == "linear":
+        discard_path = model_dir / "discard_linear.npz"
+        pegging_path = model_dir / "pegging_linear.npz"
+        if not discard_path.exists() or not pegging_path.exists():
+            raise SystemExit(f"Missing linear model files in {model_dir}")
+        discard_model = LinearValueModel.load_npz(str(discard_path))
+        pegging_model = LinearValueModel.load_npz(str(pegging_path))
+        return discard_model, pegging_model
+    raise SystemExit(f"--incremental only supports model_type=mlp or linear (got {model_type}).")
+
+
 def train_models(args) -> int:
     if args.torch_threads is not None:
         import torch
@@ -133,6 +153,10 @@ def train_models(args) -> int:
     pegging_feature_indices = get_pegging_feature_indices(args.pegging_feature_set)
     model_type = args.model_type
     mlp_hidden = _parse_hidden_sizes(args.mlp_hidden)
+    incremental = bool(getattr(args, "incremental", False))
+    incremental_from = getattr(args, "incremental_from", None)
+    incremental_start_shard = getattr(args, "incremental_start_shard", 0)
+    incremental_epochs = getattr(args, "incremental_epochs", None)
 
     if discard_mode in {"classification", "ranking"} and model_type != "linear":
         raise SystemExit("Only linear models are supported for classification/ranking at the moment.")
@@ -142,6 +166,28 @@ def train_models(args) -> int:
         raise SystemExit(
             "GBT/RF training requires --max_train_samples or --max_shards to limit memory use."
         )
+    if incremental:
+        if discard_mode != "regression":
+            raise SystemExit("--incremental requires discard_loss=regression.")
+        if model_type not in {"mlp", "linear"}:
+            raise SystemExit("--incremental only supports model_type=mlp or linear.")
+        if args.max_train_samples is not None:
+            raise SystemExit("--incremental does not support --max_train_samples.")
+        if incremental_from is None:
+            raise SystemExit("--incremental requires --incremental_from.")
+        if len(discard_shards) != len(pegging_shards):
+            raise SystemExit(
+                f"Discard/pegging shard counts differ ({len(discard_shards)} vs {len(pegging_shards)}). "
+                "Make them match before incremental training."
+            )
+        if incremental_start_shard < 0:
+            raise SystemExit("--incremental_start_shard must be >= 0.")
+        if incremental_start_shard >= len(discard_shards):
+            raise SystemExit(
+                f"--incremental_start_shard={incremental_start_shard} exceeds shard count ({len(discard_shards)})."
+            )
+        if incremental_epochs is not None and incremental_epochs <= 0:
+            raise SystemExit("--incremental_epochs must be > 0 if provided.")
 
     if discard_mode == "classification":
         with np.load(discard_shards[0]) as d0:
@@ -223,7 +269,103 @@ def train_models(args) -> int:
             y_all = y_all[idx]
         return X_all, y_all
 
-    if model_type in {"gbt", "rf"}:
+    if incremental:
+        inc_epochs = incremental_epochs or args.epochs
+        discard_model, pegging_model = _load_incremental_models(Path(incremental_from), model_type)
+        extra_idx = 0
+        for shard_idx in range(incremental_start_shard, len(discard_shards)):
+            d_path = discard_shards[shard_idx]
+            p_path = pegging_shards[shard_idx]
+            with np.load(d_path) as d:
+                Xd = d["X"].astype(np.float32)
+                yd = d["y"].astype(np.float32)
+            Xd = Xd[:, discard_feature_indices]
+            with np.load(p_path) as p:
+                Xp = p["X"].astype(np.float32)
+                yp = p["y"].astype(np.float32)
+            Xp = Xp[:, pegging_feature_indices]
+
+            def _train_discard():
+                return discard_model.fit_mse(
+                    Xd,
+                    yd,
+                    lr=args.lr,
+                    epochs=inc_epochs,
+                    batch_size=args.batch_size,
+                    l2=args.l2,
+                    seed=args.seed,
+                )
+
+            def _train_pegging():
+                return pegging_model.fit_mse(
+                    Xp,
+                    yp,
+                    lr=args.lr,
+                    epochs=inc_epochs,
+                    batch_size=args.batch_size,
+                    l2=args.l2,
+                    seed=args.seed,
+                )
+
+            if args.parallel_heads:
+                with ThreadPoolExecutor(max_workers=2) as pool:
+                    f_discard = pool.submit(_train_discard)
+                    f_pegging = pool.submit(_train_pegging)
+                    discard_losses = f_discard.result()
+                    pegging_losses = f_pegging.result()
+            else:
+                discard_losses = _train_discard()
+                pegging_losses = _train_pegging()
+            last_discard_loss = float(discard_losses[-1]) if discard_losses else last_discard_loss
+            last_pegging_loss = float(pegging_losses[-1]) if pegging_losses else last_pegging_loss
+
+            if extra_data_dir is not None and extra_ratio > 0.0 and rng.random() < extra_ratio:
+                d_path = extra_discard_shards[extra_idx % len(extra_discard_shards)]
+                p_path = extra_pegging_shards[extra_idx % len(extra_pegging_shards)]
+                extra_idx += 1
+                with np.load(d_path) as d:
+                    Xd = d["X"].astype(np.float32)
+                    yd = d["y"].astype(np.float32)
+                Xd = Xd[:, discard_feature_indices]
+                with np.load(p_path) as p:
+                    Xp = p["X"].astype(np.float32)
+                    yp = p["y"].astype(np.float32)
+                Xp = Xp[:, pegging_feature_indices]
+
+                def _train_discard_extra():
+                    return discard_model.fit_mse(
+                        Xd,
+                        yd,
+                        lr=args.lr,
+                        epochs=inc_epochs,
+                        batch_size=args.batch_size,
+                        l2=args.l2,
+                        seed=args.seed,
+                    )
+
+                def _train_pegging_extra():
+                    return pegging_model.fit_mse(
+                        Xp,
+                        yp,
+                        lr=args.lr,
+                        epochs=inc_epochs,
+                        batch_size=args.batch_size,
+                        l2=args.l2,
+                        seed=args.seed,
+                    )
+
+                if args.parallel_heads:
+                    with ThreadPoolExecutor(max_workers=2) as pool:
+                        f_discard = pool.submit(_train_discard_extra)
+                        f_pegging = pool.submit(_train_pegging_extra)
+                        discard_losses = f_discard.result()
+                        pegging_losses = f_pegging.result()
+                else:
+                    discard_losses = _train_discard_extra()
+                    pegging_losses = _train_pegging_extra()
+                last_discard_loss = float(discard_losses[-1]) if discard_losses else last_discard_loss
+                last_pegging_loss = float(pegging_losses[-1]) if pegging_losses else last_pegging_loss
+    elif model_type in {"gbt", "rf"}:
         print(f"Training {model_type} models on {len(discard_shards)} shard(s) (full in-memory fit).")
         Xd_all, yd_all = _load_all_discard()
         Xp_all, yp_all = _load_all_pegging()
@@ -432,6 +574,10 @@ def train_models(args) -> int:
         "pegging_data_dir": str(pegging_data_dir),
         "extra_data_dir": str(extra_data_dir) if extra_data_dir else None,
         "extra_ratio": extra_ratio if extra_data_dir else 0.0,
+        "incremental": incremental,
+        "incremental_from": incremental_from,
+        "incremental_start_shard": incremental_start_shard if incremental else None,
+        "incremental_epochs": incremental_epochs if incremental else None,
         "models_dir": str(models_dir),
         "model_type": model_type,
         "discard_loss": discard_mode,
@@ -475,6 +621,10 @@ def train_models(args) -> int:
         f"run_id: {model_meta['run_id']}",
         f"data_dir: {model_meta['data_dir']}",
         f"models_dir: {model_meta['models_dir']}",
+        f"incremental: {model_meta['incremental']}",
+        f"incremental_from: {model_meta['incremental_from']}",
+        f"incremental_start_shard: {model_meta['incremental_start_shard']}",
+        f"incremental_epochs: {model_meta['incremental_epochs']}",
         f"model_type: {model_meta['model_type']}",
         f"discard_loss: {model_meta['discard_loss']}",
         f"discard_feature_set: {model_meta['discard_feature_set']}",
@@ -548,6 +698,30 @@ if __name__ == "__main__":
         type=int,
         default=None,
         help="For GBT/RF only: cap total training samples to control memory.",
+    )
+    ap.add_argument(
+        "--incremental",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Train by loading an existing model and continuing on later shards.",
+    )
+    ap.add_argument(
+        "--incremental_from",
+        type=str,
+        default=None,
+        help="Model directory to load when using --incremental.",
+    )
+    ap.add_argument(
+        "--incremental_start_shard",
+        type=int,
+        default=0,
+        help="0-based shard index to start training from when using --incremental.",
+    )
+    ap.add_argument(
+        "--incremental_epochs",
+        type=int,
+        default=None,
+        help="Epochs per shard for --incremental (defaults to --epochs).",
     )
     args = ap.parse_args()
     args.models_dir = _resolve_models_dir(args.models_dir, args.model_version, args.run_id)

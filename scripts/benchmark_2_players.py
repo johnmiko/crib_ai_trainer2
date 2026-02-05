@@ -438,11 +438,15 @@ def benchmark_2_players(
         if workers <= 0:
             raise ValueError("--benchmark_workers must be >= 1 for the requested games.")
 
+        if len(set(tasks)) == 1:
+            task_summary = f"{tasks[0]} per task"
+        else:
+            task_summary = ",".join(str(g) for g in tasks) + " per task"
         logger.info(
-            "Benchmarking with %d workers for %d total games (%s per task)",
+            "Benchmarking with %d workers for %d total games (%s)",
             workers,
             total_games,
-            ",".join(str(g) for g in tasks),
+            task_summary,
         )
 
         args_dict = vars(args).copy()
@@ -489,6 +493,8 @@ def benchmark_2_players(
         model_type = first["model_type"]
         model_tag = first["model_tag"]
         model_dir_label = os.path.basename(os.path.normpath(first["models_dir"]))
+        if model_tag and "-" in model_tag:
+            model_dir_label = model_tag.split("-", 1)[1]
         estimated_training_games = first["estimated_training_games"]
         data_dir = first["data_dir"]
         discard_feature_set = first["discard_feature_set"]
@@ -551,6 +557,8 @@ def benchmark_2_players(
 
     single = _benchmark_single(args, players_override, fallback_override)
     model_dir_label = os.path.basename(os.path.normpath(single["models_dir"]))
+    if single["model_tag"] and "-" in single["model_tag"]:
+        model_dir_label = single["model_tag"].split("-", 1)[1]
     is_neural = any(name in {"AIPlayer", "MLPPlayer", "GBTPlayer", "RandomForestPlayer"} for name in single["player_names"])
     if is_neural:
         output_str = (

@@ -58,7 +58,7 @@ def _resolve_variant_dir(base_models_dir: str, model_version: str, label: str) -
 def _resolve_dataset_dir(base_dir: str, version: str, run_id: str | None) -> str:
     base = Path(base_dir)
     has_shards = bool(list(base.glob("discard_*.npz"))) or bool(list(base.glob("pegging_*.npz")))
-    if has_shards and run_id is not None:
+    if has_shards:
         return str(base)
     return _resolve_output_dir(base_dir, version, run_id, new_run=False)
 
@@ -95,7 +95,7 @@ def _train_mlp(args, dataset_dir: str, hidden: str, models_dir: str) -> str:
 def _benchmark_model(args, models_dir: str, label: str, data_dir: str) -> None:
     model_tag = f"{args.model_version}-{Path(models_dir).name}"
     bench_args = argparse.Namespace(
-        players="AIPlayer,beginner",
+        players=args.players,
         benchmark_games=args.benchmark_games,
         benchmark_workers=args.benchmark_workers,
         max_buffer_games=args.max_buffer_games,
@@ -136,6 +136,7 @@ if __name__ == "__main__":
     ap.add_argument("--rank_pairs_per_hand", type=int, default=DEFAULT_RANK_PAIRS_PER_HAND)
     ap.add_argument("--benchmark_games", type=int, default=3000)
     ap.add_argument("--benchmark_workers", type=int, default=DEFAULT_BENCHMARK_WORKERS)
+    ap.add_argument("--players", type=str, default="AIPlayer,beginner")
     ap.add_argument("--pegging_data_dir", type=str, default=DEFAULT_PEGGING_DATA_DIR)
     ap.add_argument("--torch_threads", type=int, default=8, help="Torch CPU thread count (intra/inter-op).")
     ap.add_argument(
@@ -168,6 +169,12 @@ if __name__ == "__main__":
         default="small=128,64;medium=256,128;large=512,256;xl=1024,512;small3=128,64,32;mini3=64,32,16",
         help="Semicolon-separated label=hidden_sizes pairs.",
     )
+    ap.add_argument(
+        "--custom_sizes",
+        type=str,
+        default="",
+        help="Semicolon-separated sizes or label=sizes (e.g. 128,64;small3=128,64,32).",
+    )
     args = ap.parse_args()
 
     dataset_dir = _resolve_dataset_dir(args.data_dir, args.dataset_version, args.dataset_run_id)
@@ -175,10 +182,26 @@ if __name__ == "__main__":
 
     variants: dict[str, str] = {}
     for part in [p.strip() for p in args.mlp_variants.split(";") if p.strip()]:
-        if "=" not in part:
-            raise SystemExit(f"Invalid --mlp_variants entry: {part!r}")
-        label, hidden = part.split("=", 1)
-        variants[label.strip()] = hidden.strip()
+        if "=" in part:
+            label, hidden = part.split("=", 1)
+            label = label.strip()
+            hidden = hidden.strip()
+        else:
+            hidden = part
+            label = part.replace(",", "x").replace(" ", "")
+        variants[label] = hidden
+    if args.custom_sizes.strip():
+        for part in [p.strip() for p in args.custom_sizes.split(";") if p.strip()]:
+            if "=" in part:
+                label, hidden = part.split("=", 1)
+                label = label.strip()
+                hidden = hidden.strip()
+            else:
+                hidden = part
+                label = part.replace(",", "x").replace(" ", "")
+            if label in variants:
+                raise SystemExit(f"Duplicate model label: {label}")
+            variants[label] = hidden
 
     benchmark_dirs: dict[str, str] = {}
     if args.benchmark_dirs.strip():
