@@ -1694,7 +1694,6 @@ def generate_il_data(
     pegging_ev_mode: str = "off",
     pegging_ev_rollouts: int = 16,
     workers: int = 1,
-    games_per_worker: int | None = None,
     save_pegging: bool = True,
 ) -> int:
     if seed is None:
@@ -1715,21 +1714,28 @@ def generate_il_data(
         logger.info("Parallel mode is not supported for infinite games. Falling back to 1 worker.")
         workers = 1
 
+    if games == 0:
+        logger.info("No IL games requested (games=0). Skipping generation.")
+        return 0
+
     if workers > 1 and games >= 0:
-        per_worker_games = games_per_worker if games_per_worker is not None else games
-        if per_worker_games <= 0:
-            raise ValueError("games_per_worker must be > 0 when using multiple workers.")
-        total_games = per_worker_games * workers
+        if games < workers:
+            workers = max(1, games)
+        base_games = games // workers
+        remainder = games % workers
+        games_per_worker = [base_games] * workers
+        if remainder:
+            games_per_worker[-1] += remainder
         logger.info(
-            f"Generating IL data with {workers} workers x {per_worker_games} games "
-            f"(total {total_games}) into {out_dir}"
+            f"Generating IL data with {workers} workers for {games} total games "
+            f"({','.join(str(g) for g in games_per_worker)} per worker) into {out_dir}"
         )
         worker_args = []
-        for worker_id in range(workers):
+        for worker_id, worker_games in enumerate(games_per_worker):
             worker_seed = seed + worker_id if seed is not None else secrets.randbits(32)
             worker_args.append(
                 (
-                    per_worker_games,
+                    worker_games,
                     strategy,
                     pegging_feature_set,
                     crib_ev_mode,
@@ -1786,7 +1792,7 @@ def generate_il_data(
                 log.X_pegging.extend(result["X_pegging"])
                 log.y_pegging.extend(result["y_pegging"])
 
-        cumulative_games += total_games
+        cumulative_games += games
         save_data(
             log,
             out_dir,
@@ -1938,7 +1944,6 @@ if __name__ == "__main__":
         args.pegging_ev_mode,
         args.pegging_ev_rollouts,
         args.workers,
-        args.games_per_worker,
         not args.skip_pegging_data,
     )
 

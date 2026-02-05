@@ -1,7 +1,7 @@
-"""Train LinearValueModel models from sharded datasets.
+"""Train models from sharded datasets.
 
 Usage:
-  python scripts/train_linear_models.py --data_dir il_datasets --models_dir models --epochs 20
+  python scripts/train_models.py --data_dir il_datasets --models_dir models --epochs 20
 """
 
 from __future__ import annotations
@@ -68,7 +68,7 @@ def _parse_hidden_sizes(value: str) -> tuple[int, ...]:
     return tuple(int(p) for p in parts)
 
 
-def train_linear_models(args) -> int:
+def train_models(args) -> int:
     if args.lr <= 0 or args.lr > 0.05:
         raise SystemExit(
             f"Invalid --lr={args.lr}. For stability with engineered features, use 0 < lr <= 0.05 "
@@ -401,7 +401,7 @@ if __name__ == "__main__":
     ap.add_argument("--rank_pairs_per_hand", type=int, default=DEFAULT_RANK_PAIRS_PER_HAND)
     args = ap.parse_args()
     args.models_dir = _resolve_models_dir(args.models_dir, args.model_version, args.run_id)
-    train_linear_models(args)
+    train_models(args)
 
-# python .\scripts\train_linear_models.py
-# .\.venv\Scripts\python.exe .\scripts\train_linear_models.py --data_dir "il_datasets/discard_v3/001" --models_dir "models" --model_version "discard_v3" --discard_loss regression --epochs 5 --eval_samples 2048 --lr 0.00005 --batch_size 2048 --l2 0.001
+# python .\scripts\train_models.py
+# .\.venv\Scripts\python.exe .\scripts\train_models.py --data_dir "il_datasets/discard_v3/001" --models_dir "models" --model_version "discard_v3" --discard_loss regression --epochs 5 --eval_samples 2048 --lr 0.00005 --batch_size 2048 --l2 0.001

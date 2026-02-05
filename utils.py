@@ -77,12 +77,6 @@ def build_generate_il_parser() -> argparse.ArgumentParser:
         default=DEFAULT_IL_WORKERS,
         help="Number of worker processes for IL generation.",
     )
-    ap.add_argument(
-        "--games_per_worker",
-        type=int,
-        default=DEFAULT_IL_GAMES_PER_WORKER,
-        help="Games per worker when using multiple workers.",
-    )
     ap.add_argument("--out_dir", type=str, default=TRAINING_DATA_DIR)
     ap.add_argument("--dataset_version", type=str, default=DEFAULT_DATASET_VERSION)
     ap.add_argument(
@@ -206,12 +200,6 @@ def build_benchmark_parser() -> argparse.ArgumentParser:
         default=DEFAULT_BENCHMARK_WORKERS,
         help="Number of worker processes for benchmarking.",
     )
-    ap.add_argument(
-        "--benchmark_games_per_worker",
-        type=int,
-        default=None,
-        help="Games per worker when using multiple benchmark workers (omit to split total).",
-    )
     ap.add_argument("--models_dir", type=str, default=MODELS_DIR, help="Base models dir or explicit run dir")
     ap.add_argument("--model_version", type=str, default=DEFAULT_MODEL_VERSION)
     ap.add_argument("--model_run_id", type=str, default=DEFAULT_MODEL_RUN_ID or None, help="Explicit run id (e.g., 014)")
@@ -243,7 +231,6 @@ def build_do_everything_parser() -> argparse.ArgumentParser:
     )
     ap.add_argument("--il_games", type=int, default=DEFAULT_GAMES_PER_LOOP, help="Games per loop for IL data generation")
     ap.add_argument("--il_workers", type=int, default=DEFAULT_IL_WORKERS, help="Workers for IL data generation")
-    ap.add_argument("--il_games_per_worker", type=int, default=DEFAULT_IL_GAMES_PER_WORKER, help="IL games per worker")
     ap.add_argument(
         "--loops",
         type=int,
@@ -263,17 +250,11 @@ def build_do_everything_parser() -> argparse.ArgumentParser:
     ap.add_argument("--benchmark_games", type=int, default=DEFAULT_BENCHMARK_GAMES)
     ap.add_argument("--benchmark_workers", type=int, default=DEFAULT_BENCHMARK_WORKERS)
     ap.add_argument(
-        "--benchmark_games_per_worker",
-        type=int,
-        default=None,
-        help="Games per worker when using multiple benchmark workers (omit to split total).",
-    )
-    ap.add_argument(
         "--benchmark_mode",
         type=str,
-        default="full",
-        choices=["all", "full"],
-        help="Benchmark all three (full/discard/pegging) or only the full model.",
+        default="single",
+        choices=["all", "single"],
+        help="Benchmark all three (full/discard/pegging) or only the combined model.",
     )
     ap.add_argument("--models_dir", type=str, default=MODELS_DIR)
     ap.add_argument("--model_version", type=str, default=DEFAULT_MODEL_VERSION)

@@ -18,9 +18,7 @@ def _run_do_everything_smoke(training_dir: str, models_dir: str) -> None:
     args.il_games = 1
     args.benchmark_games = 1
     args.il_workers = 1
-    args.il_games_per_worker = 1
     args.benchmark_workers = 1
-    args.benchmark_games_per_worker = 1
     args.no_benchmark_write = True
     args.training_dir = training_dir
     args.models_dir = models_dir
@@ -66,7 +64,6 @@ def _run_do_everything_smoke(training_dir: str, models_dir: str) -> None:
         args.win_prob_rollouts,
         args.win_prob_min_score,
         args.il_workers,
-        args.il_games_per_worker,
     )
 
     args.pegging_feature_set = args.pegging_model_feature_set
@@ -117,7 +114,6 @@ def _run_timing(games: int, label: str) -> float:
             pegging_ev_mode="off",
             pegging_ev_rollouts=0,
             workers=1,
-            games_per_worker=None,
         )
         elapsed = time.perf_counter() - start
 
@@ -163,7 +159,6 @@ def test_generate_il_data_timing_expensive_v6():
             pegging_ev_mode="rollout",
             pegging_ev_rollouts=64,
             workers=1,
-            games_per_worker=None,
             save_pegging=True,
         )
         elapsed = time.perf_counter() - start

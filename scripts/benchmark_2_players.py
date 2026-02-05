@@ -161,10 +161,9 @@ def _build_player_factory(args, fallback_override: str | None):
         return LinearValueModel.load_npz(f"{args.models_dir}/pegging_linear.npz")
 
     model_tag = resolve_model_tag()
-    pegging_model = _load_pegging_model()
-
     def player_factory(name: str):
         if name == "NeuralClassificationPlayer":
+            pegging_model = _load_pegging_model()
             discard_model = LinearDiscardClassifier.load_npz(f"{args.models_dir}/discard_linear.npz")
             return NeuralClassificationPlayer(
                 discard_model,
@@ -174,6 +173,7 @@ def _build_player_factory(args, fallback_override: str | None):
                 pegging_feature_set=args.pegging_feature_set,
             )
         if name == "NeuralRegressionPlayer":
+            pegging_model = _load_pegging_model()
             discard_model = _load_discard_model()
             return NeuralRegressionPlayer(
                 discard_model,
@@ -192,6 +192,7 @@ def _build_player_factory(args, fallback_override: str | None):
                 discard_feature_set=args.discard_feature_set,
             )
         if name == "NeuralPegOnlyPlayer":
+            pegging_model = _load_pegging_model()
             fallback = base_player_factory(fallback_player_name)
             return NeuralPegOnlyPlayer(
                 pegging_model,
@@ -248,7 +249,7 @@ def _benchmark_single(
     p1 = player_factory(player_names[1])
     games_to_play = games_override or args.benchmark_games
 
-    results = play_multiple_games(games_to_play, p0=p0, p1=p1)
+    results = play_multiple_games(games_to_play, p0=p0, p1=p1, seed=args.seed)
     wins = results["wins"]
     diffs = results["diffs"]
     winrate = results["winrate"]
@@ -350,7 +351,7 @@ def benchmark_2_players(
     fallback_override: str | None = None,
 ) -> int:
     if args.seed is None:
-        args.seed = 42
+        args.seed = 67
     if args.benchmark_workers < 1:
         args.benchmark_workers = 1
 
@@ -359,23 +360,18 @@ def benchmark_2_players(
         if total_games <= 0:
             raise ValueError("--benchmark_games must be > 0.")
 
-        if args.benchmark_games_per_worker is not None:
-            per_worker_games = args.benchmark_games_per_worker
-            if per_worker_games <= 0:
-                raise ValueError("benchmark_games_per_worker must be > 0 when using multiple workers.")
-            total_games = per_worker_games * args.benchmark_workers
-            games_per_worker = [per_worker_games] * args.benchmark_workers
-        else:
-            base = total_games // args.benchmark_workers
-            remainder = total_games % args.benchmark_workers
-            if base == 0:
-                raise ValueError(
-                    "benchmark_games is smaller than benchmark_workers. "
-                    "Reduce workers or increase games."
-                )
-            games_per_worker = [
-                base + (1 if i < remainder else 0) for i in range(args.benchmark_workers)
-            ]
+        if total_games < args.benchmark_workers:
+            args.benchmark_workers = total_games
+        base = total_games // args.benchmark_workers
+        remainder = total_games % args.benchmark_workers
+        if base == 0:
+            raise ValueError(
+                "benchmark_games is smaller than benchmark_workers. "
+                "Reduce workers or increase games."
+            )
+        games_per_worker = [base] * args.benchmark_workers
+        if remainder:
+            games_per_worker[-1] += remainder
 
         logger.info(
             "Benchmarking with %d workers for %d total games (%s per worker)",
@@ -434,7 +430,7 @@ def benchmark_2_players(
         pegging_feature_set = first["pegging_feature_set"]
 
         output_str = (
-            f"{display_names[0]} vs {display_names[1]} [{model_dir_label}] after {estimated_training_games} training games "
+            f"{display_names[0]}[{model_dir_label}] vs {display_names[1]} after {estimated_training_games} training games "
             f"avg point diff {avg_diff:.2f} (95% CI {diff_ci_lo:.2f} - {diff_ci_hi:.2f}) "
             f"wins={wins}/{total_games} winrate={winrate*100:.2f}% "
             f"(95% CI {win_ci_lo*100:.2f}% - {win_ci_hi*100:.2f}%)\n"
@@ -478,7 +474,7 @@ def benchmark_2_players(
     single = _benchmark_single(args, players_override, fallback_override)
     model_dir_label = os.path.basename(os.path.normpath(single["models_dir"]))
     output_str = (
-        f"{single['display_names'][0]} vs {single['display_names'][1]} [{model_dir_label}] "
+        f"{single['display_names'][0]}[{model_dir_label}] vs {single['display_names'][1]} "
         f"after {single['estimated_training_games']} training games "
         f"avg point diff {single['avg_diff']:.2f} (95% CI {single['diff_ci_lo']:.2f} - {single['diff_ci_hi']:.2f}) "
         f"wins={single['wins']}/{single['games_to_play']} winrate={single['winrate']*100:.2f}% "

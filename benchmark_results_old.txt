@@ -1,3 +1,95 @@
+Copy of file from start of 2026-02-05
+Trained using beginner discard strategy and beginner pegging strategy
+neural vs beginner after 12000.0 training games wins=45/500 winrate=0.090 (95% CI 0.068 - 0.118) avg point diff -17.88
+neural vs random after 12000.0 training games wins=330ish/500
+Check only discard and only pegging vs beginner
+neural_discard vs beginner after 12000.0 training games wins=72/500 winrate=0.144 (95% CI 0.116 - 0.177) avg point diff -14.14
+neural_peg vs beginner after 12000.0 training games wins=184/500 winrate=0.368 (95% CI 0.327 - 0.411) avg point diff -2.02
+
+Training using monte carle discard strategy and basic pegging strategy
+neural vs beginner after 2000.0 training games wins=43/500 winrate=0.086 (95% CI 0.064 - 0.114) avg point diff -18.83
+neural vs random after 2000.0 training games wins=331/500 winrate=0.662 (95% CI 0.619 - 0.702) avg point diff 7.02
+NeuralRegressionPlayer vs random after 12000.0 training games wins=333/500 winrate=0.666 (95% CI 0.624 - 0.706) avg point diff 7.24
+NeuralRegressionPlayer vs beginner after 12000.0 training games wins=45/500 winrate=0.090 (95% CI 0.068 - 0.118) avg point diff -18.50
+
+Use classification, check how number of training games affects winrate
+NeuralClassificationPlayer vs beginner after 20 training games wins=28/500 winrate=0.056 (95% CI 0.039 - 0.080) avg point diff -21.77
+NeuralClassificationPlayer vs random after 20 training games wins=278/500 winrate=0.556 (95% CI 0.512 - 0.599) avg point diff 2.54
+NeuralClassificationPlayer vs beginner after 220 training games wins=18/500 winrate=0.036 (95% CI 0.023 - 0.056) avg point diff -21.71
+NeuralClassificationPlayer vs random after 220 training games wins=273/500 winrate=0.546 (95% CI 0.502 - 0.589) avg point diff 3.55
+NeuralClassificationPlayer vs beginner after 2000.0 training games wins=6/500 winrate=0.012 (95% CI 0.006 - 0.026) avg point diff -37.34
+NeuralClassificationPlayer vs random after 2000.0 training games wins=319/500 winrate=0.638 (95% CI 0.595 - 0.679) avg point diff 8.95
+beginner vs random after 0.0 training games wins=499/500 winrate=0.998 (95% CI 0.989 - 1.000) avg point diff 45.26
+
+Start training using medium player 2026-02-02
+NeuralClassificationPlayer vs medium after 4000.0 training games wins=34/500 winrate=0.068 (95% CI 0.049 - 0.094) avg point diff -33.42
+NeuralClassificationPlayer vs random after 4000.0 training games wins=343/500 winrate=68.600 (95% CI 64.403 - 72.513) avg point diff 11.43
+NeuralClassificationPlayer vs beginner after 4000.0 training games wins=47/500 winrate=9.400 (95% CI 7.143 - 12.277) avg point diff -30.46
+NeuralClassificationPlayer vs medium after 6000.0 training games wins=40/500 winrate=8.000 (95% CI 5.930 - 10.711) avg point diff -33.52
+NeuralClassificationPlayer vs beginner after 6000.0 training games wins=51/500 winrate=10.200 (95% CI 7.843 - 13.164) avg point diff -29.92
+
+Include known_cards for pegging
+NeuralClassificationPlayer vs beginner after 4000 training games wins=49/500 winrate=9.8% (95% CI 7.5% - 12.7)% avg point diff -30.27
+NeuralClassificationPlayer vs beginner after 24000 training games wins=51/500 winrate=10.2% (95% CI 7.8% - 13.2)% avg point diff -28.94
+NeuralClassificationPlayer vs beginner after 46000 training games wins=55/500 winrate=11.0% (95% CI 8.5% - 14.0)% avg point diff -29.09
+NeuralClassificationPlayer vs beginner after 228000 training games wins=54/500 winrate=10.8% (95% CI 8.4% - 13.8)% avg point diff -29.16
+NeuralClassificationPlayer vs beginner after 228000 training games wins=43/500 winrate=8.6% (95% CI 6.4% - 11.4)% avg point diff -30.07
+NeuralClassificationPlayer vs beginner after 228000 training games wins=33/200 winrate=16.5% (95% CI 12.0% - 22.3)% avg point diff -25.62
+NeuralClassificationPlayer vs beginner after 10000 training games wins=3/10 winrate=30.0% (95% CI 10.8% - 60.3)% avg point diff -25.20
+NeuralClassificationPlayer vs beginner after 106000 training games wins=22/200 winrate=11.0% (95% CI 7.4% - 16.1)% avg point diff -30.18
+NeuralClassificationPlayer vs beginner after 106000 training games wins=31/200 winrate=15.5% (95% CI 11.1% - 21.2)% avg point diff -28.47
+NeuralClassificationPlayer vs random after 106000 training games wins=136/200 winrate=68.0% (95% CI 61.2% - 74.1)% avg point diff 12.65
+NeuralDiscardOnlyPlayer vs beginner after 106000 training games wins=44/200 winrate=22.0% (95% CI 16.8% - 28.2)% avg point diff -21.95
+NeuralPegOnlyPlayer vs beginner after 106000 training games wins=90/200 winrate=45.0% (95% CI 38.3% - 51.9)% avg point diff -4.64
+
+Classification doesn't seem to be working very well going to switch to regression
+NeuralRegressionPlayer vs beginner after 2020 training games wins=19/200 winrate=9.5% (95% CI 6.2% - 14.4)% avg point diff -28.65
+NeuralRegressionPlayer vs beginner after 4020 training games wins=30/200 winrate=15.0% (95% CI 10.7% - 20.6)% avg point diff -25.89
+NeuralDiscardOnlyPlayer vs beginner after 4020 training games wins=39/200 winrate=19.5% (95% CI 14.6% - 25.5)% avg point diff -20.41
+NeuralPegOnlyPlayer vs beginner after 4020 training games wins=72/200 winrate=36.0% (95% CI 29.7% - 42.9)% avg point diff -8.73
+NeuralRegressionPlayer vs beginner after 4021 training games wins=19/200 winrate=9.5% (95% CI 6.2% - 14.4)% avg point diff -29.46
+NeuralDiscardOnlyPlayer vs beginner after 4021 training games wins=39/200 winrate=19.5% (95% CI 14.6% - 25.5)% avg point diff -19.80
+NeuralRegressionPlayer vs beginner after 8021 training games wins=26/200 winrate=13.0% (95% CI 9.0% - 18.4)% avg point diff -28.75
+NeuralDiscardOnlyPlayer vs beginner after 8021 training games wins=32/200 winrate=16.0% (95% CI 11.6% - 21.7)% avg point diff -22.04
+
+Add all of the scoring features to the discard training set (15s, pairs, runs, flushes, nobs)
+NeuralRegressionPlayer vs beginner after 4000 training games wins=85/200 winrate=42.5% (95% CI 35.9% - 49.4)% avg point diff -5.69
+NeuralDiscardOnlyPlayer vs beginner after 4000 training games wins=105/200 winrate=52.5% (95% CI 45.6% - 59.3)% avg point diff 0.24
+NeuralPegOnlyPlayer vs beginner after 4000 training games wins=84/200 winrate=42.0% (95% CI 35.4% - 48.9)% avg point diff -5.76
+
+That went well, going to add more features to pegging
+NeuralRegressionPlayer vs beginner after 4000 training games wins=82/200 winrate=41.0% (95% CI 34.4% - 47.9)% avg point diff -5.91
+NeuralDiscardOnlyPlayer vs beginner after 4000 training games wins=105/200 winrate=52.5% (95% CI 45.6% - 59.3)% avg point diff 0.27
+NeuralPegOnlyPlayer vs beginner after 4000 training games wins=90/200 winrate=45.0% (95% CI 38.3% - 51.9)% avg point diff -2.83
+
+NeuralRegressionPlayer vs beginner after 6000 training games wins=427/1000 winrate=42.7% (95% CI 39.7% - 45.8)% avg point diff -5.08
+NeuralDiscardOnlyPlayer vs beginner after 6000 training games wins=493/1000 winrate=49.3% (95% CI 46.2% - 52.4)% avg point diff -0.67
+NeuralPegOnlyPlayer vs beginner after 6000 training games wins=437/1000 winrate=43.7% (95% CI 40.7% - 46.8)% avg point diff -4.09
+
+
+Add a bunch more features like endgame and opponents score
+NeuralRegressionPlayer vs beginner after 2414 training games wins=60/200 winrate=30.0% (95% CI 24.1% - 36.7)% avg point diff -12.17
+NeuralDiscardOnlyPlayer vs beginner after 2414 training games wins=73/200 winrate=36.5% (95% CI 30.1% - 43.4)% avg point diff -7.12
+NeuralPegOnlyPlayer vs beginner after 2414 training games wins=87/200 winrate=43.5% (95% CI 36.8% - 50.4)% avg point diff -4.38
+
+NeuralRegressionPlayer vs beginner after 4614 training games wins=84/200 winrate=42.0% (95% CI 35.4% - 48.9)% avg point diff -6.43
+NeuralDiscardOnlyPlayer vs beginner after 4614 training games wins=93/200 winrate=46.5% (95% CI 39.7% - 53.4)% avg point diff -3.56
+NeuralPegOnlyPlayer vs beginner after 4614 training games wins=86/200 winrate=43.0% (95% CI 36.3% - 49.9)% avg point diff -3.92
+
+NeuralRegressionPlayer vs beginner after 6614 training games wins=86/200 winrate=43.0% (95% CI 36.3% - 49.9)% avg point diff -4.83
+NeuralDiscardOnlyPlayer vs beginner after 6614 training games wins=92/200 winrate=46.0% (95% CI 39.2% - 52.9)% avg point diff -2.79
+NeuralPegOnlyPlayer vs beginner after 6614 training games wins=96/200 winrate=48.0% (95% CI 41.2% - 54.9)% avg point diff -1.71
+
+NeuralV3.007Player vs beginner after 8614 training games avg point diff -6.18 wins=75/200 winrate=37.5%
+NeuralV3.014Player vs beginner after 10614 training games avg point diff -7.41 wins=385/1000 winrate=38.5%
+NeuralV3.019Player vs beginner after 13414 training games avg point diff -8.98 wins=68/200 winrate=34.0%
+NeuralV3.020Player vs beginner after 15414 training games avg point diff -8.14 wins=71/200 winrate=35.5%
+
+Below shows that unmasked is behaving better than masked. But not improving after another 10'000 training games
+NeuralV3.020Player vs beginner [020] after 17414 training games avg point diff -5.28 (95% CI -6.01 - -4.56) wins=2052/5000 winrate=41.0%
+NeuralV3.026Player vs beginner [026_masked] after 27414 training games avg point diff -5.55 (95% CI -6.24 - -4.86) wins=2026/5000 winrate=40.5%
+NeuralV3.026Player vs beginner [026] after 27414 training games avg point diff -4.84 (95% CI -5.56 - -4.12) wins=2072/5000 winrate=41.4%
+
 MLPVV3.027Player vs beginner [027] after 27414 training games avg point diff -1.90 (95% CI -5.53 - 1.74) wins=90/200 winrate=45.0%
 NeuralDiscardOnlyPlayer vs beginner [027] after 27414 training games avg point diff 1.77 (95% CI -1.85 - 5.39) wins=103/200 winrate=51.5%
 NeuralPegOnlyPlayer vs beginner [027] after 27414 training games avg point diff 0.10 (95% CI -3.52 - 3.73) wins=102/200 winrate=51.0%
@@ -119,14 +211,3 @@ MLPV7 vs beginner [016] after 62000 training games avg point diff 2.68 (95% CI 1
 MLPV7 vs beginner [017] after 67000 training games avg point diff 2.40 (95% CI 1.70 - 3.10) wins=2694/5000 winrate=53.88% (95% CI 52.50% - 55.26%)
 MLPV7 vs beginner [018] after 72000 training games avg point diff 2.73 (95% CI 2.03 - 3.43) wins=2718/5000 winrate=54.36% (95% CI 52.98% - 55.74%)
 
-
-
-The next thing I want to optimize is benchmarking 2 players. I believe to optimize this though we actually just need to modify cribbage game and cribbage round. I'm not 100% sure though so can you please take a look at benchmark_2_players, create a timing test for it, run it once so it fails, copy the results of the test to hardcode what the minimum speed is, then make changes to cribbage game and cribbage round to try and improve the speed when benchmarking 2 players
-
-Trying out different MLP models, Not seeded comparison
-MLPV3 vs beginner [018_mini3] after 72000 training games avg point diff 2.39 (95% CI 1.74 - 3.04) wins=3215/6000 winrate=53.58% (95% CI 52.32% - 54.85%)
-MLPSmall vs beginner [018_small] after 72000 training games avg point diff 2.77 (95% CI 2.13 - 3.41) wins=3337/6000 winrate=55.62% (95% CI 54.36% - 56.87%)
-MLPMedium vs beginner [018_medium] after 72000 training games avg point diff 2.77 (95% CI 2.13 - 3.41) wins=3238/6000 winrate=53.97% (95% CI 52.71% - 55.23%)
-MLPV3 vs beginner [018_small3] after 72000 training games avg point diff 2.25 (95% CI 1.60 - 2.89) wins=3241/6000 winrate=54.02% (95% CI 52.76% - 55.28%)
-MLPLarge vs beginner [018_large] after 72000 training games avg point diff 2.78 (95% CI 2.14 - 3.42) wins=3272/6000 winrate=54.53% (95% CI 53.27% - 55.79%)
-MLPXl vs beginner [018_xl] after 72000 training games avg point diff 2.69 (95% CI 2.04 - 3.33) wins=3289/6000 winrate=54.82% (95% CI 53.56% - 56.08%)

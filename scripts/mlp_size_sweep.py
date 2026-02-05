@@ -31,11 +31,10 @@ from crib_ai_trainer.constants import (
     DEFAULT_RANK_PAIRS_PER_HAND,
     DEFAULT_BENCHMARK_GAMES,
     DEFAULT_BENCHMARK_WORKERS,
-    DEFAULT_BENCHMARK_GAMES_PER_WORKER,
     DEFAULT_PEGGING_DATA_DIR,
 )
 from scripts.generate_il_data import _resolve_output_dir
-from scripts.train_linear_models import train_linear_models, _resolve_models_dir
+from scripts.train_models import train_models, _resolve_models_dir
 from scripts.benchmark_2_players import benchmark_2_players
 
 
@@ -87,25 +86,25 @@ def _train_mlp(args, dataset_dir: str, hidden: str, models_dir: str) -> str:
         max_shards=args.max_shards,
         rank_pairs_per_hand=args.rank_pairs_per_hand,
     )
-    train_linear_models(train_args)
+    train_models(train_args)
     return models_dir
 
 
-def _benchmark_model(args, models_dir: str, label: str) -> None:
+def _benchmark_model(args, models_dir: str, label: str, data_dir: str) -> None:
+    model_tag = f"{args.model_version}-{Path(models_dir).name}"
     bench_args = argparse.Namespace(
         players="NeuralRegressionPlayer,beginner",
         benchmark_games=args.benchmark_games,
         benchmark_workers=args.benchmark_workers,
-        benchmark_games_per_worker=args.benchmark_games_per_worker,
         models_dir=models_dir,
         model_version=args.model_version,
         model_run_id=None,
         latest_model=False,
-        data_dir=args.data_dir,
+        data_dir=data_dir,
         max_shards=args.max_shards,
         seed=args.seed,
         fallback_player="beginner",
-        model_tag=label,
+        model_tag=model_tag,
         discard_feature_set=args.discard_feature_set,
         pegging_feature_set=args.pegging_feature_set,
         auto_mixed_benchmarks=False,
@@ -134,7 +133,6 @@ if __name__ == "__main__":
     ap.add_argument("--rank_pairs_per_hand", type=int, default=DEFAULT_RANK_PAIRS_PER_HAND)
     ap.add_argument("--benchmark_games", type=int, default=3000)
     ap.add_argument("--benchmark_workers", type=int, default=DEFAULT_BENCHMARK_WORKERS)
-    ap.add_argument("--benchmark_games_per_worker", type=int, default=DEFAULT_BENCHMARK_GAMES_PER_WORKER)
     ap.add_argument("--pegging_data_dir", type=str, default=DEFAULT_PEGGING_DATA_DIR)
     ap.add_argument(
         "--benchmark_only",
@@ -209,8 +207,8 @@ if __name__ == "__main__":
     if args.benchmark_only:
         for label, model_dir in benchmark_dirs.items():
             print(f"Benchmark: {label} vs beginner")
-            _benchmark_model(args, model_dir, label)
+            _benchmark_model(args, model_dir, label, dataset_dir)
     else:
         for label, model_dir in trained_dirs.items():
             print(f"Benchmark: {label} vs beginner")
-            _benchmark_model(args, model_dir, label)
+            _benchmark_model(args, model_dir, label, dataset_dir)

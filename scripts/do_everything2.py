@@ -11,7 +11,7 @@ from pathlib import Path
 
 from scripts.benchmark_2_players import benchmark_2_players
 from scripts.generate_il_data import generate_il_data, _resolve_output_dir
-from scripts.train_linear_models import train_linear_models, _resolve_models_dir
+from scripts.train_models import train_models, _resolve_models_dir
 from utils import build_do_everything_parser
 
 
@@ -25,9 +25,7 @@ if __name__ == "__main__":
         args.il_games = 1
         args.benchmark_games = 1
         args.il_workers = 1
-        args.il_games_per_worker = 1
         args.benchmark_workers = 1
-        args.benchmark_games_per_worker = 1
         args.no_benchmark_write = True
 
     if args.data_dir is None:
@@ -101,23 +99,22 @@ if __name__ == "__main__":
             args.win_prob_rollouts,
             args.win_prob_min_score,
             args.il_workers,
-            args.il_games_per_worker,
             not args.skip_pegging_data,
         )
         _end = datetime.now()
         _log_step_end("generate_il_data", _end, time.perf_counter() - _t0)
 
-        print("step: train_linear_models", flush=True)
+        print("step: train_models", flush=True)
         args.pegging_feature_set = args.pegging_model_feature_set
         args.models_dir = _resolve_models_dir(base_models_dir, args.model_version, args.model_run_id)
         args.pegging_data_dir = args.pegging_data_dir or args.data_dir
         print(f"models_dir: {args.models_dir}", flush=True)
         _t0 = time.perf_counter()
         _start = datetime.now()
-        _log_step_start("train_linear_models", _start)
-        train_linear_models(args)
+        _log_step_start("train_models", _start)
+        train_models(args)
         _end = datetime.now()
-        _log_step_end("train_linear_models", _end, time.perf_counter() - _t0)
+        _log_step_end("train_models", _end, time.perf_counter() - _t0)
 
         print("step: benchmark", flush=True)
         args.games = args.benchmark_games
@@ -126,7 +123,7 @@ if __name__ == "__main__":
         args.pegging_feature_set = args.pegging_model_feature_set
         _orig_seed = args.seed
         if _orig_seed is None:
-            args.seed = 42
+            args.seed = 67
         _t0 = time.perf_counter()
         _start = datetime.now()
         _log_step_start("benchmark", _start)
