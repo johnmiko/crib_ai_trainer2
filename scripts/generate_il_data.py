@@ -1771,7 +1771,7 @@ def generate_il_data(
                 start=1,
             ):
                 worker_id = result.get("worker_id")
-                logger.info(
+                logger.debug(
                     "IL worker %s finished chunk (%d/%d)",
                     str(worker_id),
                     idx,
@@ -1844,9 +1844,9 @@ def generate_il_data(
     while True:
         if i % 10 == 0:
             if games < 0:
-                logger.info(f"Playing games {i} - {i + 100}/∞")
+                logger.debug(f"Playing games {i} - {i + 100}/∞")
             else:
-                logger.info(f"Playing games {i} - {i + 100}/{games}")
+                logger.debug(f"Playing games {i} - {i + 100}/{games}")
         
         # If your engine uses RNG/Deck seeding, set it here.
         # Some engines read global RNG; we at least randomize player order sometimes.
@@ -1965,3 +1965,5 @@ if __name__ == "__main__":
 # .\.venv\Scripts\python.exe .\scripts\train_models.py --data_dir "il_datasets\discard_v2\001" --models_dir "models" --model_version "discard_v2" --run_id 003 --discard_loss regression --epochs 5 --eval_samples 2048 --lr 0.0001 --l2 0.001 --batch_size 1024
 
 # .\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py --players AIPlayer,beginner --games 200 --models_dir "models\discard_v2\003"
+
+# Script summary: generate IL datasets by simulating games and saving discard/pegging labels.

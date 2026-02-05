@@ -135,25 +135,6 @@ Change benchmarking to be against medium player since we can beat the beginner p
 medium vs beginner avg point diff 3.34 (95% CI 2.69 - 3.98) wins=3330/6000 winrate=55.50% (95% CI 54.24% - 56.75%)
 MLPVV5.0453Player vs beginner [045_small3] after 62500 training games avg point diff 3.12 (95% CI 2.47 - 3.76) wins=3319/6000 winrate=55.32% (95% CI 54.06% - 56.57%)
 
-.\.venv\Scripts\python.exe .\scripts\mlp_size_sweep.py `
-  --dataset_version "discard_v7" `
-  --model_version "discard_v7" `
-  --mlp_variants "mini=64,32" `
-  --benchmark_games 10000
-
-
-.\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py --players AIPlayer,beginner --benchmark_games 10000 --models_dir "models\regression\discard_v7\018_mini" --data_dir "il_datasets\discard_v7\001" --no_auto_mixed_benchmarks
-
-Seeded comparison (played the same games against beginner)
-MLPV7[018_small] vs beginner after 77000 training games avg point diff 2.78 (95% CI 2.28 - 3.28) wins=5548/10000 winrate=55.48% (95% CI 54.51% - 56.45%)
-MLPV7[018_xl] vs beginner after 77000 training games avg point diff 2.94 (95% CI 2.44 - 3.43) wins=5533/10000 winrate=55.33% (95% CI 54.36% - 56.30%)
-MLPV7[018_medium] vs beginner after 77000 training games avg point diff 2.94 (95% CI 2.44 - 3.44) wins=5530/10000 winrate=55.30% (95% CI 54.33% - 56.27%)
-MLPV7[018_large] vs beginner after 77000 training games avg point diff 3.04 (95% CI 2.54 - 3.53) wins=5483/10000 winrate=54.83% (95% CI 53.85% - 55.81%)
-MLPV7[018_mini3] vs beginner after 77000 training games avg point diff 2.50 (95% CI 2.00 - 3.00) wins=5458/10000 winrate=54.58% (95% CI 53.60% - 55.56%)
-MLPV7[018_small3] vs beginner after 77000 training games avg point diff 2.61 (95% CI 2.11 - 3.11) wins=5443/10000 winrate=54.43% (95% CI 53.45% - 55.41%)
-MLPV7[018_medium3] vs beginner after 77000 training games avg point diff 2.35 (95% CI 1.85 - 2.86) wins=5370/10000 winrate=53.70% (95% CI 52.72% - 54.68%)
-MLPV7[022_mini] vs beginner after 77000 training games avg point diff 2.48 (95% CI 1.98 - 2.98) wins=5333/10000 winrate=53.33% (95% CI 52.35% - 54.31%)
-
 .\.venv\Scripts\python.exe .\scripts\train_models.py `
   --data_dir "il_datasets\discard_v7\001" `
   --models_dir "models\regression" `
@@ -182,3 +163,22 @@ MLPV7[022_mini] vs beginner after 77000 training games avg point diff 2.48 (95% 
   --data_dir "il_datasets\discard_v7\001" `
   --no_auto_mixed_benchmarks
 
+
+.\.venv\Scripts\python.exe .\scripts\mlp_size_sweep.py `
+  --dataset_version "discard_v7" `
+  --model_version "discard_v7" `
+  --mlp_variants "mini=64,32" `
+  --benchmark_games 10000
+
+
+.\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py --players AIPlayer,beginner --benchmark_games 10000 --models_dir "models\regression\discard_v7\018_mini" --data_dir "il_datasets\discard_v7\001" --no_auto_mixed_benchmarks
+
+Seeded comparison (played the same games against beginner)
+MLPV7[018_small] vs beginner after 77000 training games avg point diff 2.78 (95% CI 2.28 - 3.28) wins=5548/10000 winrate=55.48% (95% CI 54.51% - 56.45%)
+MLPV7[018_xl] vs beginner after 77000 training games avg point diff 2.94 (95% CI 2.44 - 3.43) wins=5533/10000 winrate=55.33% (95% CI 54.36% - 56.30%)
+MLPV7[018_medium] vs beginner after 77000 training games avg point diff 2.94 (95% CI 2.44 - 3.44) wins=5530/10000 winrate=55.30% (95% CI 54.33% - 56.27%)
+MLPV7[018_large] vs beginner after 77000 training games avg point diff 3.04 (95% CI 2.54 - 3.53) wins=5483/10000 winrate=54.83% (95% CI 53.85% - 55.81%)
+MLPV7[018_mini3] vs beginner after 77000 training games avg point diff 2.50 (95% CI 2.00 - 3.00) wins=5458/10000 winrate=54.58% (95% CI 53.60% - 55.56%)
+MLPV7[018_small3] vs beginner after 77000 training games avg point diff 2.61 (95% CI 2.11 - 3.11) wins=5443/10000 winrate=54.43% (95% CI 53.45% - 55.41%)
+MLPV7[018_medium3] vs beginner after 77000 training games avg point diff 2.35 (95% CI 1.85 - 2.86) wins=5370/10000 winrate=53.70% (95% CI 52.72% - 54.68%)
+MLPV7[022_mini] vs beginner after 77000 training games avg point diff 2.48 (95% CI 1.98 - 2.98) wins=5333/10000 winrate=53.33% (95% CI 52.35% - 54.31%)

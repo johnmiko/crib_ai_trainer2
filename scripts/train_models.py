@@ -75,8 +75,11 @@ def train_models(args) -> int:
     if args.torch_threads is not None:
         import torch
 
-        torch.set_num_threads(int(args.torch_threads))
-        torch.set_num_interop_threads(int(args.torch_threads))
+        target_threads = int(args.torch_threads)
+        if torch.get_num_threads() != target_threads:
+            torch.set_num_threads(target_threads)
+        if torch.get_num_interop_threads() != target_threads:
+            torch.set_num_interop_threads(target_threads)
     if args.lr <= 0 or args.lr > 0.05:
         raise SystemExit(
             f"Invalid --lr={args.lr}. For stability with engineered features, use 0 < lr <= 0.05 "
@@ -552,3 +555,5 @@ if __name__ == "__main__":
 
 # python .\scripts\train_models.py
 # .\.venv\Scripts\python.exe .\scripts\train_models.py --data_dir "il_datasets/discard_v3/001" --models_dir "models" --model_version "discard_v3" --discard_loss regression --epochs 5 --eval_samples 2048 --lr 0.00005 --batch_size 2048 --l2 0.001
+
+# Script summary: train discard/pegging value models from IL datasets and write model artifacts.

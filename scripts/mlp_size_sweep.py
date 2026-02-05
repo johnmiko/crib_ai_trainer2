@@ -237,3 +237,5 @@ if __name__ == "__main__":
         for label, model_dir in trained_dirs.items():
             print(f"Benchmark: {label} vs beginner")
             _benchmark_model(args, model_dir, label, dataset_dir)
+
+# Script summary: train multiple MLP sizes and benchmark each against a baseline opponent.

@@ -69,8 +69,8 @@ def _make_player(models_dir: Path, name_override: str | None = None) -> AIPlayer
     )
 
 
-def _evaluate(p0, p1, games: int) -> dict:
-    return play_multiple_games(games, p0=p0, p1=p1)
+def _evaluate(p0, p1, games: int, seed: int | None = None) -> dict:
+    return play_multiple_games(games, p0=p0, p1=p1, seed=seed)
 
 
 def _avg_diff(result: dict) -> float:
@@ -113,10 +113,30 @@ def _get_best_path(best_file: Path, models_dir: Path, model_version: str) -> Pat
     raise SystemExit(f"Best model file missing path field: {best_file}")
 
 
+def _next_run_id(version_dir: Path) -> str:
+    version_dir.mkdir(parents=True, exist_ok=True)
+    run_dirs = [p for p in version_dir.iterdir() if p.is_dir() and p.name.isdigit()]
+    if not run_dirs:
+        return "001"
+    run_id = max(int(p.name) for p in run_dirs)
+    return f"{run_id + 1:03d}"
+
+
+def _selfplay_version_from_model_version(model_version: str) -> str:
+    if not model_version.startswith("discard_v"):
+        raise SystemExit(f"model_version must start with 'discard_v' (got {model_version!r})")
+    suffix = model_version.split("discard_v", 1)[1]
+    if not suffix.isdigit():
+        raise SystemExit(f"model_version must be like 'discard_v7' (got {model_version!r})")
+    return f"selfplayv{suffix}"
+
+
 if __name__ == "__main__":
     args = build_self_play_loop_parser().parse_args()
     if not args.best_file:
         args.best_file = f"best_model_{args.model_version}.txt"
+    if not args.selfplay_dataset_version:
+        args.selfplay_dataset_version = _selfplay_version_from_model_version(args.model_version)
 
     models_dir = Path(args.models_dir)
     best_file = Path(args.best_file)
@@ -124,6 +144,7 @@ if __name__ == "__main__":
     selfplay_dir = _resolve_output_dir(TRAINING_DATA_DIR, args.selfplay_dataset_version, None, new_run=False)
 
     i = 0
+    no_improve_streak = 0
     while True:
         i += 1
         print(f"\n=== Self-play loop {i} ===")
@@ -160,11 +181,16 @@ if __name__ == "__main__":
             model_version_for_training = best_path.parent.name
             print(f"Using model_version={model_version_for_training} to keep accepted models in the same series.")
 
+        selfplay_version = _selfplay_version_from_model_version(model_version_for_training)
+        models_root = Path(args.models_dir) / "regression" / selfplay_version
+        run_id = _next_run_id(models_root)
+        models_dir = models_root / run_id
+
         train_args = argparse.Namespace(
             data_dir=teacher_dir,
             extra_data_dir=selfplay_dir,
             extra_ratio=args.selfplay_ratio,
-            models_dir=args.models_dir,
+            models_dir=str(models_dir),
             model_version=model_version_for_training,
             run_id=None,
             discard_loss="regression",
@@ -191,8 +217,11 @@ if __name__ == "__main__":
         best_player = _make_player(best_path, name_override=f"selfplay:best:{best_path.name}")
         new_player = _make_player(new_path, name_override=f"selfplay:new:{new_path.name}")
 
+        if args.benchmark_seed is None:
+            args.benchmark_seed = int(datetime.now(timezone.utc).timestamp()) % 2_000_000_000
+        print(f"Benchmark seed: {args.benchmark_seed}")
         print("Benchmark: NEW vs BEST")
-        new_vs_best = _evaluate(new_player, best_player, args.benchmark_games)
+        new_vs_best = _evaluate(new_player, best_player, args.benchmark_games, seed=args.benchmark_seed)
         print(
             f"  -> wins={new_vs_best['wins']}/{args.benchmark_games} "
             f"winrate={new_vs_best['winrate']:.3f} avg_diff={_avg_diff(new_vs_best):.2f}"
@@ -211,10 +240,10 @@ if __name__ == "__main__":
             else:
                 if args.benchmark_opponent == "beginner":
                     print("Benchmark: BEST vs BEGINNER")
-                    best_vs_medium = _evaluate(best_player, BeginnerPlayer(name="beginner"), args.benchmark_games)
+                    best_vs_medium = _evaluate(best_player, BeginnerPlayer(name="beginner"), args.benchmark_games, seed=args.benchmark_seed)
                 else:
                     print("Benchmark: BEST vs MEDIUM")
-                    best_vs_medium = _evaluate(best_player, MediumPlayer(name="medium"), args.benchmark_games)
+                    best_vs_medium = _evaluate(best_player, MediumPlayer(name="medium"), args.benchmark_games, seed=args.benchmark_seed)
                 print(
                     f"  -> wins={best_vs_medium['wins']}/{args.benchmark_games} "
                     f"winrate={best_vs_medium['winrate']:.3f} avg_diff={_avg_diff(best_vs_medium):.2f}"
@@ -227,19 +256,19 @@ if __name__ == "__main__":
 
             if args.benchmark_opponent == "beginner":
                 print("Benchmark: NEW vs BEGINNER")
-                new_vs_medium = _evaluate(new_player, BeginnerPlayer(name="beginner"), args.benchmark_games)
+                new_vs_medium = _evaluate(new_player, BeginnerPlayer(name="beginner"), args.benchmark_games, seed=args.benchmark_seed)
             else:
                 print("Benchmark: NEW vs MEDIUM")
-                new_vs_medium = _evaluate(new_player, MediumPlayer(name="medium"), args.benchmark_games)
+                new_vs_medium = _evaluate(new_player, MediumPlayer(name="medium"), args.benchmark_games, seed=args.benchmark_seed)
             print(
                 f"  -> wins={new_vs_medium['wins']}/{args.benchmark_games} "
                 f"winrate={new_vs_medium['winrate']:.3f} avg_diff={_avg_diff(new_vs_medium):.2f}"
             )
 
         # 4) Acceptance: winrate only
-        accept = False
-        if new_vs_best["winrate"] > 0.5 and best_vs_medium is not None and new_vs_medium is not None:
-            accept = new_vs_medium["winrate"] >= best_vs_medium["winrate"]
+        if best_vs_medium is None or new_vs_medium is None:
+            raise RuntimeError("Missing benchmark results for acceptance.")
+        accept = new_vs_medium["winrate"] > best_vs_medium["winrate"]
 
         record = {
             "timestamp_utc": datetime.now(timezone.utc).isoformat(),
@@ -266,8 +295,10 @@ if __name__ == "__main__":
                 }
             _write_best_record(best_file, new_record)
             print("Accepted new model.")
+            no_improve_streak = 0
         else:
             print("Rejected new model.")
+            no_improve_streak += 1
 
         def _wins(result: dict | None) -> int:
             if result is None:
@@ -304,16 +335,22 @@ if __name__ == "__main__":
         print(f"- Accepted: {accept}")
 
         summary_line = (
-            f"new after {args.games} self play games, {args.benchmark_games} benchmark games vs best "
+            f"{new_path.name} after {args.games} self play games, {args.benchmark_games} benchmark games vs best "
             f"[{best_path.name}] wins={_wins(new_vs_best)}/{_games(new_vs_best)} "
             f"winrate={new_vs_best['winrate']:.3f} avg_diff={_avg_diff(new_vs_best):.2f}, "
             f"vs {label}: wins={_wins(new_vs_medium)}/{_games(new_vs_medium)} "
-            f"winrate={_winrate(new_vs_medium):.3f} avg_diff={_avg_diff(new_vs_medium) if new_vs_medium else 0.0:.2f}, "
+            f"winrate={_winrate(new_vs_medium):.3f} avg_diff={_avg_diff(new_vs_medium):.2f}, "
             f"Best vs {label}: wins={_wins(best_vs_medium)}/{_games(best_vs_medium)} "
-            f"winrate={_winrate(best_vs_medium):.3f} avg_diff={_avg_diff(best_vs_medium) if best_vs_medium else 0.0:.2f}\n"
+            f"winrate={_winrate(best_vs_medium):.3f} avg_diff={_avg_diff(best_vs_medium):.2f}\n"
         )
         with open("selfplay_results.txt", "a", encoding="utf-8") as f:
             f.write(summary_line)
 
+        if no_improve_streak >= args.max_no_improve:
+            print(f"Stopping after {no_improve_streak} non-improving loops.")
+            break
+
         if args.loops != -1 and i >= args.loops:
             break
+
+# Script summary: generate self-play data, train a new model, benchmark it, and accept only winrate improvements.

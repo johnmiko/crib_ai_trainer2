@@ -94,7 +94,7 @@ def _resolve_models_dir(args) -> str:
 
 def _build_player_factory(args, fallback_override: str | None):
     args.models_dir = _resolve_models_dir(args)
-    logger.info("Loading models from %s", args.models_dir)
+    logger.debug("Loading models from %s", args.models_dir)
     # print("discard |w|", float(np.linalg.norm(discard_model.w)), "b", float(discard_model.b))
     # print("pegging  |w|", float(np.linalg.norm(pegging_model.w)), "b", float(pegging_model.b))
     # discard and pegging weights after 4000 games
@@ -318,7 +318,7 @@ def _benchmark_single(
     data_dir = Path(args.data_dir)
     estimated_training_games = _estimate_training_games(data_dir, args.max_shards)
 
-    logger.info(f"Estimated training games from files: {estimated_training_games}")
+    logger.debug(f"Estimated training games from files: {estimated_training_games}")
     avg_diff = float(np.mean(diffs)) if diffs else 0.0
     if diff_ci_lo is None or diff_ci_hi is None:
         if diffs and len(diffs) > 1:
@@ -460,7 +460,7 @@ def benchmark_2_players(
                 start=1,
             ):
                 results.append(result)
-                logger.info(
+                logger.debug(
                     "Benchmark worker %s finished (%d/%d)",
                     str(result.get("worker_id")),
                     idx,
@@ -494,56 +494,57 @@ def benchmark_2_players(
         discard_feature_set = first["discard_feature_set"]
         pegging_feature_set = first["pegging_feature_set"]
 
-    is_neural = any(name in {"AIPlayer", "MLPPlayer", "GBTPlayer", "RandomForestPlayer"} for name in player_names)
-    if is_neural:
-        output_str = (
-            f"{display_names[0]}[{model_dir_label}] vs {display_names[1]} after {estimated_training_games} training games "
-            f"avg point diff {avg_diff:.2f} (95% CI {diff_ci_lo:.2f} - {diff_ci_hi:.2f}) "
-            f"wins={wins}/{total_games} winrate={winrate*100:.2f}% "
-            f"(95% CI {win_ci_lo*100:.2f}% - {win_ci_hi*100:.2f}%)\n"
-        )
-    else:
-        output_str = (
-            f"{display_names[0]} vs {display_names[1]} "
-            f"avg point diff {avg_diff:.2f} (95% CI {diff_ci_lo:.2f} - {diff_ci_hi:.2f}) "
-            f"wins={wins}/{total_games} winrate={winrate*100:.2f}% "
-            f"(95% CI {win_ci_lo*100:.2f}% - {win_ci_hi*100:.2f}%)\n"
-        )
-    if getattr(args, "no_benchmark_write", False):
-        logger.info("Skipping benchmark_results.txt write (no_benchmark_write=True).")
-    else:
-        with open("benchmark_results.txt", "a") as f:
-            f.write(output_str)
-    print(output_str)
+        is_neural = any(name in {"AIPlayer", "MLPPlayer", "GBTPlayer", "RandomForestPlayer"} for name in player_names)
+        if is_neural:
+            output_str = (
+                f"{display_names[0]}[{model_dir_label}] vs {display_names[1]} after {estimated_training_games} training games "
+                f"avg point diff {avg_diff:.2f} (95% CI {diff_ci_lo:.2f} - {diff_ci_hi:.2f}) "
+                f"wins={wins}/{total_games} winrate={winrate*100:.2f}% "
+                f"(95% CI {win_ci_lo*100:.2f}% - {win_ci_hi*100:.2f}%)\n"
+            )
+        else:
+            output_str = (
+                f"{display_names[0]} vs {display_names[1]} "
+                f"avg point diff {avg_diff:.2f} (95% CI {diff_ci_lo:.2f} - {diff_ci_hi:.2f}) "
+                f"wins={wins}/{total_games} winrate={winrate*100:.2f}% "
+                f"(95% CI {win_ci_lo*100:.2f}% - {win_ci_hi*100:.2f}%)\n"
+            )
+        output_path = getattr(args, "benchmark_output_path", None) or "benchmark_results.txt"
+        if getattr(args, "no_benchmark_write", False):
+            logger.info("Skipping benchmark_results.txt write (no_benchmark_write=True).")
+        else:
+            with open(output_path, "a") as f:
+                f.write(output_str)
+        print(output_str)
 
-    experiment = {
-        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
-        "players": player_names,
-        "display_players": display_names,
-        "models_dir": first["models_dir"],
-        "data_dir": data_dir,
-        "benchmark_games": total_games,
-        "wins": wins,
-        "winrate": winrate,
-        "avg_point_diff": avg_diff,
-        "avg_point_diff_ci_lo": diff_ci_lo,
-        "avg_point_diff_ci_hi": diff_ci_hi,
-        "winrate_ci_lo": win_ci_lo,
-        "winrate_ci_hi": win_ci_hi,
-        "estimated_training_games": estimated_training_games,
-        "discard_feature_set": discard_feature_set,
-        "pegging_feature_set": pegging_feature_set,
-        "model_tag": model_tag,
-        "seed": args.seed,
-    }
-    experiments_path = "experiments.jsonl"
-    if getattr(args, "no_benchmark_write", False):
-        logger.info("Skipping experiments.jsonl write (no_benchmark_write=True).")
-    else:
-        with open(experiments_path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(experiment) + "\n")
-        logger.info(f"Appended experiment -> {experiments_path}")
-    return 0
+        experiment = {
+            "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+            "players": player_names,
+            "display_players": display_names,
+            "models_dir": first["models_dir"],
+            "data_dir": data_dir,
+            "benchmark_games": total_games,
+            "wins": wins,
+            "winrate": winrate,
+            "avg_point_diff": avg_diff,
+            "avg_point_diff_ci_lo": diff_ci_lo,
+            "avg_point_diff_ci_hi": diff_ci_hi,
+            "winrate_ci_lo": win_ci_lo,
+            "winrate_ci_hi": win_ci_hi,
+            "estimated_training_games": estimated_training_games,
+            "discard_feature_set": discard_feature_set,
+            "pegging_feature_set": pegging_feature_set,
+            "model_tag": model_tag,
+            "seed": args.seed,
+        }
+        experiments_path = getattr(args, "experiments_output_path", None) or "experiments.jsonl"
+        if getattr(args, "no_benchmark_write", False):
+            logger.info("Skipping experiments.jsonl write (no_benchmark_write=True).")
+        else:
+            with open(experiments_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(experiment) + "\n")
+            logger.info(f"Appended experiment -> {experiments_path}")
+        return 0
 
     if total_games < args.benchmark_workers:
         raise ValueError("benchmark_games is smaller than benchmark_workers. Reduce workers or increase games.")
@@ -566,10 +567,11 @@ def benchmark_2_players(
             f"wins={single['wins']}/{single['games_to_play']} winrate={single['winrate']*100:.2f}% "
             f"(95% CI {single['win_ci_lo']*100:.2f}% - {single['win_ci_hi']*100:.2f}%)\n"
         )
+    output_path = getattr(args, "benchmark_output_path", None) or "benchmark_results.txt"
     if getattr(args, "no_benchmark_write", False):
         logger.info("Skipping benchmark_results.txt write (no_benchmark_write=True).")
     else:
-        with open("benchmark_results.txt", "a") as f:
+        with open(output_path, "a") as f:
             f.write(output_str)
     print(output_str)
 
@@ -593,7 +595,7 @@ def benchmark_2_players(
         "model_tag": single["model_tag"],
         "seed": single["seed"],
     }
-    experiments_path = "experiments.jsonl"
+    experiments_path = getattr(args, "experiments_output_path", None) or "experiments.jsonl"
     if getattr(args, "no_benchmark_write", False):
         logger.info("Skipping experiments.jsonl write (no_benchmark_write=True).")
     else:
@@ -629,3 +631,5 @@ if __name__ == "__main__":
 
 # .\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py --players AIPlayer,beginner --benchmark_games 200 --models_dir "models\regression\" --data_dir "il_datasets\discard_v3\001"
 # .\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py
+
+# Script summary: benchmark two players and log results to text/jsonl outputs.

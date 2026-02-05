@@ -378,7 +378,7 @@ def _run_self_play_batch_worker(args_tuple) -> tuple[LoggedRegPegRegDiscardData,
 
     for i in range(batch_games):
         if i % 100 == 0:
-            logger.info("Playing games %d - %d/%d", i, min(i + 100, batch_games), batch_games)
+            logger.debug("Playing games %d - %d/%d", i, min(i + 100, batch_games), batch_games)
         players = [p1, p2] if (i % 2 == 0) else [p2, p1]
         play_one_game(players)
     return log, batch_games
@@ -543,3 +543,5 @@ if __name__ == "__main__":
         args.win_prob_min_score,
         args.workers,
     )
+
+# Script summary: generate self-play datasets by pitting models against each other and logging results.

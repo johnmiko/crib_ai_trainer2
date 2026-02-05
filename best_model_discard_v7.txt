@@ -1,1 +1,1 @@
-C:\\Users\\johnm\\ccode\\crib_ai_trainer2\\models\\regression\\discard_v7\\018_small
+C:\\Users\\johnm\\ccode\\crib_ai_trainer2\\models\\regression\\selfplayv7\\001

@@ -229,6 +229,8 @@ def build_benchmark_parser() -> argparse.ArgumentParser:
     ap.add_argument("--auto_mixed_benchmarks", action="store_true", default=True)
     ap.add_argument("--no_auto_mixed_benchmarks", dest="auto_mixed_benchmarks", action="store_false")
     ap.add_argument("--max_buffer_games", type=int, default=DEFAULT_MAX_BUFFER_GAMES)
+    ap.add_argument("--benchmark_output_path", type=str, default=None)
+    ap.add_argument("--experiments_output_path", type=str, default=None)
     return ap
 
 
@@ -320,12 +322,14 @@ def build_self_play_loop_parser() -> argparse.ArgumentParser:
     ap.add_argument("--models_dir", type=str, default=MODELS_DIR)
     ap.add_argument("--model_version", type=str, default=DEFAULT_MODEL_VERSION)
     ap.add_argument("--teacher_dataset_version", type=str, default=DEFAULT_DATASET_VERSION)
-    ap.add_argument("--selfplay_dataset_version", type=str, default="selfplay_v1")
+    ap.add_argument("--selfplay_dataset_version", type=str, default=None)
     ap.add_argument("--games", type=int, default=DEFAULT_GAMES_PER_LOOP)
     ap.add_argument("--selfplay_workers", type=int, default=1, help="Worker processes for self-play generation.")
     ap.add_argument("--benchmark_games", type=int, default=DEFAULT_BENCHMARK_GAMES)
+    ap.add_argument("--benchmark_seed", type=int, default=None, help="Seed used for self-play benchmarks (random if omitted).")
     ap.add_argument("--benchmark_opponent", type=str, default="medium", choices=["medium", "beginner"])
     ap.add_argument("--selfplay_ratio", type=float, default=0.3)
+    ap.add_argument("--max_no_improve", type=int, default=3, help="Stop after this many non-improving loops.")
     ap.add_argument("--best_file", type=str, default=None)
     ap.add_argument("--loops", type=int, default=-1)
     ap.add_argument(
