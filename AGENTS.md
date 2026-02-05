@@ -18,3 +18,4 @@
 ## Preferences
 - No special safety restrictions beyond standard caution.
 - When making code changes, do not include fallbacks
+- If you make changes to crib_engine, make sure to run all the tests in crib_engine and crib_back, to check that you didn't break anything

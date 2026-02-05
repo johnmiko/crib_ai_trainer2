@@ -41,6 +41,8 @@ from crib_ai_trainer.players.neural_player import (
     get_discard_feature_indices,
     get_pegging_feature_indices,
     MLPValueModel,
+    GBTValueModel,
+    RandomForestValueModel,
 )
 import logging
 
@@ -131,6 +133,12 @@ def train_models(args) -> int:
 
     if discard_mode in {"classification", "ranking"} and model_type != "linear":
         raise SystemExit("Only linear models are supported for classification/ranking at the moment.")
+    if model_type in {"gbt", "rf"} and discard_mode != "regression":
+        raise SystemExit("GBT/RF models are only supported for regression.")
+    if model_type in {"gbt", "rf"} and args.max_train_samples is None and args.max_shards is None:
+        raise SystemExit(
+            "GBT/RF training requires --max_train_samples or --max_shards to limit memory use."
+        )
 
     if discard_mode == "classification":
         with np.load(discard_shards[0]) as d0:
@@ -139,11 +147,19 @@ def train_models(args) -> int:
         with np.load(discard_shards[0]) as d0:
             if model_type == "mlp":
                 discard_model = MLPValueModel(int(len(discard_feature_indices)), mlp_hidden, seed=args.seed or 0)
+            elif model_type == "gbt":
+                discard_model = GBTValueModel(seed=args.seed or 0, max_iter=int(args.epochs))
+            elif model_type == "rf":
+                discard_model = RandomForestValueModel(seed=args.seed or 0, n_estimators=int(args.epochs))
             else:
                 discard_model = LinearValueModel(int(len(discard_feature_indices)))
     with np.load(pegging_shards[0]) as p0:
         if model_type == "mlp":
             pegging_model = MLPValueModel(int(len(pegging_feature_indices)), mlp_hidden, seed=args.seed or 0)
+        elif model_type == "gbt":
+            pegging_model = GBTValueModel(seed=args.seed or 0, max_iter=int(args.epochs))
+        elif model_type == "rf":
+            pegging_model = RandomForestValueModel(seed=args.seed or 0, n_estimators=int(args.epochs))
         else:
             pegging_model = LinearValueModel(int(len(pegging_feature_indices)))
 
@@ -156,98 +172,184 @@ def train_models(args) -> int:
     if extra_ratio < 0.0 or extra_ratio > 1.0:
         raise SystemExit("--extra_ratio must be between 0 and 1.")
 
-    for epoch in range(args.epochs):
-        print(f"Epoch {epoch + 1}/{args.epochs}")
-        extra_idx = 0
-        primary_idx = 0
-        steps = len(discard_shards)
-        for _ in range(steps):
-            use_extra = extra_data_dir is not None and rng.random() < extra_ratio
-            if use_extra:
-                d_path = extra_discard_shards[extra_idx % len(extra_discard_shards)]
-                p_path = extra_pegging_shards[extra_idx % len(extra_pegging_shards)]
-                extra_idx += 1
-            else:
-                d_path = discard_shards[primary_idx % len(discard_shards)]
-                p_path = pegging_shards[primary_idx % len(pegging_shards)]
-                primary_idx += 1
-            logger.debug(f"  Training on shard {d_path.name} and {p_path.name}")
-            with np.load(d_path) as d:
-                if discard_mode == "classification":
-                    Xd = d["X"].astype(np.int64)
-                    yd = d["y"].astype(np.int64)
-                else:
-                    Xd = d["X"].astype(np.float32)
-                    yd = d["y"].astype(np.float32)
-            if discard_mode in {"classification", "ranking"}:
-                Xd = Xd[..., discard_feature_indices]
-            else:
-                Xd = Xd[:, discard_feature_indices]
-            # print("discard X dim", Xd.shape, "y range", float(yd.min()), float(yd.mean()), float(yd.max()))
+    def _load_all_discard() -> tuple[np.ndarray, np.ndarray]:
+        Xs = []
+        ys = []
+        for shard in discard_shards:
+            with np.load(shard) as d:
+                Xd = d["X"].astype(np.float32)
+                yd = d["y"].astype(np.float32)
+            Xd = Xd[:, discard_feature_indices]
+            Xs.append(Xd)
+            ys.append(yd)
+        X_all = np.concatenate(Xs, axis=0)
+        y_all = np.concatenate(ys, axis=0)
+        if args.max_train_samples is not None:
+            if args.max_train_samples <= 0:
+                raise SystemExit("--max_train_samples must be > 0 if provided.")
+            if X_all.shape[0] < args.max_train_samples:
+                raise SystemExit(
+                    f"--max_train_samples={args.max_train_samples} exceeds available discard samples ({X_all.shape[0]})."
+                )
+            idx = rng.choice(X_all.shape[0], size=args.max_train_samples, replace=False)
+            X_all = X_all[idx]
+            y_all = y_all[idx]
+        return X_all, y_all
 
-            with np.load(p_path) as p:
+    def _load_all_pegging() -> tuple[np.ndarray, np.ndarray]:
+        Xs = []
+        ys = []
+        for shard in pegging_shards:
+            with np.load(shard) as p:
                 Xp = p["X"].astype(np.float32)
                 yp = p["y"].astype(np.float32)
             Xp = Xp[:, pegging_feature_indices]
-            def _train_discard():
-                if discard_mode == "classification":
-                    logger.debug(f"Training discard model {discard_model}")
-                    return discard_model.fit_ce( # type: ignore
-                        Xd, yd, lr=args.lr, epochs=args.epochs,
-                        batch_size=args.batch_size, l2=args.l2, seed=args.seed
-                    )
-                if discard_mode == "ranking":
-                    return discard_model.fit_rank_pairwise( # type: ignore
+            Xs.append(Xp)
+            ys.append(yp)
+        X_all = np.concatenate(Xs, axis=0)
+        y_all = np.concatenate(ys, axis=0)
+        if args.max_train_samples is not None:
+            if args.max_train_samples <= 0:
+                raise SystemExit("--max_train_samples must be > 0 if provided.")
+            if X_all.shape[0] < args.max_train_samples:
+                raise SystemExit(
+                    f"--max_train_samples={args.max_train_samples} exceeds available pegging samples ({X_all.shape[0]})."
+                )
+            idx = rng.choice(X_all.shape[0], size=args.max_train_samples, replace=False)
+            X_all = X_all[idx]
+            y_all = y_all[idx]
+        return X_all, y_all
+
+    if model_type in {"gbt", "rf"}:
+        print(f"Training {model_type} models on {len(discard_shards)} shard(s) (full in-memory fit).")
+        Xd_all, yd_all = _load_all_discard()
+        Xp_all, yp_all = _load_all_pegging()
+
+        def _train_discard():
+            discard_model.fit(Xd_all, yd_all)  # type: ignore[attr-defined]
+            pred = discard_model.predict_batch(Xd_all)  # type: ignore[attr-defined]
+            return [float(np.mean((pred - yd_all) ** 2))]
+
+        def _train_pegging():
+            pegging_model.fit(Xp_all, yp_all)  # type: ignore[attr-defined]
+            pred = pegging_model.predict_batch(Xp_all)  # type: ignore[attr-defined]
+            return [float(np.mean((pred - yp_all) ** 2))]
+
+        if args.parallel_heads:
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                f_discard = pool.submit(_train_discard)
+                f_pegging = pool.submit(_train_pegging)
+                discard_losses = f_discard.result()
+                pegging_losses = f_pegging.result()
+        else:
+            discard_losses = _train_discard()
+            pegging_losses = _train_pegging()
+
+        last_discard_loss = float(discard_losses[-1]) if discard_losses else last_discard_loss
+        last_pegging_loss = float(pegging_losses[-1]) if pegging_losses else last_pegging_loss
+    else:
+        for epoch in range(args.epochs):
+            print(f"Epoch {epoch + 1}/{args.epochs}")
+            extra_idx = 0
+            primary_idx = 0
+            steps = len(discard_shards)
+            for _ in range(steps):
+                use_extra = extra_data_dir is not None and rng.random() < extra_ratio
+                if use_extra:
+                    d_path = extra_discard_shards[extra_idx % len(extra_discard_shards)]
+                    p_path = extra_pegging_shards[extra_idx % len(extra_pegging_shards)]
+                    extra_idx += 1
+                else:
+                    d_path = discard_shards[primary_idx % len(discard_shards)]
+                    p_path = pegging_shards[primary_idx % len(pegging_shards)]
+                    primary_idx += 1
+                logger.debug(f"  Training on shard {d_path.name} and {p_path.name}")
+                with np.load(d_path) as d:
+                    if discard_mode == "classification":
+                        Xd = d["X"].astype(np.int64)
+                        yd = d["y"].astype(np.int64)
+                    else:
+                        Xd = d["X"].astype(np.float32)
+                        yd = d["y"].astype(np.float32)
+                if discard_mode in {"classification", "ranking"}:
+                    Xd = Xd[..., discard_feature_indices]
+                else:
+                    Xd = Xd[:, discard_feature_indices]
+                # print("discard X dim", Xd.shape, "y range", float(yd.min()), float(yd.mean()), float(yd.max()))
+
+                with np.load(p_path) as p:
+                    Xp = p["X"].astype(np.float32)
+                    yp = p["y"].astype(np.float32)
+                Xp = Xp[:, pegging_feature_indices]
+                def _train_discard():
+                    if discard_mode == "classification":
+                        logger.debug(f"Training discard model {discard_model}")
+                        return discard_model.fit_ce( # type: ignore
+                            Xd, yd, lr=args.lr, epochs=args.epochs,
+                            batch_size=args.batch_size, l2=args.l2, seed=args.seed
+                        )
+                    if discard_mode == "ranking":
+                        return discard_model.fit_rank_pairwise( # type: ignore
+                            Xd, yd,
+                            lr=args.lr,
+                            epochs=1,
+                            batch_size=args.batch_size,
+                            l2=args.l2,
+                            seed=args.seed,
+                            pairs_per_hand=args.rank_pairs_per_hand,
+                        )
+                    return discard_model.fit_mse( # type: ignore
                         Xd, yd,
                         lr=args.lr,
                         epochs=1,
                         batch_size=args.batch_size,
                         l2=args.l2,
                         seed=args.seed,
-                        pairs_per_hand=args.rank_pairs_per_hand,
                     )
-                return discard_model.fit_mse( # type: ignore
-                    Xd, yd,
-                    lr=args.lr,
-                    epochs=1,
-                    batch_size=args.batch_size,
-                    l2=args.l2,
-                    seed=args.seed,
-                )
 
-            def _train_pegging():
-                return pegging_model.fit_mse(
-                    Xp, yp,
-                    lr=args.lr,
-                    epochs=1,
-                    batch_size=args.batch_size,
-                    l2=args.l2,
-                    seed=args.seed,
-                )
+                def _train_pegging():
+                    return pegging_model.fit_mse(
+                        Xp, yp,
+                        lr=args.lr,
+                        epochs=1,
+                        batch_size=args.batch_size,
+                        l2=args.l2,
+                        seed=args.seed,
+                    )
 
-            if args.parallel_heads:
-                with ThreadPoolExecutor(max_workers=2) as pool:
-                    f_discard = pool.submit(_train_discard)
-                    f_pegging = pool.submit(_train_pegging)
-                    discard_losses = f_discard.result()
-                    pegging_losses = f_pegging.result()
-            else:
-                discard_losses = _train_discard()
-                pegging_losses = _train_pegging()
+                if args.parallel_heads:
+                    with ThreadPoolExecutor(max_workers=2) as pool:
+                        f_discard = pool.submit(_train_discard)
+                        f_pegging = pool.submit(_train_pegging)
+                        discard_losses = f_discard.result()
+                        pegging_losses = f_pegging.result()
+                else:
+                    discard_losses = _train_discard()
+                    pegging_losses = _train_pegging()
 
-            last_discard_loss = float(discard_losses[-1]) if discard_losses else last_discard_loss
-            last_pegging_loss = float(pegging_losses[-1]) if pegging_losses else last_pegging_loss
-            if last_pegging_loss is not None and not np.isfinite(last_pegging_loss):
-                raise SystemExit(
-                    "Pegging loss became NaN/inf. Try a smaller --lr (e.g., 5e-5), "
-                    "a larger --batch_size (e.g., 2048+), or increase --l2."
-                )
+                last_discard_loss = float(discard_losses[-1]) if discard_losses else last_discard_loss
+                last_pegging_loss = float(pegging_losses[-1]) if pegging_losses else last_pegging_loss
+                if last_pegging_loss is not None and not np.isfinite(last_pegging_loss):
+                    raise SystemExit(
+                        "Pegging loss became NaN/inf. Try a smaller --lr (e.g., 5e-5), "
+                        "a larger --batch_size (e.g., 2048+), or increase --l2."
+                    )
 
     if model_type == "mlp":
         discard_path = models_dir / "discard_mlp.pt"
         pegging_path = models_dir / "pegging_mlp.pt"
         discard_model.save_pt(str(discard_path))
         pegging_model.save_pt(str(pegging_path))
+    elif model_type == "gbt":
+        discard_path = models_dir / "discard_gbt.pkl"
+        pegging_path = models_dir / "pegging_gbt.pkl"
+        discard_model.save_joblib(str(discard_path))  # type: ignore[attr-defined]
+        pegging_model.save_joblib(str(pegging_path))  # type: ignore[attr-defined]
+    elif model_type == "rf":
+        discard_path = models_dir / "discard_rf.pkl"
+        pegging_path = models_dir / "pegging_rf.pkl"
+        discard_model.save_joblib(str(discard_path))  # type: ignore[attr-defined]
+        pegging_model.save_joblib(str(pegging_path))  # type: ignore[attr-defined]
     else:
         discard_path = models_dir / "discard_linear.npz"
         pegging_path = models_dir / "pegging_linear.npz"
@@ -348,6 +450,15 @@ def train_models(args) -> int:
         "discard_model_file": "discard_linear.npz",
         "pegging_model_file": "pegging_linear.npz",
     }
+    if model_type == "mlp":
+        model_meta["discard_model_file"] = "discard_mlp.pt"
+        model_meta["pegging_model_file"] = "pegging_mlp.pt"
+    elif model_type == "gbt":
+        model_meta["discard_model_file"] = "discard_gbt.pkl"
+        model_meta["pegging_model_file"] = "pegging_gbt.pkl"
+    elif model_type == "rf":
+        model_meta["discard_model_file"] = "discard_rf.pkl"
+        model_meta["pegging_model_file"] = "pegging_rf.pkl"
     meta_path = models_dir / "model_meta.json"
     with open(meta_path, "w", encoding="utf-8") as f:
         json.dump(model_meta, f, indent=2)
@@ -407,7 +518,7 @@ if __name__ == "__main__":
         choices=["base", "engineered_no_scores", "engineered_no_scores_pev", "full", "full_pev"],
     )
     ap.add_argument("--pegging_feature_set", type=str, default=DEFAULT_PEGGING_MODEL_FEATURE_SET, choices=["base", "full_no_scores", "full"])
-    ap.add_argument("--model_type", type=str, default=DEFAULT_MODEL_TYPE, choices=["linear", "mlp"])
+    ap.add_argument("--model_type", type=str, default=DEFAULT_MODEL_TYPE, choices=["linear", "mlp", "gbt", "rf"])
     ap.add_argument("--mlp_hidden", type=str, default=DEFAULT_MLP_HIDDEN, help="Comma-separated hidden sizes, e.g. 128,64")
     ap.add_argument("--lr", type=float, default=DEFAULT_LR)
     ap.add_argument("--epochs", type=int, default=DEFAULT_EPOCHS)
@@ -429,6 +540,12 @@ if __name__ == "__main__":
     ap.add_argument("--eval_samples", type=int, default=DEFAULT_EVAL_SAMPLES)
     ap.add_argument("--max_shards", type=int, default=(DEFAULT_MAX_SHARDS or None))
     ap.add_argument("--rank_pairs_per_hand", type=int, default=DEFAULT_RANK_PAIRS_PER_HAND)
+    ap.add_argument(
+        "--max_train_samples",
+        type=int,
+        default=None,
+        help="For GBT/RF only: cap total training samples to control memory.",
+    )
     args = ap.parse_args()
     args.models_dir = _resolve_models_dir(args.models_dir, args.model_version, args.run_id)
     train_models(args)

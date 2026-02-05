@@ -276,7 +276,7 @@ def build_do_everything_parser() -> argparse.ArgumentParser:
         choices=["base", "engineered_no_scores", "engineered_no_scores_pev", "full", "full_pev"],
     )
     ap.add_argument("--pegging_model_feature_set", type=str, default=DEFAULT_PEGGING_MODEL_FEATURE_SET, choices=["base", "full_no_scores", "full"])
-    ap.add_argument("--model_type", type=str, default=DEFAULT_MODEL_TYPE, choices=["linear", "mlp"])
+    ap.add_argument("--model_type", type=str, default=DEFAULT_MODEL_TYPE, choices=["linear", "mlp", "gbt", "rf"])
     ap.add_argument("--mlp_hidden", type=str, default=DEFAULT_MLP_HIDDEN)
     ap.add_argument("--crib_ev_mode", type=str, default=DEFAULT_CRIB_EV_MODE, choices=["min", "mc"])
     ap.add_argument("--crib_mc_samples", type=int, default=DEFAULT_CRIB_MC_SAMPLES)
@@ -333,7 +333,7 @@ def build_self_play_loop_parser() -> argparse.ArgumentParser:
         choices=["base", "engineered_no_scores", "engineered_no_scores_pev", "full", "full_pev"],
     )
     ap.add_argument("--pegging_feature_set", type=str, default=DEFAULT_PEGGING_MODEL_FEATURE_SET, choices=["base", "full_no_scores", "full"])
-    ap.add_argument("--model_type", type=str, default=DEFAULT_MODEL_TYPE, choices=["linear", "mlp"])
+    ap.add_argument("--model_type", type=str, default=DEFAULT_MODEL_TYPE, choices=["linear", "mlp", "gbt", "rf"])
     ap.add_argument("--mlp_hidden", type=str, default=DEFAULT_MLP_HIDDEN)
     ap.add_argument("--pegging_ev_mode", type=str, default=DEFAULT_PEGGING_EV_MODE, choices=["off", "rollout"])
     ap.add_argument("--pegging_ev_rollouts", type=int, default=DEFAULT_PEGGING_EV_ROLLOUTS)

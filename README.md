@@ -14,7 +14,7 @@
 - Generate regression data forever: `python .\scripts\generate_il_data.py --games -1 --out_dir "il_datasets/medium_discard_regression" --strategy regression`
 - Train ranking model (current config): `python .\scripts\train_models.py --data_dir "il_datasets/medium_discard_ranking" --models_dir "models/ranking" --discard_loss ranking --epochs 6 --eval_samples 2048 --max_shards 6 --rank_pairs_per_hand 20`
 - Benchmark (current config): `python scripts/benchmark_2_players.py --players NeuralDiscardOnlyPlayer,beginner --games 200 --models_dir "models/ranking" --data_dir "il_datasets/medium_discard_ranking" --max_shards 6 --fallback_player beginner`
-- Full loop (forever): `python .\scripts\do_everything2.py --games 2000 --loops -1 --strategy ranking --training_dir "il_datasets/medium_discard_ranking" --data_dir "il_datasets/medium_discard_ranking" --models_dir "models/ranking" --players NeuralRegressionPlayer,beginner --benchmark_games 200`
+- Full loop (forever): `python .\scripts\do_everything2.py --games 2000 --loops -1 --strategy ranking --training_dir "il_datasets/medium_discard_ranking" --data_dir "il_datasets/medium_discard_ranking" --models_dir "models/ranking" --players AIPlayer,beginner --benchmark_games 200`
 
 # Results / History
 2026-02-03

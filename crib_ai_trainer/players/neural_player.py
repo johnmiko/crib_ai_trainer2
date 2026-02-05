@@ -972,6 +972,77 @@ class MLPValueModel:
         m.model.eval()
         return m
 
+
+class GBTValueModel:
+    """Gradient-boosted tree regressor using scikit-learn."""
+
+    def __init__(self, *, seed: int = 0, max_iter: int = 100):
+        from sklearn.ensemble import HistGradientBoostingRegressor
+
+        self.model = HistGradientBoostingRegressor(
+            max_iter=int(max_iter),
+            random_state=int(seed),
+            validation_fraction=None,
+            early_stopping=False,
+        )
+
+    def fit(self, X: np.ndarray, y: np.ndarray) -> None:
+        self.model.fit(X, y)
+
+    def predict(self, x: np.ndarray) -> float:
+        return float(self.model.predict(x.reshape(1, -1))[0])
+
+    def predict_batch(self, X: np.ndarray) -> np.ndarray:
+        return self.model.predict(X).astype(np.float32, copy=False)
+
+    def save_joblib(self, path: str) -> None:
+        import joblib
+
+        joblib.dump(self.model, path)
+
+    @classmethod
+    def load_joblib(cls, path: str) -> "GBTValueModel":
+        import joblib
+
+        obj = cls.__new__(cls)
+        obj.model = joblib.load(path)
+        return obj
+
+
+class RandomForestValueModel:
+    """Random forest regressor using scikit-learn."""
+
+    def __init__(self, *, seed: int = 0, n_estimators: int = 200):
+        from sklearn.ensemble import RandomForestRegressor
+
+        self.model = RandomForestRegressor(
+            n_estimators=int(n_estimators),
+            random_state=int(seed),
+            n_jobs=-1,
+        )
+
+    def fit(self, X: np.ndarray, y: np.ndarray) -> None:
+        self.model.fit(X, y)
+
+    def predict(self, x: np.ndarray) -> float:
+        return float(self.model.predict(x.reshape(1, -1))[0])
+
+    def predict_batch(self, X: np.ndarray) -> np.ndarray:
+        return self.model.predict(X).astype(np.float32, copy=False)
+
+    def save_joblib(self, path: str) -> None:
+        import joblib
+
+        joblib.dump(self.model, path)
+
+    @classmethod
+    def load_joblib(cls, path: str) -> "RandomForestValueModel":
+        import joblib
+
+        obj = cls.__new__(cls)
+        obj.model = joblib.load(path)
+        return obj
+
 def select_discard_with_model(discard_model, hand: List[Card], dealer_is_self: bool) -> Tuple[Card, Card]:
     return select_discard_with_model_with_scores(discard_model, hand, dealer_is_self, None, None)
 
@@ -1101,7 +1172,7 @@ def regression_pegging_strategy(
             best_v, best = v, c
     return best
 
-class NeuralRegressionPlayer:
+class AIPlayer:
     def __init__(
         self,
         discard_model,
@@ -1157,6 +1228,18 @@ class NeuralRegressionPlayer:
             feature_indices=self.pegging_feature_indices,
         )
         return best
+
+
+class MLPPlayer(AIPlayer):
+    pass
+
+
+class GBTPlayer(AIPlayer):
+    pass
+
+
+class RandomForestPlayer(AIPlayer):
+    pass
 
 class NeuralClassificationPlayer:
     def __init__(

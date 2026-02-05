@@ -44,13 +44,6 @@ MLPVV5.017Player vs beginner [017_small] after 11500 training games avg point di
 MLPVV5.017Player vs beginner [017_medium] after 11500 training games avg point diff 2.65 (95% CI 1.52 - 3.77) wins=1103/2000 winrate=55.1%
 MLPVV5.017Player vs beginner [017_large] after 11500 training games avg point diff 3.25 (95% CI 2.15 - 4.36) wins=1111/2000 winrate=55.5%
 
-Change benchmarking to be against medium player since we can beat the beginner player now
-# small=128,64
-# medium=256,128
-# large=512,256
-# xl=1024,512
-# small3=128,64,32
-# mini3=64,32,16
 .\.venv\Scripts\python.exe .\scripts\do_everything2.py --il_games 1000 --loops -1 --dataset_version "discard_v5" --model_version "discard_v5" --strategy regression --discard_loss regression --benchmark_games 1000 --benchmark_mode full --model_type mlp --mlp_hidden "256,128"
 
 MLPVV5.018Player vs beginner [018] after 12500 training games avg point diff 3.17 (95% CI 1.68 - 4.66) wins=550/1000 winrate=55.0%
@@ -119,9 +112,6 @@ MLPV7 vs beginner [016] after 62000 training games avg point diff 2.68 (95% CI 1
 MLPV7 vs beginner [017] after 67000 training games avg point diff 2.40 (95% CI 1.70 - 3.10) wins=2694/5000 winrate=53.88% (95% CI 52.50% - 55.26%)
 MLPV7 vs beginner [018] after 72000 training games avg point diff 2.73 (95% CI 2.03 - 3.43) wins=2718/5000 winrate=54.36% (95% CI 52.98% - 55.74%)
 
-
-The next thing I want to optimize is benchmarking 2 players. I believe to optimize this though we actually just need to modify cribbage game and cribbage round. I'm not 100% sure though so can you please take a look at benchmark_2_players, create a timing test for it, run it once so it fails, copy the results of the test to hardcode what the minimum speed is, then make changes to cribbage game and cribbage round to try and improve the speed when benchmarking 2 players
-
 .\.venv\Scripts\python.exe .\scripts\mlp_size_sweep.py --benchmark_only --benchmark_games 10000 --benchmark_workers 10 --model_version "discard_v7" --benchmark_dirs "small=models\regression\discard_v7\018_small;medium=models\regression\discard_v7\018_medium;large=models\regression\discard_v7\018_large;xl=models\regression\discard_v7\018_xl;small3=models\regression\discard_v7\018_small3;mini3=models\regression\discard_v7\018_mini3"
 
 Trying out different MLP models, Not seeded comparison
@@ -132,10 +122,61 @@ MLPV3[018_small3] vs beginner after 72000 training games avg point diff 2.25 (95
 MLPLarge[018_large] vs beginner after 72000 training games avg point diff 2.78 (95% CI 2.14 - 3.42) wins=3272/6000 winrate=54.53% (95% CI 53.27% - 55.79%)
 MLPXl[018_xl] vs beginner after 72000 training games avg point diff 2.69 (95% CI 2.04 - 3.33) wins=3289/6000 winrate=54.82% (95% CI 53.56% - 56.08%)
 
+Change benchmarking to be against medium player since we can beat the beginner player now
+# small=128,64
+# medium=256,128
+# large=512,256
+# xl=1024,512
+# small3=128,64,32
+# mini3=64,32,16
+# medium3=256,128,64
+# mini=64,32
+
 medium vs beginner avg point diff 3.34 (95% CI 2.69 - 3.98) wins=3330/6000 winrate=55.50% (95% CI 54.24% - 56.75%)
 MLPVV5.0453Player vs beginner [045_small3] after 62500 training games avg point diff 3.12 (95% CI 2.47 - 3.76) wins=3319/6000 winrate=55.32% (95% CI 54.06% - 56.57%)
 
-Seeded
-MLPV7[018_small] vs beginner after 77000 training games avg point diff 2.78 (95% CI 2.28 - 3.28) wins=5548/10000 winrate=55.48% (95% CI 54.51% - 56.45%)MLPV7[018_medium] vs beginner after 77000 training games avg point diff 2.94 (95% CI 2.44 - 3.44) wins=5530/10000 winrate=55.30% (95% CI 54.33% - 56.27%)
-MLPV7[018_large] vs beginner after 77000 training games avg point diff 3.04 (95% CI 2.54 - 3.53) wins=5483/10000 winrate=54.83% (95% CI 53.85% - 55.81%)
+.\.venv\Scripts\python.exe .\scripts\mlp_size_sweep.py `
+  --dataset_version "discard_v7" `
+  --model_version "discard_v7" `
+  --mlp_variants "mini=64,32" `
+  --benchmark_games 10000
+
+
+.\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py --players AIPlayer,beginner --benchmark_games 10000 --models_dir "models\regression\discard_v7\018_medium3" --data_dir "il_datasets\discard_v7\001" --no_auto_mixed_benchmarks
+
+Seeded comparison (played the same games against beginner)
+MLPV7[018_small] vs beginner after 77000 training games avg point diff 2.78 (95% CI 2.28 - 3.28) wins=5548/10000 winrate=55.48% (95% CI 54.51% - 56.45%)
 MLPV7[018_xl] vs beginner after 77000 training games avg point diff 2.94 (95% CI 2.44 - 3.43) wins=5533/10000 winrate=55.33% (95% CI 54.36% - 56.30%)
+MLPV7[018_medium] vs beginner after 77000 training games avg point diff 2.94 (95% CI 2.44 - 3.44) wins=5530/10000 winrate=55.30% (95% CI 54.33% - 56.27%)
+MLPV7[018_large] vs beginner after 77000 training games avg point diff 3.04 (95% CI 2.54 - 3.53) wins=5483/10000 winrate=54.83% (95% CI 53.85% - 55.81%)
+MLPV7[018_mini3] vs beginner after 77000 training games avg point diff 2.50 (95% CI 2.00 - 3.00) wins=5458/10000 winrate=54.58% (95% CI 53.60% - 55.56%)
+MLPV7[018_small3] vs beginner after 77000 training games avg point diff 2.61 (95% CI 2.11 - 3.11) wins=5443/10000 winrate=54.43% (95% CI 53.45% - 55.41%)
+MLPV7[018_medium3] vs beginner after 77000 training games avg point diff 2.35 (95% CI 1.85 - 2.86) wins=5370/10000 winrate=53.70% (95% CI 52.72% - 54.68%)
+
+.\.venv\Scripts\python.exe .\scripts\train_models.py `
+  --data_dir "il_datasets\discard_v7\001" `
+  --models_dir "models\regression" `
+  --model_version "discard_v7" `
+  --model_type gbt `
+  --epochs 200
+
+.\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py `
+  --players GBTPlayer,beginner `
+  --benchmark_games 10000 `
+  --models_dir "models\regression\discard_v7" `
+  --data_dir "il_datasets\discard_v7\001" `
+  --no_auto_mixed_benchmarks
+
+.\.venv\Scripts\python.exe .\scripts\train_models.py `
+  --data_dir "il_datasets\discard_v7\001" `
+  --models_dir "models\regression" `
+  --model_version "discard_v7" `
+  --model_type rf `
+  --epochs 500
+
+.\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py `
+  --players RandomForestPlayer,beginner `
+  --benchmark_games 10000 `
+  --models_dir "models\regression\discard_v7" `
+  --data_dir "il_datasets\discard_v7\001" `
+  --no_auto_mixed_benchmarks

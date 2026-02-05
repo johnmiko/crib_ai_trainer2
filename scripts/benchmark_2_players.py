@@ -25,10 +25,15 @@ from crib_ai_trainer.players.neural_player import (
     LinearDiscardClassifier,
     LinearValueModel,
     NeuralClassificationPlayer,
-    NeuralRegressionPlayer,
+    AIPlayer,
+    MLPPlayer,
+    GBTPlayer,
+    RandomForestPlayer,
     NeuralDiscardOnlyPlayer,
     NeuralPegOnlyPlayer,
     MLPValueModel,
+    GBTValueModel,
+    RandomForestValueModel,
 )
 from utils import build_benchmark_parser
 import logging
@@ -153,11 +158,19 @@ def _build_player_factory(args, fallback_override: str | None):
     def _load_discard_model():
         if model_type == "mlp":
             return MLPValueModel.load_pt(f"{args.models_dir}/discard_mlp.pt")
+        if model_type == "gbt":
+            return GBTValueModel.load_joblib(f"{args.models_dir}/discard_gbt.pkl")
+        if model_type == "rf":
+            return RandomForestValueModel.load_joblib(f"{args.models_dir}/discard_rf.pkl")
         return LinearValueModel.load_npz(f"{args.models_dir}/discard_linear.npz")
 
     def _load_pegging_model():
         if model_type == "mlp":
             return MLPValueModel.load_pt(f"{args.models_dir}/pegging_mlp.pt")
+        if model_type == "gbt":
+            return GBTValueModel.load_joblib(f"{args.models_dir}/pegging_gbt.pkl")
+        if model_type == "rf":
+            return RandomForestValueModel.load_joblib(f"{args.models_dir}/pegging_rf.pkl")
         return LinearValueModel.load_npz(f"{args.models_dir}/pegging_linear.npz")
 
     model_tag = resolve_model_tag()
@@ -172,10 +185,46 @@ def _build_player_factory(args, fallback_override: str | None):
                 discard_feature_set=args.discard_feature_set,
                 pegging_feature_set=args.pegging_feature_set,
             )
-        if name == "NeuralRegressionPlayer":
+        if name == "AIPlayer":
             pegging_model = _load_pegging_model()
             discard_model = _load_discard_model()
-            return NeuralRegressionPlayer(
+            return AIPlayer(
+                discard_model,
+                pegging_model,
+                name=f"{name}:{model_tag}",
+                discard_feature_set=args.discard_feature_set,
+                pegging_feature_set=args.pegging_feature_set,
+            )
+        if name == "MLPPlayer":
+            if model_type != "mlp":
+                raise ValueError(f"MLPPlayer requires model_type=mlp, got {model_type}.")
+            pegging_model = _load_pegging_model()
+            discard_model = _load_discard_model()
+            return MLPPlayer(
+                discard_model,
+                pegging_model,
+                name=f"{name}:{model_tag}",
+                discard_feature_set=args.discard_feature_set,
+                pegging_feature_set=args.pegging_feature_set,
+            )
+        if name == "GBTPlayer":
+            if model_type != "gbt":
+                raise ValueError(f"GBTPlayer requires model_type=gbt, got {model_type}.")
+            pegging_model = _load_pegging_model()
+            discard_model = _load_discard_model()
+            return GBTPlayer(
+                discard_model,
+                pegging_model,
+                name=f"{name}:{model_tag}",
+                discard_feature_set=args.discard_feature_set,
+                pegging_feature_set=args.pegging_feature_set,
+            )
+        if name == "RandomForestPlayer":
+            if model_type != "rf":
+                raise ValueError(f"RandomForestPlayer requires model_type=rf, got {model_type}.")
+            pegging_model = _load_pegging_model()
+            discard_model = _load_discard_model()
+            return RandomForestPlayer(
                 discard_model,
                 pegging_model,
                 name=f"{name}:{model_tag}",
@@ -249,7 +298,14 @@ def _benchmark_single(
     p1 = player_factory(player_names[1])
     games_to_play = games_override or args.benchmark_games
 
-    results = play_multiple_games(games_to_play, p0=p0, p1=p1, seed=args.seed)
+    results = play_multiple_games(
+        games_to_play,
+        p0=p0,
+        p1=p1,
+        seed=args.seed,
+        fast_mode=True,
+        copy_players=False,
+    )
     wins = results["wins"]
     diffs = results["diffs"]
     winrate = results["winrate"]
@@ -274,9 +330,16 @@ def _benchmark_single(
             diff_ci_lo = avg_diff
             diff_ci_hi = avg_diff
     display_names = []
-    model_prefix = "MLP" if model_type == "mlp" else "Linear"
+    if model_type == "mlp":
+        model_prefix = "MLP"
+    elif model_type == "gbt":
+        model_prefix = "GBT"
+    elif model_type == "rf":
+        model_prefix = "RF"
+    else:
+        model_prefix = "Linear"
     for name in player_names:
-        if name.startswith("Neural") and name.endswith("Player") and "Regression" in name:
+        if name in {"AIPlayer", "MLPPlayer", "GBTPlayer", "RandomForestPlayer"}:
             tag = model_tag
             # Prefer version like "discard_v6-008" -> V6.008 (for linear) or V6 (for mlp)
             version_digits = []
@@ -431,63 +494,63 @@ def benchmark_2_players(
         discard_feature_set = first["discard_feature_set"]
         pegging_feature_set = first["pegging_feature_set"]
 
-        is_neural = any(name.startswith("Neural") for name in player_names)
-        if is_neural:
-            output_str = (
-                f"{display_names[0]}[{model_dir_label}] vs {display_names[1]} after {estimated_training_games} training games "
-                f"avg point diff {avg_diff:.2f} (95% CI {diff_ci_lo:.2f} - {diff_ci_hi:.2f}) "
-                f"wins={wins}/{total_games} winrate={winrate*100:.2f}% "
-                f"(95% CI {win_ci_lo*100:.2f}% - {win_ci_hi*100:.2f}%)\n"
-            )
-        else:
-            output_str = (
-                f"{display_names[0]} vs {display_names[1]} "
-                f"avg point diff {avg_diff:.2f} (95% CI {diff_ci_lo:.2f} - {diff_ci_hi:.2f}) "
-                f"wins={wins}/{total_games} winrate={winrate*100:.2f}% "
-                f"(95% CI {win_ci_lo*100:.2f}% - {win_ci_hi*100:.2f}%)\n"
-            )
-        if getattr(args, "no_benchmark_write", False):
-            logger.info("Skipping benchmark_results.txt write (no_benchmark_write=True).")
-        else:
-            with open("benchmark_results.txt", "a") as f:
-                f.write(output_str)
-        print(output_str)
+    is_neural = any(name in {"AIPlayer", "MLPPlayer", "GBTPlayer", "RandomForestPlayer"} for name in player_names)
+    if is_neural:
+        output_str = (
+            f"{display_names[0]}[{model_dir_label}] vs {display_names[1]} after {estimated_training_games} training games "
+            f"avg point diff {avg_diff:.2f} (95% CI {diff_ci_lo:.2f} - {diff_ci_hi:.2f}) "
+            f"wins={wins}/{total_games} winrate={winrate*100:.2f}% "
+            f"(95% CI {win_ci_lo*100:.2f}% - {win_ci_hi*100:.2f}%)\n"
+        )
+    else:
+        output_str = (
+            f"{display_names[0]} vs {display_names[1]} "
+            f"avg point diff {avg_diff:.2f} (95% CI {diff_ci_lo:.2f} - {diff_ci_hi:.2f}) "
+            f"wins={wins}/{total_games} winrate={winrate*100:.2f}% "
+            f"(95% CI {win_ci_lo*100:.2f}% - {win_ci_hi*100:.2f}%)\n"
+        )
+    if getattr(args, "no_benchmark_write", False):
+        logger.info("Skipping benchmark_results.txt write (no_benchmark_write=True).")
+    else:
+        with open("benchmark_results.txt", "a") as f:
+            f.write(output_str)
+    print(output_str)
 
-        experiment = {
-            "timestamp_utc": datetime.now(timezone.utc).isoformat(),
-            "players": player_names,
-            "display_players": display_names,
-            "models_dir": first["models_dir"],
-            "data_dir": data_dir,
-            "benchmark_games": total_games,
-            "wins": wins,
-            "winrate": winrate,
-            "avg_point_diff": avg_diff,
-            "avg_point_diff_ci_lo": diff_ci_lo,
-            "avg_point_diff_ci_hi": diff_ci_hi,
-            "winrate_ci_lo": win_ci_lo,
-            "winrate_ci_hi": win_ci_hi,
-            "estimated_training_games": estimated_training_games,
-            "discard_feature_set": discard_feature_set,
-            "pegging_feature_set": pegging_feature_set,
-            "model_tag": model_tag,
-            "seed": args.seed,
-        }
-        experiments_path = "experiments.jsonl"
-        if getattr(args, "no_benchmark_write", False):
-            logger.info("Skipping experiments.jsonl write (no_benchmark_write=True).")
-        else:
-            with open(experiments_path, "a", encoding="utf-8") as f:
-                f.write(json.dumps(experiment) + "\n")
-            logger.info(f"Appended experiment -> {experiments_path}")
-        return 0
+    experiment = {
+        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+        "players": player_names,
+        "display_players": display_names,
+        "models_dir": first["models_dir"],
+        "data_dir": data_dir,
+        "benchmark_games": total_games,
+        "wins": wins,
+        "winrate": winrate,
+        "avg_point_diff": avg_diff,
+        "avg_point_diff_ci_lo": diff_ci_lo,
+        "avg_point_diff_ci_hi": diff_ci_hi,
+        "winrate_ci_lo": win_ci_lo,
+        "winrate_ci_hi": win_ci_hi,
+        "estimated_training_games": estimated_training_games,
+        "discard_feature_set": discard_feature_set,
+        "pegging_feature_set": pegging_feature_set,
+        "model_tag": model_tag,
+        "seed": args.seed,
+    }
+    experiments_path = "experiments.jsonl"
+    if getattr(args, "no_benchmark_write", False):
+        logger.info("Skipping experiments.jsonl write (no_benchmark_write=True).")
+    else:
+        with open(experiments_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(experiment) + "\n")
+        logger.info(f"Appended experiment -> {experiments_path}")
+    return 0
 
     if total_games < args.benchmark_workers:
         raise ValueError("benchmark_games is smaller than benchmark_workers. Reduce workers or increase games.")
 
     single = _benchmark_single(args, players_override, fallback_override)
     model_dir_label = os.path.basename(os.path.normpath(single["models_dir"]))
-    is_neural = any(name.startswith("Neural") for name in single["player_names"])
+    is_neural = any(name in {"AIPlayer", "MLPPlayer", "GBTPlayer", "RandomForestPlayer"} for name in single["player_names"])
     if is_neural:
         output_str = (
             f"{single['display_names'][0]}[{model_dir_label}] vs {single['display_names'][1]} "
@@ -558,11 +621,11 @@ if __name__ == "__main__":
         )
 
 # python scripts/benchmark_2_players.py
-# python scripts/benchmark_2_players.py --players NeuralRegressionPlayer,beginner --games 200 --models_dir "models/ranking" --data_dir "il_datasets/medium_discard_ranking" --max_shards 6 --fallback_player beginner
+# python scripts/benchmark_2_players.py --players AIPlayer,beginner --games 200 --models_dir "models/ranking" --data_dir "il_datasets/medium_discard_ranking" --max_shards 6 --fallback_player beginner
 
 # .\.venv\Scripts\python.exe .\scripts\generate_il_data.py --games 4000 --out_dir "il_datasets" --dataset_version "discard_v2" --run_id 001 --strategy regression
 
 # .\.venv\Scripts\python.exe .\scripts\train_models.py --data_dir "il_datasets\discard_v3\001" --models_dir "models" --model_version "discard_v3" --run_id 002 --discard_loss regression --epochs 5 --eval_samples 2048 --lr 0.00005 --l2 0.001 --batch_size 2048
 
-# .\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py --players NeuralRegressionPlayer,beginner --benchmark_games 200 --models_dir "models\regression\" --data_dir "il_datasets\discard_v3\001"
+# .\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py --players AIPlayer,beginner --benchmark_games 200 --models_dir "models\regression\" --data_dir "il_datasets\discard_v3\001"
 # .\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py

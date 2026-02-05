@@ -27,9 +27,11 @@ from cribbage.players.medium_player import MediumPlayer
 from scripts.generate_self_play_data import generate_self_play_data, _resolve_models_dir, _resolve_output_dir
 from scripts.train_models import train_models
 from crib_ai_trainer.players.neural_player import (
-    NeuralRegressionPlayer,
+    AIPlayer,
     LinearValueModel,
     MLPValueModel,
+    GBTValueModel,
+    RandomForestValueModel,
 )
 from utils import build_self_play_loop_parser
 
@@ -44,17 +46,21 @@ def _load_meta(models_dir: Path) -> dict:
 def _load_value_model(models_dir: Path, model_type: str):
     if model_type == "mlp":
         return MLPValueModel.load_pt(str(models_dir / "discard_mlp.pt")), MLPValueModel.load_pt(str(models_dir / "pegging_mlp.pt"))
+    if model_type == "gbt":
+        return GBTValueModel.load_joblib(str(models_dir / "discard_gbt.pkl")), GBTValueModel.load_joblib(str(models_dir / "pegging_gbt.pkl"))
+    if model_type == "rf":
+        return RandomForestValueModel.load_joblib(str(models_dir / "discard_rf.pkl")), RandomForestValueModel.load_joblib(str(models_dir / "pegging_rf.pkl"))
     return LinearValueModel.load_npz(str(models_dir / "discard_linear.npz")), LinearValueModel.load_npz(str(models_dir / "pegging_linear.npz"))
 
 
-def _make_player(models_dir: Path, name_override: str | None = None) -> NeuralRegressionPlayer:
+def _make_player(models_dir: Path, name_override: str | None = None) -> AIPlayer:
     meta = _load_meta(models_dir)
     model_type = meta.get("model_type", "linear")
     discard_feature_set = meta.get("discard_feature_set", "full")
     pegging_feature_set = meta.get("pegging_feature_set", "full")
     discard_model, pegging_model = _load_value_model(models_dir, model_type)
     name = name_override or f"selfplay:{models_dir.name}"
-    return NeuralRegressionPlayer(
+    return AIPlayer(
         discard_model,
         pegging_model,
         name=name,

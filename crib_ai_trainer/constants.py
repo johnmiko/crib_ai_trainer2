@@ -81,7 +81,7 @@ DEFAULT_LR = _getenv_float("LR", 0.00005)
 DEFAULT_L2 = _getenv_float("L2", 0.001)
 DEFAULT_BATCH_SIZE = _getenv_int("BATCH_SIZE", 2048)
 
-DEFAULT_BENCHMARK_PLAYERS = _getenv_str("BENCHMARK_PLAYERS", "NeuralRegressionPlayer,medium")
+DEFAULT_BENCHMARK_PLAYERS = _getenv_str("BENCHMARK_PLAYERS", "AIPlayer,medium")
 DEFAULT_FALLBACK_PLAYER = _getenv_str("FALLBACK_PLAYER", "medium")
 DEFAULT_MODEL_TAG = _getenv_str("MODEL_TAG", "")
 

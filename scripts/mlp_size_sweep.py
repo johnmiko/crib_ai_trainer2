@@ -95,7 +95,7 @@ def _train_mlp(args, dataset_dir: str, hidden: str, models_dir: str) -> str:
 def _benchmark_model(args, models_dir: str, label: str, data_dir: str) -> None:
     model_tag = f"{args.model_version}-{Path(models_dir).name}"
     bench_args = argparse.Namespace(
-        players="NeuralRegressionPlayer,beginner",
+        players="AIPlayer,beginner",
         benchmark_games=args.benchmark_games,
         benchmark_workers=args.benchmark_workers,
         max_buffer_games=args.max_buffer_games,
