@@ -1,2 +1,4 @@
 new after 250 self play games, 500 benchmark games vs best [001] wins=200/500 winrate=0.400 avg_diff=-5.02, vs beginner: wins=221/500 winrate=0.442 avg_diff=-1.94, Best vs beginner: wins=266/500 winrate=0.532 avg_diff=1.79
 new after 250 self play games, 500 benchmark games vs best [001] wins=222/500 winrate=0.444 avg_diff=-2.16, vs beginner: wins=0/0 winrate=0.000 avg_diff=0.00, Best vs beginner: wins=0/0 winrate=0.000 avg_diff=0.00
+
+Starting V7 self play with small model

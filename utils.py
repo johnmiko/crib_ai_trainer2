@@ -175,6 +175,7 @@ def build_generate_il_parser() -> argparse.ArgumentParser:
 def build_generate_self_play_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser()
     ap.add_argument("--games", type=int, default=DEFAULT_GAMES_PER_LOOP)
+    ap.add_argument("--workers", type=int, default=1, help="Number of worker processes for self-play generation.")
     ap.add_argument("--out_dir", type=str, default=TRAINING_DATA_DIR)
     ap.add_argument("--dataset_version", type=str, default=DEFAULT_DATASET_VERSION)
     ap.add_argument("--run_id", type=str, default=DEFAULT_DATASET_RUN_ID or None)
@@ -321,10 +322,11 @@ def build_self_play_loop_parser() -> argparse.ArgumentParser:
     ap.add_argument("--teacher_dataset_version", type=str, default=DEFAULT_DATASET_VERSION)
     ap.add_argument("--selfplay_dataset_version", type=str, default="selfplay_v1")
     ap.add_argument("--games", type=int, default=DEFAULT_GAMES_PER_LOOP)
+    ap.add_argument("--selfplay_workers", type=int, default=1, help="Worker processes for self-play generation.")
     ap.add_argument("--benchmark_games", type=int, default=DEFAULT_BENCHMARK_GAMES)
     ap.add_argument("--benchmark_opponent", type=str, default="medium", choices=["medium", "beginner"])
     ap.add_argument("--selfplay_ratio", type=float, default=0.3)
-    ap.add_argument("--best_file", type=str, default="best_model.txt")
+    ap.add_argument("--best_file", type=str, default=None)
     ap.add_argument("--loops", type=int, default=-1)
     ap.add_argument(
         "--discard_feature_set",

@@ -88,10 +88,10 @@ def _winrate(result: dict | None) -> float:
 
 def _load_best_record(best_file: Path) -> dict:
     if not best_file.exists():
-        return {}
+        raise SystemExit(f"Best model file not found: {best_file}")
     raw = best_file.read_text(encoding="utf-8").strip()
     if not raw:
-        return {}
+        raise SystemExit(f"Best model file is empty: {best_file}")
     try:
         data = json.loads(raw)
         if isinstance(data, dict) and "path" in data:
@@ -110,19 +110,13 @@ def _get_best_path(best_file: Path, models_dir: Path, model_version: str) -> Pat
     record = _load_best_record(best_file)
     if record.get("path"):
         return Path(str(record["path"]).strip())
-    # Always resolve under model_version (avoid picking the base models dir)
-    version_dir = models_dir / model_version
-    if not version_dir.exists():
-        return Path(_resolve_models_dir(str(models_dir), model_version, None))
-    run_dirs = [p for p in version_dir.iterdir() if p.is_dir() and p.name.isdigit()]
-    if not run_dirs:
-        return Path(_resolve_models_dir(str(models_dir), model_version, None))
-    run_id = max(int(p.name) for p in run_dirs)
-    return version_dir / f"{run_id:03d}"
+    raise SystemExit(f"Best model file missing path field: {best_file}")
 
 
 if __name__ == "__main__":
     args = build_self_play_loop_parser().parse_args()
+    if not args.best_file:
+        args.best_file = f"best_model_{args.model_version}.txt"
 
     models_dir = Path(args.models_dir)
     best_file = Path(args.best_file)
@@ -156,6 +150,7 @@ if __name__ == "__main__":
             args.win_prob_mode,
             args.win_prob_rollouts,
             args.win_prob_min_score,
+            args.selfplay_workers,
         )
 
         # 2) Train new model mixing teacher + self-play data
@@ -241,7 +236,7 @@ if __name__ == "__main__":
                 f"winrate={new_vs_medium['winrate']:.3f} avg_diff={_avg_diff(new_vs_medium):.2f}"
             )
 
-        # 4) Acceptance: frozen + strict
+        # 4) Acceptance: winrate only
         accept = False
         if new_vs_best["winrate"] > 0.5 and best_vs_medium is not None and new_vs_medium is not None:
             accept = new_vs_medium["winrate"] >= best_vs_medium["winrate"]

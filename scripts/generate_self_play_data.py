@@ -56,6 +56,8 @@ from crib_ai_trainer.players.neural_player import (
     LinearValueModel,
     LinearDiscardClassifier,
     MLPValueModel,
+    GBTValueModel,
+    RandomForestValueModel,
 )
 
 from scripts.generate_il_data import (
@@ -114,9 +116,17 @@ def _load_models(models_dir: str):
     if model_type == "mlp":
         discard_model = MLPValueModel.load_pt(os.path.join(models_dir, "discard_mlp.pt"))
         pegging_model = MLPValueModel.load_pt(os.path.join(models_dir, "pegging_mlp.pt"))
-    else:
+    elif model_type == "linear":
         discard_model = LinearValueModel.load_npz(os.path.join(models_dir, "discard_linear.npz"))
         pegging_model = LinearValueModel.load_npz(os.path.join(models_dir, "pegging_linear.npz"))
+    elif model_type == "gbt":
+        discard_model = GBTValueModel.load_joblib(os.path.join(models_dir, "discard_gbt.pkl"))
+        pegging_model = GBTValueModel.load_joblib(os.path.join(models_dir, "pegging_gbt.pkl"))
+    elif model_type == "rf":
+        discard_model = RandomForestValueModel.load_joblib(os.path.join(models_dir, "discard_rf.pkl"))
+        pegging_model = RandomForestValueModel.load_joblib(os.path.join(models_dir, "pegging_rf.pkl"))
+    else:
+        raise ValueError(f"Unknown model_type: {model_type}")
 
     return discard_model, pegging_model, discard_feature_set, pegging_feature_set
 
@@ -313,27 +323,24 @@ def play_one_game(players) -> None:
     game.start()
 
 
-def generate_self_play_data(
-    games: int,
-    out_dir: str,
-    models_dir: str,
-    opponent_models_dir: str | None,
-    seed: int | None,
-    strategy: str,
-    pegging_feature_set: str,
-    crib_ev_mode: str,
-    crib_mc_samples: int,
-    pegging_label_mode: str,
-    pegging_rollouts: int,
-    pegging_ev_mode: str = DEFAULT_PEGGING_EV_MODE,
-    pegging_ev_rollouts: int = DEFAULT_PEGGING_EV_ROLLOUTS,
-    win_prob_mode: str = DEFAULT_WIN_PROB_MODE,
-    win_prob_rollouts: int = DEFAULT_WIN_PROB_ROLLOUTS,
-    win_prob_min_score: int = DEFAULT_WIN_PROB_MIN_SCORE,
-) -> int:
-    if seed is None:
-        seed = random.randint(1, 2**31 - 1)
-        logger.info("No seed provided, using random seed=%s", seed)
+def _run_self_play_batch_worker(args_tuple) -> tuple[LoggedRegPegRegDiscardData, int]:
+    (
+        batch_games,
+        batch_seed,
+        models_dir,
+        opponent_models_dir,
+        strategy,
+        pegging_feature_set,
+        crib_ev_mode,
+        crib_mc_samples,
+        pegging_label_mode,
+        pegging_rollouts,
+        pegging_ev_mode,
+        pegging_ev_rollouts,
+        win_prob_mode,
+        win_prob_rollouts,
+        win_prob_min_score,
+    ) = args_tuple
 
     discard_model, pegging_model, discard_feature_set, pegging_feature_set_model = _load_models(models_dir)
     if opponent_models_dir:
@@ -353,7 +360,7 @@ def generate_self_play_data(
         crib_mc_samples,
         pegging_label_mode,
         pegging_rollouts,
-        seed=seed,
+        seed=batch_seed,
     )
     p2 = LoggingNeuralPlayer(
         "selfplay2",
@@ -366,28 +373,52 @@ def generate_self_play_data(
         crib_mc_samples,
         pegging_label_mode,
         pegging_rollouts,
-        seed=seed + 1,
+        seed=batch_seed + 1,
     )
 
-    cumulative_games = get_cumulative_game_count(out_dir)
-    save_interval = 2000
-    games_since_save = 0
-
-    for i in range(games):
+    for i in range(batch_games):
         if i % 100 == 0:
-            logger.info("Playing games %d - %d/%d", i, min(i + 100, games), games)
+            logger.info("Playing games %d - %d/%d", i, min(i + 100, batch_games), batch_games)
         players = [p1, p2] if (i % 2 == 0) else [p2, p1]
         play_one_game(players)
-        games_since_save += 1
+    return log, batch_games
 
-        if games_since_save >= save_interval:
-            cumulative_games += games_since_save
-            save_data(
-                log,
-                out_dir,
-                cumulative_games,
-                strategy,
+
+def generate_self_play_data(
+    games: int,
+    out_dir: str,
+    models_dir: str,
+    opponent_models_dir: str | None,
+    seed: int | None,
+    strategy: str,
+    pegging_feature_set: str,
+    crib_ev_mode: str,
+    crib_mc_samples: int,
+    pegging_label_mode: str,
+    pegging_rollouts: int,
+    pegging_ev_mode: str = DEFAULT_PEGGING_EV_MODE,
+    pegging_ev_rollouts: int = DEFAULT_PEGGING_EV_ROLLOUTS,
+    win_prob_mode: str = DEFAULT_WIN_PROB_MODE,
+    win_prob_rollouts: int = DEFAULT_WIN_PROB_ROLLOUTS,
+    win_prob_min_score: int = DEFAULT_WIN_PROB_MIN_SCORE,
+    workers: int = 1,
+) -> int:
+    if workers < 1:
+        raise ValueError("--workers must be >= 1")
+    if seed is None:
+        seed = random.randint(1, 2**31 - 1)
+        logger.info("No seed provided, using random seed=%s", seed)
+
+    cumulative_games = get_cumulative_game_count(out_dir)
+
+    if workers == 1:
+        log, games_played = _run_self_play_batch_worker(
+            (
+                games,
                 seed,
+                models_dir,
+                opponent_models_dir,
+                strategy,
                 pegging_feature_set,
                 crib_ev_mode,
                 crib_mc_samples,
@@ -399,14 +430,8 @@ def generate_self_play_data(
                 win_prob_rollouts,
                 win_prob_min_score,
             )
-            log.X_discard.clear()
-            log.y_discard.clear()
-            log.X_pegging.clear()
-            log.y_pegging.clear()
-            games_since_save = 0
-
-    if games_since_save > 0:
-        cumulative_games += games_since_save
+        )
+        cumulative_games += games_played
         save_data(
             log,
             out_dir,
@@ -424,6 +449,63 @@ def generate_self_play_data(
             win_prob_rollouts,
             win_prob_min_score,
         )
+        return 0
+
+    base = games // workers
+    remainder = games % workers
+    batches = [base + (1 if i < remainder else 0) for i in range(workers)]
+    if any(b <= 0 for b in batches):
+        raise ValueError("Each worker must have at least 1 game.")
+
+    import multiprocessing as mp
+
+    ctx = mp.get_context("spawn")
+    with ctx.Pool(processes=workers) as pool:
+        for idx, (log, games_played) in enumerate(
+            pool.map(
+                _run_self_play_batch_worker,
+                [
+                    (
+                        batches[i],
+                        seed + i * 1000,
+                        models_dir,
+                        opponent_models_dir,
+                        strategy,
+                        pegging_feature_set,
+                        crib_ev_mode,
+                        crib_mc_samples,
+                        pegging_label_mode,
+                        pegging_rollouts,
+                        pegging_ev_mode,
+                        pegging_ev_rollouts,
+                        win_prob_mode,
+                        win_prob_rollouts,
+                        win_prob_min_score,
+                    )
+                    for i in range(workers)
+                ],
+            ),
+            start=1,
+        ):
+            cumulative_games += games_played
+            save_data(
+                log,
+                out_dir,
+                cumulative_games,
+                strategy,
+                seed,
+                pegging_feature_set,
+                crib_ev_mode,
+                crib_mc_samples,
+                pegging_label_mode,
+                pegging_rollouts,
+                pegging_ev_mode,
+                pegging_ev_rollouts,
+                win_prob_mode,
+                win_prob_rollouts,
+                win_prob_min_score,
+            )
+            logger.info("Self-play worker %d/%d saved %d games.", idx, workers, games_played)
     return 0
 
 
@@ -459,4 +541,5 @@ if __name__ == "__main__":
         args.win_prob_mode,
         args.win_prob_rollouts,
         args.win_prob_min_score,
+        args.workers,
     )
