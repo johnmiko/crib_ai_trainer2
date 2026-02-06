@@ -223,7 +223,7 @@ if __name__ == "__main__":
         args.benchmark_games = 2
         args.benchmark_workers = 1
     if not args.best_file:
-        args.best_file = f"best_model_{args.model_version}.txt"
+        args.best_file = f"text/best_model_{args.model_version}.txt"
     if not args.selfplay_dataset_version:
         args.selfplay_dataset_version = _selfplay_version_from_model_version(args.model_version)
 
@@ -460,8 +460,10 @@ if __name__ == "__main__":
             "accepted": accept,
         }
         if not args.smoke:
-            Path("selfplay_experiments.jsonl").write_text("", encoding="utf-8") if not Path("selfplay_experiments.jsonl").exists() else None
-            with open("selfplay_experiments.jsonl", "a", encoding="utf-8") as f:
+            results_path = Path("text/selfplay_experiments.jsonl")
+            results_path.parent.mkdir(parents=True, exist_ok=True)
+            results_path.write_text("", encoding="utf-8") if not results_path.exists() else None
+            with open(results_path, "a", encoding="utf-8") as f:
                 f.write(json.dumps(record) + "\n")
 
         if accept:
@@ -493,7 +495,7 @@ if __name__ == "__main__":
             return int(result.get("games", args.benchmark_games))
 
         print("Loop summary:")
-        print(f"- Results log: {Path('selfplay_experiments.jsonl').resolve()}")
+        print(f"- Results log: {Path('text/selfplay_experiments.jsonl').resolve()}")
         print(f"- Best model: {best_path}")
         print(f"- New model: {new_path}")
         if best_vs_medium is not None:
@@ -529,7 +531,8 @@ if __name__ == "__main__":
             f"winrate={_winrate(best_vs_medium):.3f} avg_diff={_avg_diff(best_vs_medium):.2f}\n"
         )
         if not args.smoke:
-            with open("selfplay_results.txt", "a", encoding="utf-8") as f:
+            Path("text").mkdir(parents=True, exist_ok=True)
+            with open("text/selfplay_results.txt", "a", encoding="utf-8") as f:
                 f.write(summary_line)
 
         if no_improve_streak >= args.max_no_improve:

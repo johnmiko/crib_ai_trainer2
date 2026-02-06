@@ -536,10 +536,11 @@ def benchmark_2_players(
                 f"wins={wins}/{total_games} winrate={winrate*100:.2f}% "
                 f"(95% CI {win_ci_lo*100:.2f}% - {win_ci_hi*100:.2f}%)\n"
             )
-        output_path = getattr(args, "benchmark_output_path", None) or "benchmark_results.txt"
+        output_path = getattr(args, "benchmark_output_path", None) or "text/benchmark_results.txt"
         if getattr(args, "no_benchmark_write", False):
-            logger.info("Skipping benchmark_results.txt write (no_benchmark_write=True).")
+            logger.info("Skipping text/benchmark_results.txt write (no_benchmark_write=True).")
         else:
+            Path(output_path).parent.mkdir(parents=True, exist_ok=True)
             with open(output_path, "a") as f:
                 f.write(output_str)
         print(output_str)
@@ -565,10 +566,11 @@ def benchmark_2_players(
             "model_tag": model_tag,
             "seed": args.seed,
         }
-        experiments_path = getattr(args, "experiments_output_path", None) or "experiments.jsonl"
+        experiments_path = getattr(args, "experiments_output_path", None) or "text/experiments.jsonl"
         if getattr(args, "no_benchmark_write", False):
-            logger.info("Skipping experiments.jsonl write (no_benchmark_write=True).")
+            logger.info("Skipping text/experiments.jsonl write (no_benchmark_write=True).")
         else:
+            Path(experiments_path).parent.mkdir(parents=True, exist_ok=True)
             with open(experiments_path, "a", encoding="utf-8") as f:
                 f.write(json.dumps(experiment) + "\n")
             logger.info(f"Appended experiment -> {experiments_path}")
@@ -605,10 +607,11 @@ def benchmark_2_players(
             f"wins={single['wins']}/{single['games_to_play']} winrate={single['winrate']*100:.2f}% "
             f"(95% CI {single['win_ci_lo']*100:.2f}% - {single['win_ci_hi']*100:.2f}%)\n"
         )
-    output_path = getattr(args, "benchmark_output_path", None) or "benchmark_results.txt"
+    output_path = getattr(args, "benchmark_output_path", None) or "text/benchmark_results.txt"
     if getattr(args, "no_benchmark_write", False):
-        logger.info("Skipping benchmark_results.txt write (no_benchmark_write=True).")
+        logger.info("Skipping text/benchmark_results.txt write (no_benchmark_write=True).")
     else:
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
         with open(output_path, "a") as f:
             f.write(output_str)
     print(output_str)
@@ -634,10 +637,11 @@ def benchmark_2_players(
         "model_tag": single["model_tag"],
         "seed": single["seed"],
     }
-    experiments_path = getattr(args, "experiments_output_path", None) or "experiments.jsonl"
+    experiments_path = getattr(args, "experiments_output_path", None) or "text/experiments.jsonl"
     if getattr(args, "no_benchmark_write", False):
-        logger.info("Skipping experiments.jsonl write (no_benchmark_write=True).")
+        logger.info("Skipping text/experiments.jsonl write (no_benchmark_write=True).")
     else:
+        Path(experiments_path).parent.mkdir(parents=True, exist_ok=True)
         with open(experiments_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(experiment) + "\n")
         logger.info(f"Appended experiment -> {experiments_path}")

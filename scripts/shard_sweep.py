@@ -286,7 +286,7 @@ if __name__ == "__main__":
                 auto_mixed_benchmarks=False,
                 games=args.benchmark_games,
                 no_benchmark_write=False,
-                benchmark_output_path="shard_size_benchmark.txt",
+                benchmark_output_path="text/shard_size_benchmark.txt",
                 experiments_output_path=None,
             )
             benchmark_2_players(bench_args)
@@ -341,7 +341,7 @@ if __name__ == "__main__":
                 auto_mixed_benchmarks=False,
                 games=args.benchmark_games,
                 no_benchmark_write=False,
-                benchmark_output_path="shard_size_benchmark.txt",
+                benchmark_output_path="text/shard_size_benchmark.txt",
                 experiments_output_path=None,
             )
             benchmark_2_players(bench_args)

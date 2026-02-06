@@ -245,7 +245,7 @@ def build_do_everything_parser() -> argparse.ArgumentParser:
     ap.add_argument(
         "--smoke",
         action="store_true",
-        help="Run a tiny smoke cycle (loops=1, games=1) and skip benchmark_results.txt writes.",
+        help="Run a tiny smoke cycle (loops=1, games=1) and skip text/benchmark_results.txt writes.",
     )
     ap.add_argument("--il_games", type=int, default=DEFAULT_GAMES_PER_LOOP, help="Games per loop for IL data generation")
     ap.add_argument("--il_workers", type=int, default=DEFAULT_IL_WORKERS, help="Workers for IL data generation")
