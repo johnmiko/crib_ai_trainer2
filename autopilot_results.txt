@@ -4,3 +4,10 @@ loop=2 model_dir=C:\Users\johnm\ccode\crib_ai_trainer2\models\regression\discard
 loop=3 model_dir=C:\Users\johnm\ccode\crib_ai_trainer2\models\regression\discard_v8\003 winrate=0.3927
 loop=4 model_dir=C:\Users\johnm\ccode\crib_ai_trainer2\models\regression\discard_v8\004 winrate=0.3956
 loop=1 model_dir=C:\Users\johnm\ccode\crib_ai_trainer2\models\regression\discard_v8\001 winrate=0.4147
+loop=1 model_dir=C:\Users\johnm\ccode\crib_ai_trainer2\models\regression\discard_v8\001 winrate=0.3810
+loop=2 model_dir=C:\Users\johnm\ccode\crib_ai_trainer2\models\regression\discard_v8\001 winrate=0.4030
+loop=3 model_dir=C:\Users\johnm\ccode\crib_ai_trainer2\models\regression\discard_v8\001 winrate=0.4190
+loop=4 model_dir=C:\Users\johnm\ccode\crib_ai_trainer2\models\regression\discard_v8\001 winrate=0.4200
+loop=5 model_dir=C:\Users\johnm\ccode\crib_ai_trainer2\models\regression\discard_v8\001 winrate=0.4180
+loop=6 model_dir=C:\Users\johnm\ccode\crib_ai_trainer2\models\regression\discard_v8\001 winrate=0.4170
+loop=7 model_dir=C:\Users\johnm\ccode\crib_ai_trainer2\models\regression\discard_v8\001 winrate=0.4150

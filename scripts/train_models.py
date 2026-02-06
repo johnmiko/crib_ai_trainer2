@@ -71,6 +71,28 @@ def _parse_hidden_sizes(value: str) -> tuple[int, ...]:
     return tuple(int(p) for p in parts)
 
 
+def _max_games_from_shards(shards: list[Path], prefix: str) -> int:
+    if not shards:
+        raise SystemExit(f"No {prefix} shards provided.")
+    max_games = None
+    for path in shards:
+        stem = path.stem
+        if not stem.startswith(f"{prefix}_"):
+            raise SystemExit(f"Unexpected shard name '{path.name}' for prefix '{prefix}'.")
+        parts = stem.split("_", 1)
+        if len(parts) != 2:
+            raise SystemExit(f"Invalid shard name '{path.name}'.")
+        try:
+            games = int(parts[1])
+        except ValueError:
+            raise SystemExit(f"Invalid shard suffix in '{path.name}'.")
+        if max_games is None or games > max_games:
+            max_games = games
+    if max_games is None:
+        raise SystemExit(f"Unable to parse game counts from {prefix} shards.")
+    return max_games
+
+
 def _load_incremental_models(model_dir: Path, model_type: str):
     if model_type == "mlp":
         discard_path = model_dir / "discard_mlp.pt"
@@ -138,6 +160,9 @@ def train_models(args) -> int:
         discard_shards = discard_shards[: args.max_shards]
         pegging_shards = pegging_shards[: args.max_shards]
         logger.info(f"Limiting training to first {args.max_shards} shard(s)")
+
+    discard_games_used = _max_games_from_shards(discard_shards, "discard")
+    pegging_games_used = _max_games_from_shards(pegging_shards, "pegging")
 
     # init models
     discard_mode = args.discard_loss
@@ -593,6 +618,9 @@ def train_models(args) -> int:
         "seed": args.seed,
         "max_shards": args.max_shards,
         "num_shards_used": len(discard_shards),
+        "discard_games_used": discard_games_used,
+        "pegging_games_used": pegging_games_used,
+        "training_games_used": min(discard_games_used, pegging_games_used),
         "last_discard_loss": last_discard_loss,
         "last_pegging_loss": last_pegging_loss,
         "eval_metrics": eval_metrics,
@@ -639,6 +667,9 @@ def train_models(args) -> int:
         f"seed: {model_meta['seed']}",
         f"max_shards: {model_meta['max_shards']}",
         f"num_shards_used: {model_meta['num_shards_used']}",
+        f"discard_games_used: {model_meta['discard_games_used']}",
+        f"pegging_games_used: {model_meta['pegging_games_used']}",
+        f"training_games_used: {model_meta['training_games_used']}",
         f"last_discard_loss: {model_meta['last_discard_loss']}",
         f"last_pegging_loss: {model_meta['last_pegging_loss']}",
         f"discard_model_file: {model_meta['discard_model_file']}",

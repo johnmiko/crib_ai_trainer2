@@ -2,6 +2,7 @@
 # python .\scripts\train_models.py --data_dir "il_datasets/" --out_dir models --epochs 20
 # python .\scripts\benchmark_2_players.py --players neural,random --games 500 --models_dir models
 import sys
+import argparse
 import time
 from datetime import datetime
 
@@ -28,8 +29,6 @@ if __name__ == "__main__":
         args.benchmark_workers = 1
         args.no_benchmark_write = True
 
-    if args.data_dir is None:
-        args.data_dir = args.training_dir
     if args.loops <= 0:
         raise SystemExit("--loops must be >= 1")
 
@@ -53,7 +52,6 @@ if __name__ == "__main__":
             args.dataset_run_id,
             new_run=False,
         )
-    args.data_dir = dataset_dir
 
     data_pegging_feature_set = args.pegging_feature_set
 
@@ -84,26 +82,26 @@ if __name__ == "__main__":
         _start = datetime.now()
         _log_step_start("generate_il_data", _start)
         try:
-        generate_il_data(
-            args.il_games,
-            dataset_dir,
-            args.seed,
-            args.strategy,
-            data_pegging_feature_set,
-            args.crib_ev_mode,
-            args.crib_mc_samples,
-            args.pegging_label_mode,
-            args.pegging_rollouts,
-            args.pegging_ev_mode,
-            args.pegging_ev_rollouts,
-            args.win_prob_mode,
-            args.win_prob_rollouts,
-            args.win_prob_min_score,
-            args.il_workers,
-            not args.skip_pegging_data,
-            args.max_buffer_games,
-            args.teacher_player,
-        )
+            generate_il_data(
+                args.il_games,
+                dataset_dir,
+                args.seed,
+                args.strategy,
+                data_pegging_feature_set,
+                args.crib_ev_mode,
+                args.crib_mc_samples,
+                args.pegging_label_mode,
+                args.pegging_rollouts,
+                args.pegging_ev_mode,
+                args.pegging_ev_rollouts,
+                args.win_prob_mode,
+                args.win_prob_rollouts,
+                args.win_prob_min_score,
+                args.il_workers,
+                not args.skip_pegging_data,
+                args.max_buffer_games,
+                args.teacher_player,
+            )
         except MemoryError as exc:
             print("MemoryError during generate_il_data. This likely ran out of RAM.", flush=True)
             raise
@@ -113,7 +111,7 @@ if __name__ == "__main__":
         print("step: train_models", flush=True)
         args.pegging_feature_set = args.pegging_model_feature_set
         args.models_dir = _resolve_models_dir(base_models_dir, args.model_version, args.model_run_id)
-        args.pegging_data_dir = args.pegging_data_dir or args.data_dir
+        args.pegging_data_dir = args.pegging_data_dir or dataset_dir
         print(f"models_dir: {args.models_dir}", flush=True)
         _t0 = time.perf_counter()
         _start = datetime.now()
@@ -138,14 +136,17 @@ if __name__ == "__main__":
         _start = datetime.now()
         _log_step_start("benchmark", _start)
         try:
-            benchmark_2_players(args)
+            bench_args = argparse.Namespace(**vars(args))
+            if hasattr(bench_args, "data_dir"):
+                delattr(bench_args, "data_dir")
+            benchmark_2_players(bench_args)
             if args.benchmark_mode == "all":
                 parts = [p.strip() for p in args.players.split(",") if p.strip()]
                 opponent = parts[1] if len(parts) >= 2 else "beginner"
-                args.players = f"NeuralDiscardOnlyPlayer,{opponent}"
-                benchmark_2_players(args)
-                args.players = f"NeuralPegOnlyPlayer,{opponent}"
-                benchmark_2_players(args)
+                bench_args.players = f"NeuralDiscardOnlyPlayer,{opponent}"
+                benchmark_2_players(bench_args)
+                bench_args.players = f"NeuralPegOnlyPlayer,{opponent}"
+                benchmark_2_players(bench_args)
         except MemoryError as exc:
             print("MemoryError during benchmark_2_players. This likely ran out of RAM.", flush=True)
             raise

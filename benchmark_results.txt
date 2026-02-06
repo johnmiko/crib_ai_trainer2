@@ -79,7 +79,6 @@ MLPVV5.045Player vs beginner [045_large] after 62500 training games avg point di
 MLPVV5.045Player vs beginner [045_extra_large] after 62500 training games avg point diff 2.74 (95% CI 2.09 - 3.38) wins=3246/6000 winrate=54.1%
 
 # self play loop with 2 layer medium size
-.\.venv\Scripts\python.exe .\scripts\self_play_loop.py --model_version "discard_v5" --teacher_dataset_version "discard_v5" --selfplay_dataset_version "selfplay_v5" --games 250 --loops -1 --benchmark_opponent beginner --benchmark_games 500 
 new after 1000 self play games, 1000 benchmark games vs best [001] wins=480/1000 winrate=0.480 avg_diff=-0.74, vs beginner: wins=592/1000 winrate=0.592 avg_diff=4.69, Best vs beginner: wins=543/1000 winrate=0.543 avg_diff=2.59
 
 start generating V6 data. taking too long only generate V6 data for discard
@@ -112,7 +111,6 @@ MLPV7 vs beginner [016] after 62000 training games avg point diff 2.68 (95% CI 1
 MLPV7 vs beginner [017] after 67000 training games avg point diff 2.40 (95% CI 1.70 - 3.10) wins=2694/5000 winrate=53.88% (95% CI 52.50% - 55.26%)
 MLPV7 vs beginner [018] after 72000 training games avg point diff 2.73 (95% CI 2.03 - 3.43) wins=2718/5000 winrate=54.36% (95% CI 52.98% - 55.74%)
 
-.\.venv\Scripts\python.exe .\scripts\mlp_size_sweep.py --benchmark_only --benchmark_games 10000 --benchmark_workers 10 --model_version "discard_v7" --benchmark_dirs "small=models\regression\discard_v7\018_small;medium=models\regression\discard_v7\018_medium;large=models\regression\discard_v7\018_large;xl=models\regression\discard_v7\018_xl;small3=models\regression\discard_v7\018_small3;mini3=models\regression\discard_v7\018_mini3"
 
 Trying out different MLP models, Not seeded comparison
 MLPV3[018_mini3] vs beginner after 72000 training games avg point diff 2.39 (95% CI 1.74 - 3.04) wins=3215/6000 winrate=53.58% (95% CI 52.32% - 54.85%)
@@ -131,6 +129,13 @@ Change benchmarking to be against medium player since we can beat the beginner p
 # mini3=64,32,16
 # medium3=256,128,64
 # mini=64,32
+.\.venv\Scripts\python.exe .\scripts\mlp_size_sweep.py `
+  --data_dir "il_datasets\discard_v8\001" `
+  --models_dir "models\regression" `
+  --model_version "discard_v8" `
+  --benchmark_games 10000 `
+  --mlp_variants "small=128,64;medium=256,128;large=512,256;xl=1024,512;small3=128,64,32;mini3=64,32,16;medium3=256,128,64;large3=512,256,128"
+
 
 
 MLPVV5.0453Player vs beginner [045_small3] after 62500 training games avg point diff 3.12 (95% CI 2.47 - 3.76) wins=3319/6000 winrate=55.32% (95% CI 54.06% - 56.57%)
@@ -161,5 +166,28 @@ hard vs beginner avg point diff 4.57 (95% CI 4.08 - 5.07) wins=5749/10000 winrat
   
 Moving to V8 with hard player
 
-MLPV8[mini] vs beginner after 10000 training games avg point diff -5.25 (95% CI -5.74 - -4.77) wins=4016/10000 winrate=40.16% (95% CI 39.20% - 41.12%)
-MLPV8[001_128_64] vs beginner after 50000 training games avg point diff -4.65 (95% CI -5.15 - -4.15) wins=4147/10000 winrate=41.47% (95% CI 40.50% - 42.44%)
+
+.\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py --players AIPlayer,beginner --benchmark_games 12000 --models_dir "models\regression\discard_v8\002_mini3" --data_dir "il_datasets\discard_v8\001" --no_auto_mixed_benchmarks
+
+.\.venv\Scripts\python.exe .\scripts\train_models.py `
+  --data_dir "il_datasets\discard_v8\001" `
+  --models_dir "models\regression" `
+  --model_version "discard_v8" `
+  --run_id "002_xl" `
+  --model_type mlp `
+  --mlp_hidden "1024,512"
+
+
+.\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py --players AIPlayer,beginner --benchmark_games 20000 --models_dir "models\regression\discard_v8\002_medium3" --data_dir "il_datasets\discard_v8\001" --no_auto_mixed_benchmarks
+
+.\.venv\Scripts\python.exe .\scripts\evo_loop.py `
+  --model_version "discard_v8" `
+  --best_run_id "002_medium" `
+  --games_per_opponent 10 `
+  --loops 1
+
+
+MLPV8[002_medium] vs beginner after 70000 training games avg point diff 2.27 (95% CI 1.82 - 2.73) wins=6557/12000 winrate=54.64% (95% CI 53.75% - 55.53%)
+MLPV8[002_large] vs beginner after 70000 training games avg point diff 2.36 (95% CI 1.90 - 2.82) wins=6443/12000 winrate=53.69% (95% CI 52.80% - 54.58%)
+MLPV8[002_small] vs beginner after 70000 training games avg point diff 2.07 (95% CI 1.60 - 2.53) wins=6490/12000 winrate=54.08% (95% CI 53.19% - 54.97%)
+MLPV8[002_small3] vs beginner after 70000 training games avg point diff 1.56 (95% CI 1.10 - 2.02) wins=6195/12000 winrate=51.62% (95% CI 50.73% - 52.52%)

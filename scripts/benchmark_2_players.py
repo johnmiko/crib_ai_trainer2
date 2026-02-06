@@ -254,22 +254,25 @@ def _build_player_factory(args, fallback_override: str | None):
     return player_factory, model_tag, model_type
 
 
-def _estimate_training_games(data_dir: Path, max_shards: int | None) -> int:
-    discard_files = sorted(data_dir.glob("discard_*.npz"))
-    if max_shards is not None:
-        if max_shards <= 0:
-            raise ValueError("--max_shards must be > 0 if provided")
-        discard_files = discard_files[: max_shards]
-    if discard_files:
-        max_games = 0
-        for f in discard_files:
-            try:
-                num = int(f.stem.split("_")[1])
-                max_games = max(max_games, num)
-            except (ValueError, IndexError):
-                pass
-        return max_games
-    return 0
+def _read_training_games_from_meta(models_dir: str) -> tuple[int | str, int | str, int | str]:
+    meta_path = Path(models_dir) / "model_meta.json"
+    if not meta_path.exists():
+        raise ValueError(f"Expected model_meta.json at {meta_path} but it does not exist.")
+    with open(meta_path, "r", encoding="utf-8") as f:
+        meta = json.load(f)
+    if "discard_games_used" in meta:
+        discard_games = int(meta["discard_games_used"])
+    else:
+        discard_games = "unknown"
+    if "pegging_games_used" in meta:
+        pegging_games = int(meta["pegging_games_used"])
+    else:
+        pegging_games = "unknown"
+    if "training_games_used" in meta:
+        training_games = int(meta["training_games_used"])
+    else:
+        training_games = "unknown"
+    return discard_games, pegging_games, training_games
 
 
 def _compute_win_ci(winrate: float, total_games: int) -> tuple[float, float]:
@@ -314,11 +317,22 @@ def _benchmark_single(
     diff_ci_lo = results.get("diff_ci_lo")
     diff_ci_hi = results.get("diff_ci_hi")
 
-    # Count actual training games from discard file names (which are cumulative)
-    data_dir = Path(args.data_dir)
-    estimated_training_games = _estimate_training_games(data_dir, args.max_shards)
-
-    logger.debug(f"Estimated training games from files: {estimated_training_games}")
+    is_neural = any(
+        name in {"AIPlayer", "MLPPlayer", "GBTPlayer", "RandomForestPlayer", "NeuralDiscardOnlyPlayer", "NeuralPegOnlyPlayer"}
+        for name in player_names
+    )
+    if is_neural:
+        discard_games_used, pegging_games_used, estimated_training_games = _read_training_games_from_meta(args.models_dir)
+        logger.debug(
+            "Training games from model_meta: discard=%s pegging=%s min=%s",
+            discard_games_used,
+            pegging_games_used,
+            estimated_training_games,
+        )
+    else:
+        discard_games_used = 0
+        pegging_games_used = 0
+        estimated_training_games = 0
     avg_diff = float(np.mean(diffs)) if diffs else 0.0
     if diff_ci_lo is None or diff_ci_hi is None:
         if diffs and len(diffs) > 1:
@@ -389,8 +403,9 @@ def _benchmark_single(
         "model_type": model_type,
         "model_tag": model_tag,
         "models_dir": args.models_dir,
-        "data_dir": str(data_dir),
         "estimated_training_games": estimated_training_games,
+        "discard_games_used": discard_games_used,
+        "pegging_games_used": pegging_games_used,
         "discard_feature_set": args.discard_feature_set,
         "pegging_feature_set": args.pegging_feature_set,
         "seed": args.seed,
@@ -496,14 +511,20 @@ def benchmark_2_players(
         if model_tag and "-" in model_tag:
             model_dir_label = model_tag.split("-", 1)[1]
         estimated_training_games = first["estimated_training_games"]
-        data_dir = first["data_dir"]
+        discard_games_used = first.get("discard_games_used", 0)
+        pegging_games_used = first.get("pegging_games_used", 0)
         discard_feature_set = first["discard_feature_set"]
         pegging_feature_set = first["pegging_feature_set"]
 
         is_neural = any(name in {"AIPlayer", "MLPPlayer", "GBTPlayer", "RandomForestPlayer"} for name in player_names)
         if is_neural:
+            training_label = (
+                estimated_training_games
+                if isinstance(estimated_training_games, str)
+                else str(estimated_training_games)
+            )
             output_str = (
-                f"{display_names[0]}[{model_dir_label}] vs {display_names[1]} after {estimated_training_games} training games "
+                f"{display_names[0]}[{model_dir_label}] vs {display_names[1]} after {training_label} training games "
                 f"avg point diff {avg_diff:.2f} (95% CI {diff_ci_lo:.2f} - {diff_ci_hi:.2f}) "
                 f"wins={wins}/{total_games} winrate={winrate*100:.2f}% "
                 f"(95% CI {win_ci_lo*100:.2f}% - {win_ci_hi*100:.2f}%)\n"
@@ -528,7 +549,6 @@ def benchmark_2_players(
             "players": player_names,
             "display_players": display_names,
             "models_dir": first["models_dir"],
-            "data_dir": data_dir,
             "benchmark_games": total_games,
             "wins": wins,
             "winrate": winrate,
@@ -538,6 +558,8 @@ def benchmark_2_players(
             "winrate_ci_lo": win_ci_lo,
             "winrate_ci_hi": win_ci_hi,
             "estimated_training_games": estimated_training_games,
+            "discard_games_used": discard_games_used,
+            "pegging_games_used": pegging_games_used,
             "discard_feature_set": discard_feature_set,
             "pegging_feature_set": pegging_feature_set,
             "model_tag": model_tag,
@@ -559,11 +581,19 @@ def benchmark_2_players(
     model_dir_label = os.path.basename(os.path.normpath(single["models_dir"]))
     if single["model_tag"] and "-" in single["model_tag"]:
         model_dir_label = single["model_tag"].split("-", 1)[1]
-    is_neural = any(name in {"AIPlayer", "MLPPlayer", "GBTPlayer", "RandomForestPlayer"} for name in single["player_names"])
+    is_neural = any(
+        name in {"AIPlayer", "MLPPlayer", "GBTPlayer", "RandomForestPlayer", "NeuralDiscardOnlyPlayer", "NeuralPegOnlyPlayer"}
+        for name in single["player_names"]
+    )
     if is_neural:
+        training_label = (
+            single["estimated_training_games"]
+            if isinstance(single["estimated_training_games"], str)
+            else str(single["estimated_training_games"])
+        )
         output_str = (
             f"{single['display_names'][0]}[{model_dir_label}] vs {single['display_names'][1]} "
-            f"after {single['estimated_training_games']} training games "
+            f"after {training_label} training games "
             f"avg point diff {single['avg_diff']:.2f} (95% CI {single['diff_ci_lo']:.2f} - {single['diff_ci_hi']:.2f}) "
             f"wins={single['wins']}/{single['games_to_play']} winrate={single['winrate']*100:.2f}% "
             f"(95% CI {single['win_ci_lo']*100:.2f}% - {single['win_ci_hi']*100:.2f}%)\n"
@@ -588,7 +618,6 @@ def benchmark_2_players(
         "players": single["player_names"],
         "display_players": single["display_names"],
         "models_dir": single["models_dir"],
-        "data_dir": single["data_dir"],
         "benchmark_games": single["games_to_play"],
         "wins": single["wins"],
         "winrate": single["winrate"],
@@ -598,6 +627,8 @@ def benchmark_2_players(
         "winrate_ci_lo": single["win_ci_lo"],
         "winrate_ci_hi": single["win_ci_hi"],
         "estimated_training_games": single["estimated_training_games"],
+        "discard_games_used": single.get("discard_games_used", 0),
+        "pegging_games_used": single.get("pegging_games_used", 0),
         "discard_feature_set": single["discard_feature_set"],
         "pegging_feature_set": single["pegging_feature_set"],
         "model_tag": single["model_tag"],
@@ -631,13 +662,13 @@ if __name__ == "__main__":
         )
 
 # python scripts/benchmark_2_players.py
-# python scripts/benchmark_2_players.py --players AIPlayer,beginner --games 200 --models_dir "models/ranking" --data_dir "il_datasets/medium_discard_ranking" --max_shards 6 --fallback_player beginner
+# python scripts/benchmark_2_players.py --players AIPlayer,beginner --games 200 --models_dir "models/ranking" --max_shards 6 --fallback_player beginner
 
 # .\.venv\Scripts\python.exe .\scripts\generate_il_data.py --games 4000 --out_dir "il_datasets" --dataset_version "discard_v2" --run_id 001 --strategy regression
 
 # .\.venv\Scripts\python.exe .\scripts\train_models.py --data_dir "il_datasets\discard_v3\001" --models_dir "models" --model_version "discard_v3" --run_id 002 --discard_loss regression --epochs 5 --eval_samples 2048 --lr 0.00005 --l2 0.001 --batch_size 2048
 
-# .\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py --players AIPlayer,beginner --benchmark_games 200 --models_dir "models\regression\" --data_dir "il_datasets\discard_v3\001"
+# .\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py --players AIPlayer,beginner --benchmark_games 200 --models_dir "models\regression\"
 # .\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py
 
 # Script summary: benchmark two players and log results to text/jsonl outputs.

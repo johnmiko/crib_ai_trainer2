@@ -101,13 +101,6 @@ def build_generate_il_parser() -> argparse.ArgumentParser:
         help="Which teacher player to use for IL generation.",
     )
     ap.add_argument(
-        "--teacher_player",
-        type=str,
-        default="medium",
-        choices=["medium", "hard"],
-        help="Which teacher player to use for IL generation.",
-    )
-    ap.add_argument(
         "--skip_pegging_data",
         action="store_true",
         help="Generate only discard data (skip pegging logging and files).",
@@ -217,7 +210,6 @@ def build_benchmark_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser()
     ap.add_argument("--players", type=str, default=DEFAULT_BENCHMARK_PLAYERS)
     ap.add_argument("--benchmark_games", type=int, default=DEFAULT_BENCHMARK_GAMES)
-    ap.add_argument("--benchmark_workers", type=int, default=DEFAULT_BENCHMARK_WORKERS)
     ap.add_argument(
         "--benchmark_workers",
         type=int,
@@ -229,7 +221,6 @@ def build_benchmark_parser() -> argparse.ArgumentParser:
     ap.add_argument("--model_run_id", type=str, default=DEFAULT_MODEL_RUN_ID or None, help="Explicit run id (e.g., 014)")
     ap.add_argument("--latest_model", action="store_true", default=True)
     ap.add_argument("--no_latest_model", dest="latest_model", action="store_false")
-    ap.add_argument("--data_dir", type=str, default=TRAINING_DATA_DIR)
     ap.add_argument("--max_shards", type=int, default=(DEFAULT_MAX_SHARDS or None))
     ap.add_argument("--seed", type=int, default=DEFAULT_SEED)
     ap.add_argument("--fallback_player", type=str, default=DEFAULT_FALLBACK_PLAYER)
@@ -271,7 +262,6 @@ def build_do_everything_parser() -> argparse.ArgumentParser:
     ap.add_argument("--strategy", type=str, default=DEFAULT_STRATEGY)
     ap.add_argument("--pegging_feature_set", type=str, default=DEFAULT_PEGGING_FEATURE_SET, choices=["basic", "full"])
     ap.add_argument("--seed", type=int, default=_default_seed())
-    ap.add_argument("--data_dir", type=str, default=None)
     ap.add_argument("--epochs", type=int, default=DEFAULT_EPOCHS)
     ap.add_argument("--players", type=str, default=DEFAULT_BENCHMARK_PLAYERS)
     ap.add_argument("--benchmark_games", type=int, default=DEFAULT_BENCHMARK_GAMES)

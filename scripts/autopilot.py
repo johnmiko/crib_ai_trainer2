@@ -81,12 +81,11 @@ def _read_mlp_hidden(models_dir: str) -> tuple[int, ...]:
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--data_dir", type=str, default=TRAINING_DATA_DIR)
     ap.add_argument("--dataset_version", type=str, default=DEFAULT_DATASET_VERSION)
     ap.add_argument("--dataset_run_id", type=str, default="001")
     ap.add_argument("--models_dir", type=str, default=MODELS_DIR)
     ap.add_argument("--model_version", type=str, default=DEFAULT_MODEL_VERSION)
-    ap.add_argument("--model_run_id", type=str, default="001")
+    ap.add_argument("--model_run_id", type=str, default=None)
     ap.add_argument("--discard_loss", type=str, default=DEFAULT_DISCARD_LOSS, choices=["classification", "regression", "ranking"])
     ap.add_argument("--discard_feature_set", type=str, default=DEFAULT_DISCARD_FEATURE_SET, choices=["base", "engineered_no_scores", "full"])
     ap.add_argument("--pegging_feature_set", type=str, default=DEFAULT_PEGGING_MODEL_FEATURE_SET, choices=["base", "full_no_scores", "full"])
@@ -123,6 +122,12 @@ if __name__ == "__main__":
     ap.add_argument("--generate_il_each_loop", action=argparse.BooleanOptionalAction, default=True)
     ap.add_argument("--il_games", type=int, default=DEFAULT_GAMES_PER_LOOP)
     ap.add_argument("--il_workers", type=int, default=10)
+    ap.add_argument(
+        "--skip_pegging_data",
+        action="store_true",
+        default=False,
+        help="Generate only discard data (skip pegging logging and files).",
+    )
     ap.add_argument("--win_prob_mode", type=str, default="off", choices=["off", "rollout"])
     ap.add_argument("--win_prob_rollouts", type=int, default=16)
     ap.add_argument("--win_prob_min_score", type=int, default=90)
@@ -170,7 +175,7 @@ if __name__ == "__main__":
     for loop_idx in range(1, args.loops + 1):
         _log(log_path, f"=== Autopilot loop {loop_idx} ===")
         if args.generate_il and (args.generate_il_each_loop or loop_idx == 1):
-            dataset_dir = _resolve_output_dir(args.data_dir, args.dataset_version, args.dataset_run_id, new_run=False)
+            dataset_dir = _resolve_output_dir(TRAINING_DATA_DIR, args.dataset_version, args.dataset_run_id, new_run=False)
             _log(log_path, f"Generating IL data into {dataset_dir} (games={args.il_games})")
             generate_il_data(
                 args.il_games,
@@ -188,12 +193,12 @@ if __name__ == "__main__":
                 args.pegging_ev_mode,
                 args.pegging_ev_rollouts,
                 args.il_workers,
-                True,
+                not args.skip_pegging_data,
                 args.max_buffer_games,
                 args.teacher_player,
             )
         if dataset_dir is None:
-            dataset_dir = _resolve_output_dir(args.data_dir, args.dataset_version, args.dataset_run_id, new_run=False)
+            dataset_dir = _resolve_output_dir(TRAINING_DATA_DIR, args.dataset_version, args.dataset_run_id, new_run=False)
 
         model_dir = _resolve_models_dir(args.models_dir, args.model_version, args.model_run_id)
         _log(log_path, f"Training model in {model_dir}")
@@ -245,7 +250,6 @@ if __name__ == "__main__":
             model_version=args.model_version,
             model_run_id=None,
             latest_model=False,
-            data_dir=dataset_dir,
             max_shards=args.max_shards,
             seed=args.benchmark_seed,
             fallback_player="beginner",
