@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
+import multiprocessing as mp
 
 import sys
 sys.path.insert(0, ".")
@@ -24,6 +25,7 @@ from crib_ai_trainer.players.neural_player import (
 )
 from cribbage.players.hard_player import HardPlayer
 from cribbage.utils import play_game
+from cribbage.cribbagegame import CribbageGame
 
 
 class RLLoggingPlayer(AIPlayer):
@@ -141,6 +143,114 @@ def _evaluate(player: AIPlayer, opponent, games: int, seed: int) -> dict:
     return {"wins": wins, "games": games, "winrate": winrate, "avg_diff": avg_diff}
 
 
+def _play_n_hands(p0, p1, seed: int | None, hands: int) -> float:
+    game = CribbageGame(players=[p0, p1], seed=seed, copy_players=False, fast_mode=True)
+    game_score = [0, 0]
+    for _ in range(hands):
+        game_score = game.play_round(game_score, seed=game.round_seed)
+    return float(game_score[0] - game_score[1])
+
+
+def _compute_target(diff: float, target_mode: str, winrate_weight: float) -> float:
+    if diff > 0:
+        win = 1.0
+    elif diff < 0:
+        win = 0.0
+    else:
+        win = 0.5
+    if target_mode == "point_diff":
+        return diff
+    if target_mode == "winrate":
+        return win
+    if target_mode == "mixed":
+        return (winrate_weight * win) + ((1.0 - winrate_weight) * diff)
+    # score_aware
+    if diff < 0:
+        return win
+    return (winrate_weight * win) + ((1.0 - winrate_weight) * diff)
+
+
+def _collect_training_batch(args_tuple: tuple) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    (
+        best_dir_str,
+        discard_feature_set,
+        pegging_feature_set,
+        games,
+        seed,
+        target_mode,
+        winrate_weight,
+        hands_per_game,
+    ) = args_tuple
+    best_dir = Path(best_dir_str)
+    discard_model, pegging_model, _ = _load_best_models(best_dir)
+    learner = RLLoggingPlayer(
+        discard_model,
+        pegging_model,
+        name=f"learner:{best_dir.name}",
+        discard_feature_set=discard_feature_set,
+        pegging_feature_set=pegging_feature_set,
+    )
+    opponent = HardPlayer(name="hard")
+
+    Xd_list: list[np.ndarray] = []
+    Xp_list: list[np.ndarray] = []
+    yd_list: list[float] = []
+    yp_list: list[float] = []
+
+    for game_idx in range(games):
+        learner.reset_logs()
+        game_seed = int(seed) + game_idx
+        if hands_per_game is None:
+            if game_idx % 2 == 0:
+                s0, s1 = play_game(learner, opponent, seed=game_seed, fast_mode=True, copy_players=False)
+                diff = float(s0 - s1)
+            else:
+                s0, s1 = play_game(opponent, learner, seed=game_seed, fast_mode=True, copy_players=False)
+                diff = float(s1 - s0)
+        else:
+            if game_idx % 2 == 0:
+                diff = _play_n_hands(learner, opponent, game_seed, hands_per_game)
+            else:
+                diff = -_play_n_hands(opponent, learner, game_seed, hands_per_game)
+        target = _compute_target(diff, target_mode, winrate_weight)
+        d_feats, p_feats = learner.get_logged_features()
+        Xd_list.extend(d_feats)
+        Xp_list.extend(p_feats)
+        yd_list.extend([target] * len(d_feats))
+        yp_list.extend([target] * len(p_feats))
+
+    if not Xd_list or not Xp_list:
+        raise SystemExit("No training data collected from games.")
+
+    Xd = np.stack(Xd_list).astype(np.float32, copy=False)
+    yd = np.array(yd_list, dtype=np.float32)
+    Xp = np.stack(Xp_list).astype(np.float32, copy=False)
+    yp = np.array(yp_list, dtype=np.float32)
+
+    discard_idx = get_discard_feature_indices(discard_feature_set)
+    pegging_idx = get_pegging_feature_indices(pegging_feature_set)
+    Xd = Xd[:, discard_idx]
+    Xp = Xp[:, pegging_idx]
+    return Xd, yd, Xp, yp
+
+
+def _evaluate_hands(player: AIPlayer, opponent, games: int, seed: int, hands: int) -> dict:
+    wins = 0
+    diffs = []
+    for i in range(games):
+        game_seed = int(seed) + i
+        if i % 2 == 0:
+            diff = _play_n_hands(player, opponent, game_seed, hands)
+        else:
+            diff = -_play_n_hands(opponent, player, game_seed, hands)
+        if diff > 0:
+            wins += 1
+        diffs.append(diff)
+    winrate = wins / games if games else 0.0
+    avg_diff = float(np.mean(diffs)) if diffs else 0.0
+    return {"wins": wins, "games": games, "winrate": winrate, "avg_diff": avg_diff}
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--models_dir", type=str, default=MODELS_DIR)
@@ -148,7 +258,24 @@ if __name__ == "__main__":
     ap.add_argument("--best_file", type=str, default=None)
     ap.add_argument("--best_run_id", type=str, default=None)
     ap.add_argument("--games_per_iteration", type=int, default=200)
+    ap.add_argument("--workers", type=int, default=10)
     ap.add_argument("--loops", type=int, default=-1)
+    ap.add_argument("--eval_games", type=int, default=None)
+    ap.add_argument("--accept_margin", type=float, default=0.0)
+    ap.add_argument("--hands_per_game", type=int, default=None, help="If set, play this many hands per game for training instead of full games.")
+    ap.add_argument("--eval_hands_per_game", type=int, default=None, help="If set, play this many hands per eval game instead of full games.")
+    ap.add_argument("--save_data_dir", type=str, default="il_datasets/selfplayv8/rl")
+    ap.add_argument("--save_data", action=argparse.BooleanOptionalAction, default=True)
+    ap.add_argument("--max_saved_shards", type=int, default=500)
+    ap.add_argument("--train_from_saved_shards", action=argparse.BooleanOptionalAction, default=True)
+    ap.add_argument("--max_train_shards", type=int, default=500)
+    ap.add_argument(
+        "--target_mode",
+        type=str,
+        default="point_diff",
+        choices=["point_diff", "winrate", "mixed", "score_aware"],
+    )
+    ap.add_argument("--winrate_weight", type=float, default=0.7)
     ap.add_argument("--lr", type=float, default=1e-4)
     ap.add_argument("--epochs", type=int, default=3)
     ap.add_argument("--batch_size", type=int, default=1024)
@@ -158,6 +285,16 @@ if __name__ == "__main__":
 
     if args.games_per_iteration <= 0:
         raise SystemExit("--games_per_iteration must be > 0.")
+    if args.hands_per_game is not None and args.hands_per_game <= 0:
+        raise SystemExit("--hands_per_game must be > 0 if provided.")
+    if args.eval_hands_per_game is not None and args.eval_hands_per_game <= 0:
+        raise SystemExit("--eval_hands_per_game must be > 0 if provided.")
+    if args.eval_games is not None and args.eval_games <= 0:
+        raise SystemExit("--eval_games must be > 0 if provided.")
+    if args.accept_margin < 0:
+        raise SystemExit("--accept_margin must be >= 0.")
+    if args.workers <= 0:
+        raise SystemExit("--workers must be > 0.")
     if args.loops == 0:
         raise SystemExit("--loops must be != 0.")
 
@@ -205,33 +342,116 @@ if __name__ == "__main__":
         yd_list: list[float] = []
         yp_list: list[float] = []
 
-        for game_idx in range(args.games_per_iteration):
-            learner.reset_logs()
-            game_seed = int(base_seed) + (loop_idx * 100_000) + game_idx
-            if game_idx % 2 == 0:
-                s0, s1 = play_game(learner, opponent, seed=game_seed, fast_mode=True, copy_players=False)
-                diff = float(s0 - s1)
-            else:
-                s0, s1 = play_game(opponent, learner, seed=game_seed, fast_mode=True, copy_players=False)
-                diff = float(s1 - s0)
-            d_feats, p_feats = learner.get_logged_features()
-            Xd_list.extend(d_feats)
-            Xp_list.extend(p_feats)
-            yd_list.extend([diff] * len(d_feats))
-            yp_list.extend([diff] * len(p_feats))
+        if args.target_mode in {"mixed", "score_aware"}:
+            if args.winrate_weight < 0.0 or args.winrate_weight > 1.0:
+                raise SystemExit("--winrate_weight must be in [0, 1].")
 
-        if not Xd_list or not Xp_list:
-            raise SystemExit("No training data collected from games.")
+        games_total = int(args.games_per_iteration)
+        if args.workers == 1:
+            Xd, yd, Xp, yp = _collect_training_batch(
+                (
+                    str(best_dir),
+                    discard_feature_set,
+                    pegging_feature_set,
+                    games_total,
+                    int(base_seed) + (loop_idx * 100_000),
+                    args.target_mode,
+                    args.winrate_weight,
+                    args.hands_per_game,
+                )
+            )
+        else:
+            chunk = games_total // args.workers
+            remainder = games_total % args.workers
+            tasks = []
+            seed_base = int(base_seed) + (loop_idx * 100_000)
+            for i in range(args.workers):
+                n_games = chunk + (1 if i < remainder else 0)
+                if n_games == 0:
+                    continue
+                tasks.append(
+                    (
+                        str(best_dir),
+                        discard_feature_set,
+                        pegging_feature_set,
+                        n_games,
+                        seed_base + (i * 10_000),
+                        args.target_mode,
+                        args.winrate_weight,
+                        args.hands_per_game,
+                    )
+                )
+            if not tasks:
+                raise SystemExit("No training tasks created for workers.")
+            ctx = mp.get_context("spawn")
+            results = []
+            with ctx.Pool(processes=min(args.workers, len(tasks))) as pool:
+                for res in pool.imap_unordered(_collect_training_batch, tasks):
+                    results.append(res)
+            Xd = np.concatenate([r[0] for r in results], axis=0).astype(np.float32, copy=False)
+            yd = np.concatenate([r[1] for r in results], axis=0).astype(np.float32, copy=False)
+            Xp = np.concatenate([r[2] for r in results], axis=0).astype(np.float32, copy=False)
+            yp = np.concatenate([r[3] for r in results], axis=0).astype(np.float32, copy=False)
 
-        Xd = np.stack(Xd_list).astype(np.float32, copy=False)
-        yd = np.array(yd_list, dtype=np.float32)
-        Xp = np.stack(Xp_list).astype(np.float32, copy=False)
-        yp = np.array(yp_list, dtype=np.float32)
+        if args.save_data:
+            save_dir = Path(args.save_data_dir)
+            if args.target_mode == "winrate":
+                save_dir = save_dir / "winrate"
+            save_dir.mkdir(parents=True, exist_ok=True)
+            existing_ids = sorted(
+                int(p.stem.split("_")[1])
+                for p in save_dir.glob("discard_*.npz")
+                if p.stem.split("_")[1].isdigit()
+            )
+            next_id = (existing_ids[-1] + 1) if existing_ids else 1
+            shard_id = f"{next_id:03d}"
+            discard_path = save_dir / f"discard_{shard_id}.npz"
+            pegging_path = save_dir / f"pegging_{shard_id}.npz"
+            np.savez(discard_path, X=Xd, y=yd)
+            np.savez(pegging_path, X=Xp, y=yp)
+            if args.max_saved_shards is not None:
+                if args.max_saved_shards <= 0:
+                    raise SystemExit("--max_saved_shards must be > 0 if provided.")
+                discard_shards = sorted(save_dir.glob("discard_*.npz"))
+                pegging_shards = sorted(save_dir.glob("pegging_*.npz"))
+                excess = len(discard_shards) - args.max_saved_shards
+                if excess > 0:
+                    for shard in discard_shards[:excess]:
+                        shard.unlink()
+                excess = len(pegging_shards) - args.max_saved_shards
+                if excess > 0:
+                    for shard in pegging_shards[:excess]:
+                        shard.unlink()
 
-        discard_idx = get_discard_feature_indices(discard_feature_set)
-        pegging_idx = get_pegging_feature_indices(pegging_feature_set)
-        Xd = Xd[:, discard_idx]
-        Xp = Xp[:, pegging_idx]
+        if args.train_from_saved_shards:
+            if args.max_train_shards is not None and args.max_train_shards <= 0:
+                raise SystemExit("--max_train_shards must be > 0 if provided.")
+            train_dir = Path(args.save_data_dir)
+            if args.target_mode == "winrate":
+                train_dir = train_dir / "winrate"
+            discard_shards = sorted(train_dir.glob("discard_*.npz"))
+            pegging_shards = sorted(train_dir.glob("pegging_*.npz"))
+            if args.max_train_shards is not None:
+                discard_shards = discard_shards[-args.max_train_shards :]
+                pegging_shards = pegging_shards[-args.max_train_shards :]
+            if not discard_shards or not pegging_shards:
+                raise SystemExit(f"No saved shards found in {train_dir} for training.")
+            Xd_list = []
+            yd_list = []
+            for path in discard_shards:
+                data = np.load(path)
+                Xd_list.append(data["X"])
+                yd_list.append(data["y"])
+            Xp_list = []
+            yp_list = []
+            for path in pegging_shards:
+                data = np.load(path)
+                Xp_list.append(data["X"])
+                yp_list.append(data["y"])
+            Xd = np.concatenate(Xd_list, axis=0).astype(np.float32, copy=False)
+            yd = np.concatenate(yd_list, axis=0).astype(np.float32, copy=False)
+            Xp = np.concatenate(Xp_list, axis=0).astype(np.float32, copy=False)
+            yp = np.concatenate(yp_list, axis=0).astype(np.float32, copy=False)
 
         discard_model.fit_mse(Xd, yd, lr=args.lr, epochs=args.epochs, batch_size=args.batch_size, l2=args.l2, seed=base_seed)
         pegging_model.fit_mse(Xp, yp, lr=args.lr, epochs=args.epochs, batch_size=args.batch_size, l2=args.l2, seed=base_seed)
@@ -264,16 +484,23 @@ if __name__ == "__main__":
         )
 
         eval_seed = int(base_seed) + (loop_idx * 1_000_000)
-        best_eval = _evaluate(best_player, opponent, args.games_per_iteration, eval_seed)
-        cand_eval = _evaluate(cand_player, opponent, args.games_per_iteration, eval_seed)
-        print("model | wins/games | winrate | avg_diff")
-        print(f"best | {best_eval['wins']}/{best_eval['games']} | {best_eval['winrate']:.3f} | {best_eval['avg_diff']:.2f}")
-        print(f"cand | {cand_eval['wins']}/{cand_eval['games']} | {cand_eval['winrate']:.3f} | {cand_eval['avg_diff']:.2f}")
+        eval_games = args.eval_games if args.eval_games is not None else args.games_per_iteration
+        if args.eval_hands_per_game is None:
+            best_eval = _evaluate(best_player, opponent, eval_games, eval_seed)
+            cand_eval = _evaluate(cand_player, opponent, eval_games, eval_seed)
+        else:
+            best_eval = _evaluate_hands(best_player, opponent, eval_games, eval_seed, args.eval_hands_per_game)
+            cand_eval = _evaluate_hands(cand_player, opponent, eval_games, eval_seed, args.eval_hands_per_game)
+        print(
+            "eval | "
+            f"best {best_eval['wins']}/{best_eval['games']} wr={best_eval['winrate']:.3f} diff={best_eval['avg_diff']:.2f} | "
+            f"cand {cand_eval['wins']}/{cand_eval['games']} wr={cand_eval['winrate']:.3f} diff={cand_eval['avg_diff']:.2f}"
+        )
 
-        if cand_eval["winrate"] > best_eval["winrate"]:
+        if cand_eval["avg_diff"] >= (best_eval["avg_diff"] + args.accept_margin):
             new_run_id = _next_run_id(base_dir)
             new_best_dir = base_dir / new_run_id
-            print(f"Accepted candidate (higher winrate). Saving as {new_run_id}.")
+            print(f"Accepted candidate (higher avg_diff). Saving as {new_run_id}.")
             shutil.copytree(candidate_dir, new_best_dir)
             best_dir = new_best_dir
             best_file.write_text(str(best_dir))

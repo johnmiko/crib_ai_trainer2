@@ -150,10 +150,6 @@ MLPV7[018_small3] vs beginner after 77000 training games avg point diff 2.61 (95
 MLPV7[018_medium3] vs beginner after 77000 training games avg point diff 2.35 (95% CI 1.85 - 2.86) wins=5370/10000 winrate=53.70% (95% CI 52.72% - 54.68%)
 MLPV7[022_mini] vs beginner after 77000 training games avg point diff 2.48 (95% CI 1.98 - 2.98) wins=5333/10000 winrate=53.33% (95% CI 52.35% - 54.31%)
 
-hard vs medium avg point diff 1.35 (95% CI 0.87 - 1.83) wins=5114/10000 winrate=51.14% (95% CI 50.16% - 52.12%)
-medium vs beginner avg point diff 3.34 (95% CI 2.69 - 3.98) wins=3330/6000 winrate=55.50% (95% CI 54.24% - 56.75%)
-hard vs beginner avg point diff 4.57 (95% CI 4.08 - 5.07) wins=5749/10000 winrate=57.49% (95% CI 56.52% - 58.46%)
-
 
 .\.venv\Scripts\python.exe .\scripts\autopilot.py `
   --dataset_version "discard_v8" `
@@ -190,4 +186,26 @@ MLPV8[002_medium] vs beginner after 70000 training games avg point diff 2.27 (95
 MLPV8[002_small] vs beginner after 70000 training games avg point diff 2.07 (95% CI 1.60 - 2.53) wins=6490/12000 winrate=54.08% (95% CI 53.19% - 54.97%)
 MLPV8[002_large] vs beginner after 70000 training games avg point diff 2.36 (95% CI 1.90 - 2.82) wins=6443/12000 winrate=53.69% (95% CI 52.80% - 54.58%)
 MLPV8[002_small3] vs beginner after 70000 training games avg point diff 1.56 (95% CI 1.10 - 2.02) wins=6195/12000 winrate=51.62% (95% CI 50.73% - 52.52%)
+
+RL self play double check that things are improving. self play v8 model 004
+MLPV8[002_medium] vs beginner after 300 training games avg point diff 3.20 (95% CI 2.79 - 3.61) wins=8436/15000 winrate=56.24% (95% CI 55.45% - 57.03%)
+MLPV8[002_medium] vs hard after 400 training games avg point diff -1.73 (95% CI -2.13 - -1.33) wins=7131/15000 winrate=47.54% (95% CI 46.74% - 48.34%)
+
+hard vs medium avg point diff 1.35 (95% CI 0.87 - 1.83) wins=5114/10000 winrate=51.14% (95% CI 50.16% - 52.12%)
+medium vs beginner avg point diff 3.34 (95% CI 2.69 - 3.98) wins=3330/6000 winrate=55.50% (95% CI 54.24% - 56.75%)
+hard vs beginner avg point diff 4.57 (95% CI 4.08 - 5.07) wins=5749/10000 winrate=57.49% (95% CI 56.52% - 58.46%)
+
+.\.venv\Scripts\python.exe .\scripts\rl_loop.py `
+  --model_version "selfplayv8" `
+  --games_per_iteration 2000 `
+  --hands_per_game 2 `
+  --eval_games 500 `
+  --loops -1 `
+  --target_mode point_diff `
+  --lr 1e-5 `
+  --epochs 1 `
+  --no-train_from_saved_shards `
+  --accept_margin 0.01
+
+Best model before switching to hand_per_game=2 is 014
 
