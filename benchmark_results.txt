@@ -158,3 +158,8 @@ hard vs beginner avg point diff 4.57 (95% CI 4.08 - 5.07) wins=5749/10000 winrat
   --benchmark_games 10000 `
   --mlp_hidden "64,32" `
   --model_tag_suffix "001_mini"
+  
+Moving to V8 with hard player
+
+MLPV8[mini] vs beginner after 10000 training games avg point diff -5.25 (95% CI -5.74 - -4.77) wins=4016/10000 winrate=40.16% (95% CI 39.20% - 41.12%)
+MLPV8[001_128_64] vs beginner after 50000 training games avg point diff -4.65 (95% CI -5.15 - -4.15) wins=4147/10000 winrate=41.47% (95% CI 40.50% - 42.44%)

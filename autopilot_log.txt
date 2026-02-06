@@ -7,3 +7,43 @@ Generating IL data into C:\Users\johnm\ccode\crib_ai_trainer2\il_datasets\discar
 Training model in C:\Users\johnm\ccode\crib_ai_trainer2\models\regression\discard_v7\023
 Benchmarking AIPlayer,beginner for 2 games (seed=67)
 loop=1 model_dir=C:\Users\johnm\ccode\crib_ai_trainer2\models\regression\discard_v7\023 winrate=0.0000
+=== Autopilot loop 1 ===
+Generating IL data into C:\Users\johnm\ccode\crib_ai_trainer2\il_datasets\discard_v8\001 (games=10000)
+Training model in C:\Users\johnm\ccode\crib_ai_trainer2\models\regression\discard_v8\001
+Benchmarking AIPlayer,beginner for 10000 games (seed=67)
+loop=1 model_dir=C:\Users\johnm\ccode\crib_ai_trainer2\models\regression\discard_v8\001 winrate=0.4016
+=== Autopilot loop 2 ===
+Generating IL data into C:\Users\johnm\ccode\crib_ai_trainer2\il_datasets\discard_v8\002 (games=10000)
+Training model in C:\Users\johnm\ccode\crib_ai_trainer2\models\regression\discard_v8\002
+Benchmarking AIPlayer,beginner for 10000 games (seed=67)
+loop=2 model_dir=C:\Users\johnm\ccode\crib_ai_trainer2\models\regression\discard_v8\002 winrate=0.3931
+=== Autopilot loop 3 ===
+Generating IL data into C:\Users\johnm\ccode\crib_ai_trainer2\il_datasets\discard_v8\003 (games=10000)
+Training model in C:\Users\johnm\ccode\crib_ai_trainer2\models\regression\discard_v8\003
+Benchmarking AIPlayer,beginner for 10000 games (seed=67)
+loop=3 model_dir=C:\Users\johnm\ccode\crib_ai_trainer2\models\regression\discard_v8\003 winrate=0.3927
+=== Autopilot loop 4 ===
+Generating IL data into C:\Users\johnm\ccode\crib_ai_trainer2\il_datasets\discard_v8\004 (games=10000)
+Training model in C:\Users\johnm\ccode\crib_ai_trainer2\models\regression\discard_v8\004
+Benchmarking AIPlayer,beginner for 10000 games (seed=67)
+loop=4 model_dir=C:\Users\johnm\ccode\crib_ai_trainer2\models\regression\discard_v8\004 winrate=0.3956
+Stopping after 3 non-improving loops.
+=== Autopilot loop 1 ===
+Generating IL data into C:\Users\johnm\ccode\crib_ai_trainer2\il_datasets\discard_v8\005 (games=10000)
+=== Autopilot loop 1 ===
+Generating IL data into C:\Users\johnm\ccode\crib_ai_trainer2\il_datasets\discard_v8\005 (games=10000)
+=== Autopilot loop 1 ===
+Generating IL data into C:\Users\johnm\ccode\crib_ai_trainer2\il_datasets\discard_v8\001 (games=10000)
+=== Autopilot loop 1 ===
+Generating IL data into C:\Users\johnm\ccode\crib_ai_trainer2\il_datasets\discard_v7\001 (games=1)
+Training model in C:\Users\johnm\ccode\crib_ai_trainer2\models\regression\discard_v7\001
+=== Autopilot loop 1 ===
+Generating IL data into C:\Users\johnm\ccode\crib_ai_trainer2\il_datasets\discard_v7\001 (games=1)
+Training model in C:\Users\johnm\ccode\crib_ai_trainer2\models\regression\discard_v7\001
+=== Autopilot loop 1 ===
+Generating IL data into C:\Users\johnm\ccode\crib_ai_trainer2\il_datasets\discard_v8\001 (games=10000)
+Training model in C:\Users\johnm\ccode\crib_ai_trainer2\models\regression\discard_v8\001
+Benchmarking AIPlayer,beginner for 10000 games (seed=67)
+loop=1 model_dir=C:\Users\johnm\ccode\crib_ai_trainer2\models\regression\discard_v8\001 winrate=0.4147
+=== Autopilot loop 2 ===
+Generating IL data into C:\Users\johnm\ccode\crib_ai_trainer2\il_datasets\discard_v8\001 (games=10000)

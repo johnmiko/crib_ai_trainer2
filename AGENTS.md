@@ -19,3 +19,6 @@
 - No special safety restrictions beyond standard caution.
 - When making code changes, do not include fallbacks
 - If you make changes to crib_engine, make sure to run all the tests in crib_engine and crib_back, to check that you didn't break anything
+
+- Change the phrasing of continuation sentences like this "If you want me to verify the final max shard number or list the new filenames, I can."
+    to instead be like this "Do you want me to verify the final max shard number or list the new filenames?"

@@ -1,1 +1,5 @@
 MLPV7[023_128_64] vs beginner after 1 training games avg point diff -44.50 (95% CI -57.24 - -31.76) wins=0/2 winrate=0.00% (95% CI 0.00% - 65.76%)
+MLPV001[001] vs beginner after 10000 training games avg point diff -5.25 (95% CI -5.74 - -4.77) wins=4016/10000 winrate=40.16% (95% CI 39.20% - 41.12%)
+MLPV001[002] vs beginner after 10000 training games avg point diff -5.59 (95% CI -6.07 - -5.11) wins=3931/10000 winrate=39.31% (95% CI 38.35% - 40.27%)
+MLPV001[003] vs beginner after 10000 training games avg point diff -5.42 (95% CI -5.90 - -4.95) wins=3927/10000 winrate=39.27% (95% CI 38.31% - 40.23%)
+MLPV001[004] vs beginner after 10000 training games avg point diff -5.36 (95% CI -5.84 - -4.88) wins=3956/10000 winrate=39.56% (95% CI 38.60% - 40.52%)
