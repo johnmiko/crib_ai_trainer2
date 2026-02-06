@@ -22,3 +22,5 @@
 
 - Change the phrasing of continuation sentences like this "If you want me to verify the final max shard number or list the new filenames, I can."
     to instead be like this "Do you want me to verify the final max shard number or list the new filenames?"
+
+- You have generic permission to run powershell, python, pytest, and grep (whatever the short command for it is)

@@ -149,10 +149,13 @@ if __name__ == "__main__":
     if args.incremental and args.incremental_from is None:
         latest = _find_latest_run_dir(args.models_dir, args.model_version)
         if latest is None:
-            raise SystemExit(
-                f"--incremental requires an existing model in {Path(args.models_dir) / args.model_version}."
+            _log(
+                log_path,
+                f"No existing model in {Path(args.models_dir) / args.model_version}; starting fresh training.",
             )
-        args.incremental_from = latest
+            args.incremental = False
+        else:
+            args.incremental_from = latest
     if args.incremental and args.model_type == "mlp":
         requested_hidden = _parse_hidden_sizes(args.mlp_hidden)
         existing_hidden = _read_mlp_hidden(args.incremental_from)

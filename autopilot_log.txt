@@ -47,3 +47,11 @@ Benchmarking AIPlayer,beginner for 10000 games (seed=67)
 loop=1 model_dir=C:\Users\johnm\ccode\crib_ai_trainer2\models\regression\discard_v8\001 winrate=0.4147
 === Autopilot loop 2 ===
 Generating IL data into C:\Users\johnm\ccode\crib_ai_trainer2\il_datasets\discard_v8\001 (games=10000)
+=== Autopilot loop 1 ===
+Generating IL data into C:\Users\johnm\ccode\crib_ai_trainer2\il_datasets\discard_v8\001 (games=10000)
+=== Autopilot loop 1 ===
+Generating IL data into C:\Users\johnm\ccode\crib_ai_trainer2\il_datasets\discard_v7\001 (games=1)
+Training model in C:\Users\johnm\ccode\crib_ai_trainer2\models\regression\discard_v7\001
+No existing model in C:\Users\johnm\ccode\crib_ai_trainer2\models\regression\discard_v8; starting fresh training.
+=== Autopilot loop 1 ===
+Generating IL data into C:\Users\johnm\ccode\crib_ai_trainer2\il_datasets\discard_v8\001 (games=10000)

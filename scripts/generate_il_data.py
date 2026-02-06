@@ -1073,39 +1073,23 @@ class LoggingHardPlayer(HardPlayer):
         highest_scoring_card = get_highest_rank_card(highest_scoring_cards_list)
         return highest_scoring_card
     
+    def _build_db_scores_df(self, hand: List[Card], dealer_is_self: bool) -> pd.DataFrame:
+        rows = []
+        for kept in combinations(hand, 4):
+            kept_list = list(kept)
+            discards_list = [c for c in hand if c not in kept_list]
+            hand_key = normalize_hand_to_str(kept_list)
+            crib_key = normalize_hand_to_str(discards_list)
+            hand_avg = self._hand_stats.get(hand_key)
+            crib_avg = self._crib_stats.get(crib_key)
+            if hand_avg is None or crib_avg is None:
+                raise KeyError(f"Missing DB stats for hand={hand_key} crib={crib_key}")
+            avg_total = hand_avg + (crib_avg if dealer_is_self else -crib_avg)
+            rows.append([hand_key, crib_key, float(avg_total)])
+        return pd.DataFrame(rows, columns=["hand_key", "crib_key", "avg_total_score"])
+
     def select_crib_cards_classifier(self, hand, dealer_is_self, your_score=None, opponent_score=None) -> Tuple[Card, Card]:                
-        # don't analyze crib, just calculate min value of the crib and use that
-        full_deck = get_full_deck()
-        hand_score_cache = {}
-        crib_score_cache = {}        
-        hand_results = process_dealt_hand_only_exact([hand, full_deck, hand_score_cache])
-        df_hand = pd.DataFrame(hand_results, columns=["hand_key","min_hand_score","max_hand_score","avg_hand_score"])
-        if self._crib_ev_mode == "min":
-            crib_results = calc_crib_min_only_given_6_cards(hand)
-            df_crib = pd.DataFrame(crib_results, columns=["hand_key","crib_key","min_crib_score","avg_crib_score"])
-            df3 = pd.merge(df_hand, df_crib, on=["hand_key"])
-            df3["avg_total_score"] = df3["avg_hand_score"] + (df3["avg_crib_score"] if dealer_is_self else -df3["avg_crib_score"])
-        else:
-            # Monte Carlo crib EV
-            hand_set = set(hand)
-            remaining = [c for c in self._full_deck if c not in hand_set]
-            rows = []
-            for kept in combinations(hand, 4):
-                kept_list = list(kept)
-                discards_list_temp = [c for c in hand if c not in kept_list]
-                hand_key = normalize_hand_to_str(kept_list)
-                crib_key = normalize_hand_to_str(discards_list_temp)
-                crib_ev = estimate_crib_ev_mc_from_remaining(
-                    discards_list_temp,
-                    remaining,
-                    self._rng,
-                    n_samples=self._crib_mc_samples,
-                )
-                rows.append([hand_key, crib_key, crib_ev])
-            df_crib = pd.DataFrame(rows, columns=["hand_key","crib_key","avg_crib_score"])
-            df3 = pd.merge(df_hand, df_crib, on=["hand_key"])
-            df3["avg_total_score"] = df3["avg_hand_score"] + (df3["avg_crib_score"] if dealer_is_self else -df3["avg_crib_score"])
-        df3["min_total_score"] = df3["min_hand_score"] + (df3["min_crib_score"] if dealer_is_self else -df3["min_crib_score"])
+        df3 = self._build_db_scores_df(hand, dealer_is_self)
         best_discards_str = df3.loc[df3["avg_total_score"] == df3["avg_total_score"].max()]["crib_key"].values[0]
         best_discards = best_discards_str.lower().replace("t", "10").split("|")
         best_discards_cards = build_hand(best_discards)
@@ -1153,35 +1137,7 @@ class LoggingHardPlayer(HardPlayer):
         return tuple(best_discards_cards)
        
     def select_crib_cards_ranking(self, hand, dealer_is_self, your_score=None, opponent_score=None) -> Tuple[Card, Card]:
-        full_deck = get_full_deck()
-        hand_score_cache = {}
-        crib_score_cache = {}
-        hand_results = process_dealt_hand_only_exact([hand, full_deck, hand_score_cache])
-        df_hand = pd.DataFrame(hand_results, columns=["hand_key","min_hand_score","max_hand_score","avg_hand_score"])
-        if self._crib_ev_mode == "min":
-            crib_results = calc_crib_min_only_given_6_cards(hand)
-            df_crib = pd.DataFrame(crib_results, columns=["hand_key","crib_key","min_crib_score","avg_crib_score"])
-            df3 = pd.merge(df_hand, df_crib, on=["hand_key"])
-            df3["avg_total_score"] = df3["avg_hand_score"] + (df3["avg_crib_score"] if dealer_is_self else -df3["avg_crib_score"])
-        else:
-            hand_set = set(hand)
-            remaining = [c for c in self._full_deck if c not in hand_set]
-            rows = []
-            for kept in combinations(hand, 4):
-                kept_list = list(kept)
-                discards_list_temp = [c for c in hand if c not in kept_list]
-                hand_key = normalize_hand_to_str(kept_list)
-                crib_key = normalize_hand_to_str(discards_list_temp)
-                crib_ev = estimate_crib_ev_mc_from_remaining(
-                    discards_list_temp,
-                    remaining,
-                    self._rng,
-                    n_samples=self._crib_mc_samples,
-                )
-                rows.append([hand_key, crib_key, crib_ev])
-            df_crib = pd.DataFrame(rows, columns=["hand_key","crib_key","avg_crib_score"])
-            df3 = pd.merge(df_hand, df_crib, on=["hand_key"])
-            df3["avg_total_score"] = df3["avg_hand_score"] + (df3["avg_crib_score"] if dealer_is_self else -df3["avg_crib_score"])
+        df3 = self._build_db_scores_df(hand, dealer_is_self)
 
         Xs: List[np.ndarray] = []
         ys: List[float] = []
@@ -1225,37 +1181,7 @@ class LoggingHardPlayer(HardPlayer):
 
 
     def select_crib_cards_regresser(self, hand, dealer_is_self, your_score=None, opponent_score=None) -> Tuple[Card, Card]:                
-        # don't analyze crib, just calculate min value of the crib and use that
-        full_deck = get_full_deck()
-        hand_score_cache = {}
-        crib_score_cache = {}        
-        hand_results = process_dealt_hand_only_exact([hand, full_deck, hand_score_cache])
-        df_hand = pd.DataFrame(hand_results, columns=["hand_key","min_hand_score","max_hand_score","avg_hand_score"])
-        if self._crib_ev_mode == "min":
-            crib_results = calc_crib_min_only_given_6_cards(hand)
-            df_crib = pd.DataFrame(crib_results, columns=["hand_key","crib_key","min_crib_score","avg_crib_score"])
-            df3 = pd.merge(df_hand, df_crib, on=["hand_key"])
-            df3["avg_total_score"] = df3["avg_hand_score"] + (df3["avg_crib_score"] if dealer_is_self else -df3["avg_crib_score"])
-            df3["min_total_score"] = df3["min_hand_score"] + (df3["min_crib_score"] if dealer_is_self else -df3["min_crib_score"])
-        else:
-            hand_set = set(hand)
-            remaining = [c for c in self._full_deck if c not in hand_set]
-            rows = []
-            for kept in combinations(hand, 4):
-                kept_list = list(kept)
-                discards_list_temp = [c for c in hand if c not in kept_list]
-                hand_key = normalize_hand_to_str(kept_list)
-                crib_key = normalize_hand_to_str(discards_list_temp)
-                crib_ev = estimate_crib_ev_mc_from_remaining(
-                    discards_list_temp,
-                    remaining,
-                    self._rng,
-                    n_samples=self._crib_mc_samples,
-                )
-                rows.append([hand_key, crib_key, crib_ev])
-            df_crib = pd.DataFrame(rows, columns=["hand_key","crib_key","avg_crib_score"])
-            df3 = pd.merge(df_hand, df_crib, on=["hand_key"])
-            df3["avg_total_score"] = df3["avg_hand_score"] + (df3["avg_crib_score"] if dealer_is_self else -df3["avg_crib_score"])
+        df3 = self._build_db_scores_df(hand, dealer_is_self)
 
         # Iterate through actual card combinations to get Card objects for featurization
         for kept in combinations(hand, 4):
