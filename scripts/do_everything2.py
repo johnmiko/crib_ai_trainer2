@@ -104,8 +104,8 @@ if __name__ == "__main__":
                 args.max_buffer_games,
                 args.teacher_player,
             )
-        except MemoryError as exc:
-            print("MemoryError during generate_il_data. This likely ran out of RAM.", flush=True)
+        except OSError as exc:
+            print("OSError during generate_il_data. This likely ran out of system resources.", flush=True)
             raise
         _end = datetime.now()
         _log_step_end("generate_il_data", _end, time.perf_counter() - _t0)
@@ -121,8 +121,8 @@ if __name__ == "__main__":
         _log_step_start("train_models", _start)
         try:
             train_models(args)
-        except MemoryError as exc:
-            print("MemoryError during train_models. This likely ran out of RAM.", flush=True)
+        except OSError as exc:
+            print("OSError during train_models. This likely ran out of system resources.", flush=True)
             raise
         _end = datetime.now()
         _log_step_end("train_models", _end, time.perf_counter() - _t0)
@@ -155,8 +155,8 @@ if __name__ == "__main__":
                     benchmark_2_players(bench_args)
                     bench_args.players = f"NeuralPegOnlyPlayer,{opponent}"
                     benchmark_2_players(bench_args)
-        except MemoryError as exc:
-            print("MemoryError during benchmark_2_players. This likely ran out of RAM.", flush=True)
+        except OSError as exc:
+            print("OSError during benchmark_2_players. This likely ran out of system resources.", flush=True)
             raise
         args.pegging_feature_set = data_pegging_feature_set
         args.seed = _orig_seed

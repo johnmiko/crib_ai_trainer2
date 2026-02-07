@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+from dataclasses import dataclass
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 sys.path.insert(0, ".")
@@ -31,6 +32,7 @@ from crib_ai_trainer.constants import (
     DEFAULT_BENCHMARK_GAMES,
     DEFAULT_BENCHMARK_WORKERS,
     DEFAULT_PEGGING_DATA_DIR,
+    DEFAULT_MLP_HIDDEN,
 )
 from scripts.generate_il_data import _resolve_output_dir
 from scripts.train_models import train_models, _resolve_models_dir
@@ -62,7 +64,21 @@ def _resolve_dataset_dir(base_dir: str, version: str) -> str:
     return _resolve_output_dir(base_dir, version)
 
 
-def _train_mlp(args, dataset_dir: str, hidden: str, models_dir: str) -> str:
+@dataclass(frozen=True)
+class VariantConfig:
+    label: str
+    model_type: str
+    mlp_hidden: str | None = None
+    rnn_hidden: int | None = None
+    transformer: tuple[int, int, int, int, float] | None = None
+
+
+def _train_variant(args, dataset_dir: str, variant: VariantConfig, models_dir: str) -> str:
+    if variant.model_type in {"gru", "lstm", "transformer"} and args.pegging_feature_set != "full_seq":
+        raise SystemExit("pegging_feature_set must be full_seq for GRU/LSTM/transformer models.")
+    if variant.model_type == "mlp" and not variant.mlp_hidden:
+        raise SystemExit(f"MLP variant {variant.label} is missing hidden sizes.")
+    mlp_hidden = variant.mlp_hidden or args.mlp_hidden
     train_args = argparse.Namespace(
         data_dir=dataset_dir,
         extra_data_dir=None,
@@ -74,8 +90,20 @@ def _train_mlp(args, dataset_dir: str, hidden: str, models_dir: str) -> str:
         discard_loss=args.discard_loss,
         discard_feature_set=args.discard_feature_set,
         pegging_feature_set=args.pegging_feature_set,
-        model_type="mlp",
-        mlp_hidden=hidden,
+        model_type=variant.model_type,
+        mlp_hidden=mlp_hidden,
+        discard_mlp_hidden=mlp_hidden,
+        pegging_mlp_hidden=mlp_hidden,
+        discard_model_type=args.discard_model_type,
+        pegging_model_type=variant.model_type,
+        pegging_rnn_hidden=variant.rnn_hidden or args.pegging_rnn_hidden,
+        pegging_transformer_d_model=(variant.transformer[0] if variant.transformer else args.pegging_transformer_d_model),
+        pegging_transformer_heads=(variant.transformer[1] if variant.transformer else args.pegging_transformer_heads),
+        pegging_transformer_layers=(variant.transformer[2] if variant.transformer else args.pegging_transformer_layers),
+        pegging_transformer_ff_dim=(variant.transformer[3] if variant.transformer else args.pegging_transformer_ff_dim),
+        pegging_transformer_dropout=(variant.transformer[4] if variant.transformer else args.pegging_transformer_dropout),
+        discard_only=args.discard_only,
+        pegging_only=args.pegging_only,
         lr=args.lr,
         epochs=args.epochs,
         batch_size=args.batch_size,
@@ -93,8 +121,13 @@ def _train_mlp(args, dataset_dir: str, hidden: str, models_dir: str) -> str:
 
 def _benchmark_model(args, models_dir: str, label: str, data_dir: str) -> None:
     model_tag = f"{args.model_version}-{Path(models_dir).name}"
+    players = args.players
+    if args.pegging_only:
+        players = "NeuralPegOnlyPlayer,beginner"
+    elif args.discard_only:
+        players = "NeuralDiscardOnlyPlayer,beginner"
     bench_args = argparse.Namespace(
-        players=args.players,
+        players=players,
         benchmark_games=args.benchmark_games,
         benchmark_workers=args.benchmark_workers,
         max_buffer_games=args.max_buffer_games,
@@ -122,8 +155,8 @@ if __name__ == "__main__":
     ap.add_argument("--models_dir", type=str, default=MODELS_DIR)
     ap.add_argument("--model_version", type=str, default=DEFAULT_MODEL_VERSION)
     ap.add_argument("--discard_loss", type=str, default=DEFAULT_DISCARD_LOSS, choices=["classification", "regression", "ranking"])
-    ap.add_argument("--discard_feature_set", type=str, default=DEFAULT_DISCARD_FEATURE_SET, choices=["base", "engineered_no_scores", "full"])
-    ap.add_argument("--pegging_feature_set", type=str, default=DEFAULT_PEGGING_MODEL_FEATURE_SET, choices=["base", "full_no_scores", "full"])
+    ap.add_argument("--discard_feature_set", type=str, default=DEFAULT_DISCARD_FEATURE_SET, choices=["base", "engineered_no_scores", "full", "full_pev"])
+    ap.add_argument("--pegging_feature_set", type=str, default=DEFAULT_PEGGING_MODEL_FEATURE_SET, choices=["base", "full_no_scores", "full", "full_seq"])
     ap.add_argument("--epochs", type=int, default=DEFAULT_EPOCHS)
     ap.add_argument("--lr", type=float, default=DEFAULT_LR)
     ap.add_argument("--batch_size", type=int, default=DEFAULT_BATCH_SIZE)
@@ -136,6 +169,14 @@ if __name__ == "__main__":
     ap.add_argument("--benchmark_workers", type=int, default=DEFAULT_BENCHMARK_WORKERS)
     ap.add_argument("--players", type=str, default="AIPlayer,beginner")
     ap.add_argument("--pegging_data_dir", type=str, default=DEFAULT_PEGGING_DATA_DIR)
+    ap.add_argument("--mlp_hidden", type=str, default=DEFAULT_MLP_HIDDEN, help="Default MLP sizes for non-MLP variants.")
+    ap.add_argument("--discard_model_type", type=str, default=None, choices=["linear", "mlp", "gbt", "rf"])
+    ap.add_argument("--pegging_rnn_hidden", type=int, default=64, help="Default GRU/LSTM hidden size.")
+    ap.add_argument("--pegging_transformer_d_model", type=int, default=128, help="Transformer d_model for pegging.")
+    ap.add_argument("--pegging_transformer_heads", type=int, default=4, help="Transformer num heads for pegging.")
+    ap.add_argument("--pegging_transformer_layers", type=int, default=2, help="Transformer layers for pegging.")
+    ap.add_argument("--pegging_transformer_ff_dim", type=int, default=256, help="Transformer FFN dim for pegging.")
+    ap.add_argument("--pegging_transformer_dropout", type=float, default=0.1, help="Transformer dropout for pegging.")
     ap.add_argument("--torch_threads", type=int, default=8, help="Torch CPU thread count (intra/inter-op).")
     ap.add_argument(
         "--parallel_heads",
@@ -168,17 +209,50 @@ if __name__ == "__main__":
         help="Semicolon-separated label=hidden_sizes pairs.",
     )
     ap.add_argument(
+        "--rnn_variants",
+        type=str,
+        default="",
+        help="Semicolon-separated label=gru:128 or label=lstm:256 entries.",
+    )
+    ap.add_argument(
+        "--transformer_variants",
+        type=str,
+        default="",
+        help="Semicolon-separated label=d_model,heads,layers,ff_dim,dropout entries.",
+    )
+    ap.add_argument(
         "--custom_sizes",
         type=str,
         default="",
         help="Semicolon-separated sizes or label=sizes (e.g. 128,64;small3=128,64,32).",
     )
+    ap.add_argument(
+        "--pegging_only",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Train only the pegging model for each variant.",
+    )
+    ap.add_argument(
+        "--discard_only",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Train only the discard model for each variant.",
+    )
     args = ap.parse_args()
+
+    if args.pegging_only and args.discard_only:
+        raise SystemExit("--pegging_only and --discard_only are mutually exclusive.")
 
     dataset_dir = _resolve_dataset_dir(args.data_dir, args.dataset_version)
     print(f"Dataset dir: {dataset_dir}")
 
-    variants: dict[str, str] = {}
+    variants: list[VariantConfig] = []
+
+    def _add_variant(v: VariantConfig) -> None:
+        if any(existing.label == v.label for existing in variants):
+            raise SystemExit(f"Duplicate model label: {v.label}")
+        variants.append(v)
+
     for part in [p.strip() for p in args.mlp_variants.split(";") if p.strip()]:
         if "=" in part:
             label, hidden = part.split("=", 1)
@@ -187,7 +261,7 @@ if __name__ == "__main__":
         else:
             hidden = part
             label = part.replace(",", "x").replace(" ", "")
-        variants[label] = hidden
+        _add_variant(VariantConfig(label=label, model_type="mlp", mlp_hidden=hidden))
     if args.custom_sizes.strip():
         for part in [p.strip() for p in args.custom_sizes.split(";") if p.strip()]:
             if "=" in part:
@@ -197,9 +271,51 @@ if __name__ == "__main__":
             else:
                 hidden = part
                 label = part.replace(",", "x").replace(" ", "")
-            if label in variants:
-                raise SystemExit(f"Duplicate model label: {label}")
-            variants[label] = hidden
+            _add_variant(VariantConfig(label=label, model_type="mlp", mlp_hidden=hidden))
+
+    if args.rnn_variants.strip():
+        for part in [p.strip() for p in args.rnn_variants.split(";") if p.strip()]:
+            if "=" not in part or ":" not in part:
+                raise SystemExit(f"Invalid --rnn_variants entry: {part!r}")
+            label, spec = part.split("=", 1)
+            model_type, hidden = spec.split(":", 1)
+            model_type = model_type.strip()
+            if model_type not in {"gru", "lstm"}:
+                raise SystemExit(f"Invalid RNN model type {model_type!r} in {part!r}")
+            _add_variant(
+                VariantConfig(
+                    label=label.strip(),
+                    model_type=model_type,
+                    rnn_hidden=int(hidden.strip()),
+                )
+            )
+
+    if args.transformer_variants.strip():
+        for part in [p.strip() for p in args.transformer_variants.split(";") if p.strip()]:
+            if "=" not in part:
+                raise SystemExit(f"Invalid --transformer_variants entry: {part!r}")
+            label, spec = part.split("=", 1)
+            parts = [p.strip() for p in spec.split(",") if p.strip()]
+            if len(parts) != 5:
+                raise SystemExit(
+                    f"Transformer variants must be d_model,heads,layers,ff_dim,dropout (got {spec!r})"
+                )
+            d_model, heads, layers, ff_dim = (int(parts[0]), int(parts[1]), int(parts[2]), int(parts[3]))
+            dropout = float(parts[4])
+            _add_variant(
+                VariantConfig(
+                    label=label.strip(),
+                    model_type="transformer",
+                    transformer=(d_model, heads, layers, ff_dim, dropout),
+                )
+            )
+
+    if not variants:
+        raise SystemExit("No model variants specified.")
+    if any(v.model_type in {"gru", "lstm", "transformer"} for v in variants) and not args.pegging_only:
+        raise SystemExit("GRU/LSTM/transformer variants require --pegging_only.")
+    if args.discard_only and any(v.model_type in {"gru", "lstm", "transformer"} for v in variants):
+        raise SystemExit("Discard-only training does not support GRU/LSTM/transformer variants.")
 
     benchmark_dirs: dict[str, str] = {}
     if args.benchmark_dirs.strip():
@@ -214,7 +330,7 @@ if __name__ == "__main__":
         latest_run = _find_latest_run_id(version_dir)
         if latest_run is None:
             raise SystemExit(f"No run folders found under {version_dir}")
-        for label in variants:
+        for label in (v.label for v in variants):
             path = version_dir / f"{latest_run}_{label}"
             if not path.exists():
                 raise SystemExit(f"Missing model dir for {label}: {path}")
@@ -225,24 +341,30 @@ if __name__ == "__main__":
         args.benchmark_only = True
 
     if not args.benchmark_only:
-        variant_jobs: list[tuple[str, str, str]] = []
-        for label, hidden in variants.items():
-            model_dir = _resolve_variant_dir(args.models_dir, args.model_version, label)
-            variant_jobs.append((label, hidden, model_dir))
+        variant_jobs: list[tuple[VariantConfig, str]] = []
+        for variant in variants:
+            model_dir = _resolve_variant_dir(args.models_dir, args.model_version, variant.label)
+            variant_jobs.append((variant, model_dir))
 
         train_workers = args.train_workers or len(variant_jobs)
         if train_workers <= 1 or len(variant_jobs) <= 1:
-            for label, hidden, model_dir in variant_jobs:
-                print(f"Training {label} MLP...")
-                _train_mlp(args, dataset_dir, hidden, model_dir)
-                print(f"{label} model dir: {model_dir}")
-                trained_dirs[label] = model_dir
+            for variant, model_dir in variant_jobs:
+                print(f"Training {variant.label} ({variant.model_type})...")
+                _train_variant(args, dataset_dir, variant, model_dir)
+                print(f"{variant.label} model dir: {model_dir}")
+                trained_dirs[variant.label] = model_dir
         else:
-            print(f"Training {len(variant_jobs)} MLPs with {train_workers} workers...")
+            print(f"Training {len(variant_jobs)} variants with {train_workers} workers...")
             with ProcessPoolExecutor(max_workers=train_workers) as pool:
                 future_map = {
-                    pool.submit(_train_mlp, args, dataset_dir, hidden, model_dir): (label, model_dir)
-                    for label, hidden, model_dir in variant_jobs
+                    pool.submit(
+                        _train_variant,
+                        args,
+                        dataset_dir,
+                        variant,
+                        model_dir,
+                    ): (variant.label, model_dir)
+                    for variant, model_dir in variant_jobs
                 }
                 for future in as_completed(future_map):
                     label, model_dir = future_map[future]

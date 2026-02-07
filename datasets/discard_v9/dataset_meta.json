@@ -1,0 +1,62 @@
+{
+  "updated_at_utc": "2026-02-07T21:05:10.886472+00:00",
+  "dataset_version": "discard_v9",
+  "strategy": "regression",
+  "crib_ev_mode": "mc",
+  "crib_mc_samples": 32,
+  "pegging_label_mode": "rollout2",
+  "pegging_rollouts": 32,
+  "win_prob_mode": "off",
+  "win_prob_rollouts": 8,
+  "win_prob_min_score": "rollout",
+  "pegging_ev_mode": 16,
+  "pegging_ev_rollouts": 90,
+  "has_discard_win_prob": false,
+  "cumulative_games": 18500,
+  "seed": 2583285633,
+  "discard": {
+    "file": null,
+    "X_shape": [
+      0,
+      161
+    ],
+    "y_shape": [
+      0
+    ],
+    "features": {
+      "discard_features": "52 multi-hot discards",
+      "kept_features": "52 multi-hot kept",
+      "dealer_flag": "1 float (1.0 if dealer_is_self else 0.0)",
+      "score_context": "player_score, opponent_score, score_margin, endgame_self, endgame_opp, endgame_any",
+      "pegging_ev": "expected pegging points (self, opp, diff) from MC rollouts",
+      "total_dim": 161
+    },
+    "label": "avg_total_score (crib_ev_mode=mc)",
+    "skipped": true
+  },
+  "pegging": {
+    "file": "pegging_18500.npz",
+    "X_shape": [
+      85443,
+      1054
+    ],
+    "y_shape": [
+      85443
+    ],
+    "features": {
+      "hand": "52 multi-hot",
+      "table": "52 multi-hot",
+      "count": "32 one-hot (0..31)",
+      "candidate": "52 one-hot",
+      "known_cards": "52 multi-hot",
+      "total_dim": 1054,
+      "opponent_played": "52 multi-hot",
+      "all_played": "52 multi-hot",
+      "engineered": "37 scalar pegging features (15/31 flags, runs, setups, hand sizes, go-prob, score context, opponent response belief)",
+      "feature_set": "full_seq",
+      "sequence": "8-step sequence (card+count) padded to length"
+    },
+    "label": "pegging_label_mode=rollout2",
+    "skipped": false
+  }
+}

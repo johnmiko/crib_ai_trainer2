@@ -1719,6 +1719,8 @@ def _init_logging_players(
 
 def _collect_il_data_worker(
     games: int,
+    out_dir: str,
+    cumulative_games: int,
     strategy: str,
     pegging_feature_set: str,
     crib_ev_mode: str,
@@ -1771,19 +1773,34 @@ def _collect_il_data_worker(
                 players = [p1, p2]
             play_one_game(players)
             i += 1
+        save_data(
+            log,
+            out_dir,
+            cumulative_games,
+            strategy,
+            seed,
+            pegging_feature_set,
+            crib_ev_mode,
+            crib_mc_samples,
+            pegging_label_mode,
+            pegging_rollouts,
+            pegging_ev_mode,
+            pegging_ev_rollouts,
+            win_prob_mode,
+            win_prob_rollouts,
+            win_prob_min_score,
+            log_pegging,
+            log_discard,
+        )
         result = {
             "worker_id": worker_id,
             "games": games,
-            "X_discard": getattr(log, "X_discard", []),
-            "y_discard": getattr(log, "y_discard", []),
-            "y_discard_win": getattr(log, "y_discard_win", None),
-            "X_pegging": log.X_pegging,
-            "y_pegging": log.y_pegging,
+            "cumulative_games": cumulative_games,
         }
         return result
-    except MemoryError as exc:
-        raise MemoryError(
-            f"MemoryError in IL data worker {worker_id} while generating {games} games. "
+    except OSError as exc:
+        raise OSError(
+            f"OSError in IL data worker {worker_id} while generating {games} games. "
             f"Consider reducing --il_games or --il_workers."
         ) from exc
 
@@ -1853,11 +1870,15 @@ def generate_il_data(
             f"in chunks of {chunk_size} into {out_dir}"
         )
         worker_args = []
+        worker_cumulative = cumulative_games
         for worker_id, worker_games in enumerate(tasks):
             worker_seed = seed + worker_id if seed is not None else secrets.randbits(32)
+            worker_cumulative += worker_games
             worker_args.append(
                 (
                     worker_games,
+                    out_dir,
+                    worker_cumulative,
                     strategy,
                     pegging_feature_set,
                     crib_ev_mode,
@@ -1888,51 +1909,6 @@ def generate_il_data(
                     str(worker_id),
                     idx,
                     len(worker_args),
-                )
-                log, _, _ = _init_logging_players(
-                    strategy,
-                    seed,
-                    pegging_feature_set,
-                    crib_ev_mode,
-                    crib_mc_samples,
-                    pegging_label_mode,
-                    pegging_rollouts,
-                    win_prob_mode,
-                    win_prob_rollouts,
-                    win_prob_min_score,
-                    pegging_ev_mode,
-                    pegging_ev_rollouts,
-                    save_pegging,
-                    save_discard,
-                    teacher_player,
-                )
-                if save_discard:
-                    log.X_discard.extend(result["X_discard"])
-                    log.y_discard.extend(result["y_discard"])
-                    if hasattr(log, "y_discard_win") and result.get("y_discard_win"):
-                        log.y_discard_win.extend(result["y_discard_win"])
-                if save_pegging:
-                    log.X_pegging.extend(result["X_pegging"])
-                    log.y_pegging.extend(result["y_pegging"])
-                cumulative_games += int(result.get("games", 0))
-                save_data(
-                    log,
-                    out_dir,
-                    cumulative_games,
-                    strategy,
-                    seed,
-                    pegging_feature_set,
-                    crib_ev_mode,
-                    crib_mc_samples,
-                    pegging_label_mode,
-                    pegging_rollouts,
-                    pegging_ev_mode,
-                    pegging_ev_rollouts,
-                    win_prob_mode,
-                    win_prob_rollouts,
-                    win_prob_min_score,
-                    save_pegging,
-                    save_discard,
                 )
         return 0
 

@@ -375,13 +375,13 @@ def build_do_everything_parser() -> argparse.ArgumentParser:
     ap.add_argument(
         "--early_stop_patience",
         type=int,
-        default=2,
+        default=5,
         help="Stop after N epochs without loss improvement.",
     )
     ap.add_argument(
         "--early_stop_min_delta",
         type=float,
-        default=0.0,
+        default=1e-4,
         help="Minimum loss improvement to reset early stopping.",
     )
     ap.add_argument(

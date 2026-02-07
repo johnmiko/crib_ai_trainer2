@@ -167,6 +167,22 @@ Questions
     Meaning I don't need the model to try and predict these. I just want the model, given these values + potential pegging points + probablity of winning + your score + opponent score
     decide what to do
 
-  Please work on setting up the transformer model, so once I'm doing trying out the GRP pegging model, I can try out the transfer on it
+benchmark elapsed: 13m 8s
+LinearVV9.001[gru-128]Player-PegOnly vs beginner avg point diff 0.86 (95% CI 0.36 - 1.37) wins=5098/10000 winrate=50.98% (95% CI 50.00% - 51.96%)
+LinearVV9.004Player-PegOnly vs beginner avg point diff 0.75 (95% CI -0.84 - 2.35) wins=505/1000 winrate=50.50% (95% CI 47.40% - 53.60%)
 
-LinearVV9.001Player-PegOnly vs beginner avg point diff -30.00 (95% CI -30.00 - -30.00) wins=0/1 winrate=0.00% (95% CI 0.00% - 0.00%)
+.\.venv\Scripts\python.exe .\scripts\mlp_size_sweep.py `
+  --data_dir "datasets" `
+  --dataset_version "discard_v9" `
+  --model_version "discard_v9" ` 
+  --pegging_only `
+  --pegging_feature_set full_seq `
+  --mlp_variants "small=128,64;medium=256,128" `
+  --benchmark_games 10000
+smallV9.004Player-PegOnly vs beginner avg point diff 0.34 (95% CI -0.17 - 0.85) wins=4976/10000 winrate=49.76% (95% CI 48.78% - 50.74%)
+mediumV9.004Player-PegOnly vs beginner avg point diff 0.10 (95% CI -0.41 - 0.61) wins=4915/10000 winrate=49.15% (95% CI 48.17% - 50.13%)
+medium3V9.0043Player-PegOnly vs beginner avg point diff 0.33 (95% CI -0.19 - 0.84) wins=5009/10000 winrate=50.09% (95% CI 49.11% - 51.07%)
+gru128V9.004128Player-PegOnly vs beginner avg point diff 0.31 (95% CI -0.20 - 0.83) wins=5041/10000 winrate=50.41% (95% CI 49.43% - 51.39%)
+gru256V9.004256Player-PegOnly vs beginner avg point diff 0.51 (95% CI -0.00 - 1.03) wins=5074/10000 winrate=50.74% (95% CI 49.76% - 51.72%)
+tx64V9.00464Player-PegOnly vs beginner avg point diff 0.58 (95% CI 0.07 - 1.09) wins=5067/10000 winrate=50.67% (95% CI 49.69% - 51.65%)
+tx128V9.004128Player-PegOnly vs beginner avg point diff 0.64 (95% CI 0.13 - 1.15) wins=5102/10000 winrate=51.02% (95% CI 50.04% - 52.00%)

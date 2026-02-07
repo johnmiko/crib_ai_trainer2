@@ -1,6 +1,7 @@
 from itertools import combinations
 from functools import lru_cache
 import math
+import sqlite3
 import numpy as np
 from typing import List, Tuple
 
@@ -11,6 +12,8 @@ from cribbage.scoring import HasPairTripleQuad, HasStraight_DuringPlay
 from cribbage.players.rule_based_player import get_full_deck
 from cribbage.strategies.pegging_strategies import medium_pegging_strategy
 from cribbage.strategies.hand_strategies import exact_hand_and_min_crib
+from cribbage.constants import HAND_CRIB_DB_PATH
+from cribbage.database import normalize_hand_to_str
 
 from crib_ai_trainer.features import multi_hot_cards
 
@@ -20,6 +23,37 @@ TENS_RANKS = {"10", "j", "q", "k"}
 _SUITS = ["h", "d", "c", "s"]
 SUIT_TO_I = {s: i for i, s in enumerate(_SUITS)}
 _FULL_DECK = get_full_deck()
+
+_HAND_STATS_EXACT: dict[str, tuple[float, float, float]] | None = None
+_CRIB_STATS_EXACT: dict[str, tuple[float, float]] | None = None
+
+
+def _load_exact_hand_crib_stats() -> tuple[dict[str, tuple[float, float, float]], dict[str, tuple[float, float]]]:
+    global _HAND_STATS_EXACT, _CRIB_STATS_EXACT
+    if _HAND_STATS_EXACT is not None and _CRIB_STATS_EXACT is not None:
+        return _HAND_STATS_EXACT, _CRIB_STATS_EXACT
+
+    if not HAND_CRIB_DB_PATH:
+        raise FileNotFoundError("HAND_CRIB_DB_PATH is not set.")
+
+    conn = sqlite3.connect(HAND_CRIB_DB_PATH)
+    cur = conn.cursor()
+
+    hand_stats: dict[str, tuple[float, float, float]] = {}
+    crib_stats: dict[str, tuple[float, float]] = {}
+
+    cur.execute("SELECT hand_key, min_hand_score, max_hand_score, avg_hand_score FROM hand1")
+    for hand_key, min_score, max_score, avg_score in cur.fetchall():
+        hand_stats[str(hand_key)] = (float(min_score), float(max_score), float(avg_score))
+
+    cur.execute("SELECT hand_key, min_crib_score, avg_crib_score FROM crib1")
+    for crib_key, min_score, avg_score in cur.fetchall():
+        crib_stats[str(crib_key)] = (float(min_score), float(avg_score))
+
+    conn.close()
+    _HAND_STATS_EXACT = hand_stats
+    _CRIB_STATS_EXACT = crib_stats
+    return hand_stats, crib_stats
 
 # Base discard features (52 discards + 52 kept + 1 dealer flag)
 BASE_DISCARD_FEATURE_DIM = 105
@@ -31,8 +65,9 @@ BASE_DISCARD_FEATURE_DIM = 105
 # 3 run counts (3/4/5) + 1 run max +
 # 2 flush flags (kept/discard) + 1 nobs + 2 fifteen counts +
 # 3 pegging EV features (self/opp/diff) +
+# 5 exact discard stats (hand_avg, crib_avg, hand_min, hand_max, crib_min) +
 # 2 scores + 1 score margin + 3 endgame flags
-ENGINEERED_DISCARD_NO_SCORE_BASE_DIM = 47
+ENGINEERED_DISCARD_NO_SCORE_BASE_DIM = 52
 ENGINEERED_DISCARD_PEGGING_EV_DIM = 3
 ENGINEERED_DISCARD_NO_SCORE_DIM = ENGINEERED_DISCARD_NO_SCORE_BASE_DIM + ENGINEERED_DISCARD_PEGGING_EV_DIM
 ENGINEERED_DISCARD_SCORE_DIM = 6
@@ -355,6 +390,16 @@ def featurize_discard(
     if pegging_ev is None:
         pegging_ev = (0.0, 0.0, 0.0)
 
+    hand_stats, crib_stats = _load_exact_hand_crib_stats()
+    hand_key = normalize_hand_to_str(kept)
+    crib_key = normalize_hand_to_str(discards)
+    hand_vals = hand_stats.get(hand_key)
+    crib_vals = crib_stats.get(crib_key)
+    if hand_vals is None or crib_vals is None:
+        raise KeyError(f"Missing exact hand/crib stats for hand={hand_key} crib={crib_key}")
+    hand_min, hand_max, hand_avg = hand_vals
+    crib_min, crib_avg = crib_vals
+
     engineered = np.concatenate([
         _rank_counts(kept),                       # 13
         _rank_counts(discards),                   # 13
@@ -375,6 +420,11 @@ def featurize_discard(
         np.array([pegging_ev[0]], dtype=np.float32),
         np.array([pegging_ev[1]], dtype=np.float32),
         np.array([pegging_ev[2]], dtype=np.float32),
+        np.array([hand_avg], dtype=np.float32),
+        np.array([crib_avg], dtype=np.float32),
+        np.array([hand_min], dtype=np.float32),
+        np.array([hand_max], dtype=np.float32),
+        np.array([crib_min], dtype=np.float32),
         score_context,
     ])
 

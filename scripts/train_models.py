@@ -246,8 +246,6 @@ def train_models(args) -> int:
             raise SystemExit("--incremental requires discard/pegging model types to match.")
         if args.max_train_samples is not None:
             raise SystemExit("--incremental does not support --max_train_samples.")
-        if early_stop_patience is not None:
-            raise SystemExit("--early_stop_patience is not supported with --incremental.")
         if incremental_from is None:
             raise SystemExit("--incremental requires --incremental_from.")
         if len(discard_shards) != len(pegging_shards):
@@ -374,6 +372,8 @@ def train_models(args) -> int:
         inc_epochs = incremental_epochs or args.epochs
         discard_model, pegging_model = _load_incremental_models(Path(incremental_from), model_type)
         extra_idx = 0
+        best_epoch_loss = None
+        shards_no_improve = 0
         for shard_idx in range(incremental_start_shard, len(discard_shards)):
             d_path = discard_shards[shard_idx]
             p_path = pegging_shards[shard_idx]
@@ -419,6 +419,23 @@ def train_models(args) -> int:
                 pegging_losses = _train_pegging()
             last_discard_loss = float(discard_losses[-1]) if discard_losses else last_discard_loss
             last_pegging_loss = float(pegging_losses[-1]) if pegging_losses else last_pegging_loss
+            if early_stop_patience is not None:
+                if last_discard_loss is None or last_pegging_loss is None:
+                    raise SystemExit("Early stopping requires discard and pegging losses to be available.")
+                epoch_loss = 0.5 * (last_discard_loss + last_pegging_loss)
+                if best_epoch_loss is None or (best_epoch_loss - epoch_loss) > early_stop_min_delta:
+                    best_epoch_loss = epoch_loss
+                    shards_no_improve = 0
+                else:
+                    shards_no_improve += 1
+                if shards_no_improve >= early_stop_patience:
+                    args.early_stopped = True
+                    args.early_stop_shard = d_path.name
+                    print(
+                        f"Early stopping during incremental training on shard {d_path.name} "
+                        f"(no improvement for {early_stop_patience} shards)."
+                    )
+                    break
 
             if extra_data_dir is not None and extra_ratio > 0.0 and rng.random() < extra_ratio:
                 d_path = extra_discard_shards[extra_idx % len(extra_discard_shards)]
@@ -482,6 +499,8 @@ def train_models(args) -> int:
         else:
             best_epoch_loss = None
             epochs_no_improve = 0
+            shards_no_improve = 0
+            stop_training = False
             for epoch in range(args.epochs):
                 print(f"Epoch {epoch + 1}/{args.epochs}")
                 extra_idx = 0
@@ -516,24 +535,26 @@ def train_models(args) -> int:
                             "Pegging loss became NaN/inf. Try a smaller --lr (e.g., 5e-5), "
                             "a larger --batch_size (e.g., 2048+), or increase --l2."
                         )
+                    if early_stop_patience is not None:
+                        if last_pegging_loss is None:
+                            raise SystemExit("Early stopping requires pegging loss to be available.")
+                        if best_epoch_loss is None or (best_epoch_loss - last_pegging_loss) > early_stop_min_delta:
+                            best_epoch_loss = last_pegging_loss
+                            shards_no_improve = 0
+                        else:
+                            shards_no_improve += 1
+                        if shards_no_improve >= early_stop_patience:
+                            args.early_stopped = True
+                            args.early_stop_shard = last_pegging_shard_used
+                            print(
+                                f"Early stopping mid-epoch {epoch + 1} on shard {last_pegging_shard_used} "
+                                f"(no improvement for {early_stop_patience} shards)."
+                            )
+                            stop_training = True
+                            break
+                if stop_training:
+                    break
                 epochs_trained += 1
-                if early_stop_patience is not None:
-                    if last_pegging_loss is None:
-                        raise SystemExit("Early stopping requires pegging loss to be available.")
-                    epoch_loss = last_pegging_loss
-                    if best_epoch_loss is None or (best_epoch_loss - epoch_loss) > early_stop_min_delta:
-                        best_epoch_loss = epoch_loss
-                        epochs_no_improve = 0
-                    else:
-                        epochs_no_improve += 1
-                    if epochs_no_improve >= early_stop_patience:
-                        args.early_stopped = True
-                        args.early_stop_shard = last_pegging_shard_used
-                        print(
-                            f"Early stopping at epoch {epoch + 1} on shard {last_pegging_shard_used} "
-                            f"(no improvement for {early_stop_patience} epochs)."
-                        )
-                        break
     elif discard_model_type in {"gbt", "rf"}:
         print(f"Training {discard_model_type} discard model on {len(discard_shards)} shard(s) (full in-memory fit).")
         Xd_all, yd_all = _load_all_discard()
@@ -565,12 +586,14 @@ def train_models(args) -> int:
     else:
         best_epoch_loss = None
         epochs_no_improve = 0
+        shards_no_improve = 0
         if discard_only:
             for epoch in range(args.epochs):
                 print(f"Epoch {epoch + 1}/{args.epochs}")
                 extra_idx = 0
                 primary_idx = 0
                 steps = len(discard_shards)
+                stop_training = False
                 for _ in range(steps):
                     use_extra = extra_data_dir is not None and rng.random() < extra_ratio
                     if use_extra:
@@ -620,30 +643,34 @@ def train_models(args) -> int:
                         )
 
                     last_discard_loss = float(discard_losses[-1]) if discard_losses else last_discard_loss
+                    if early_stop_patience is not None:
+                        epoch_loss = last_discard_loss
+                        if epoch_loss is None:
+                            raise SystemExit("Early stopping requires discard loss to be available.")
+                        if best_epoch_loss is None or (best_epoch_loss - epoch_loss) > early_stop_min_delta:
+                            best_epoch_loss = epoch_loss
+                            shards_no_improve = 0
+                        else:
+                            shards_no_improve += 1
+                        if shards_no_improve >= early_stop_patience:
+                            args.early_stopped = True
+                            args.early_stop_shard = last_discard_shard_used
+                            print(
+                                f"Early stopping mid-epoch {epoch + 1} on shard {last_discard_shard_used} "
+                                f"(no improvement for {early_stop_patience} shards)."
+                            )
+                            stop_training = True
+                            break
+                if stop_training:
+                    break
                 epochs_trained += 1
-                if early_stop_patience is not None:
-                    epoch_loss = last_discard_loss
-                    if epoch_loss is None:
-                        raise SystemExit("Early stopping requires discard loss to be available.")
-                    if best_epoch_loss is None or (best_epoch_loss - epoch_loss) > early_stop_min_delta:
-                        best_epoch_loss = epoch_loss
-                        epochs_no_improve = 0
-                    else:
-                        epochs_no_improve += 1
-                    if epochs_no_improve >= early_stop_patience:
-                        args.early_stopped = True
-                        args.early_stop_shard = last_discard_shard_used
-                        print(
-                            f"Early stopping at epoch {epoch + 1} on shard {last_discard_shard_used} "
-                            f"(no improvement for {early_stop_patience} epochs)."
-                        )
-                        break
         else:
             for epoch in range(args.epochs):
                 print(f"Epoch {epoch + 1}/{args.epochs}")
                 extra_idx = 0
                 primary_idx = 0
                 steps = len(discard_shards)
+                stop_training = False
                 for _ in range(steps):
                     use_extra = extra_data_dir is not None and rng.random() < extra_ratio
                     if use_extra:
@@ -727,24 +754,27 @@ def train_models(args) -> int:
                             "Pegging loss became NaN/inf. Try a smaller --lr (e.g., 5e-5), "
                             "a larger --batch_size (e.g., 2048+), or increase --l2."
                         )
+                    if early_stop_patience is not None:
+                        if last_discard_loss is None or last_pegging_loss is None:
+                            raise SystemExit("Early stopping requires discard and pegging losses to be available.")
+                        epoch_loss = 0.5 * (last_discard_loss + last_pegging_loss)
+                        if best_epoch_loss is None or (best_epoch_loss - epoch_loss) > early_stop_min_delta:
+                            best_epoch_loss = epoch_loss
+                            shards_no_improve = 0
+                        else:
+                            shards_no_improve += 1
+                        if shards_no_improve >= early_stop_patience:
+                            args.early_stopped = True
+                            args.early_stop_shard = last_pegging_shard_used
+                            print(
+                                f"Early stopping mid-epoch {epoch + 1} on shard {last_pegging_shard_used} "
+                                f"(no improvement for {early_stop_patience} shards)."
+                            )
+                            stop_training = True
+                            break
+                if stop_training:
+                    break
                 epochs_trained += 1
-                if early_stop_patience is not None:
-                    if last_discard_loss is None or last_pegging_loss is None:
-                        raise SystemExit("Early stopping requires discard and pegging losses to be available.")
-                    epoch_loss = 0.5 * (last_discard_loss + last_pegging_loss)
-                    if best_epoch_loss is None or (best_epoch_loss - epoch_loss) > early_stop_min_delta:
-                        best_epoch_loss = epoch_loss
-                        epochs_no_improve = 0
-                    else:
-                        epochs_no_improve += 1
-                    if epochs_no_improve >= early_stop_patience:
-                        args.early_stopped = True
-                        args.early_stop_shard = last_pegging_shard_used
-                        print(
-                            f"Early stopping at epoch {epoch + 1} on shard {last_pegging_shard_used} "
-                            f"(no improvement for {early_stop_patience} epochs)."
-                        )
-                        break
 
     discard_path = None
     if not pegging_only:
@@ -771,6 +801,9 @@ def train_models(args) -> int:
             pegging_model.save_pt(str(pegging_path))
         elif pegging_model_type == "lstm":
             pegging_path = models_dir / "pegging_lstm.pt"
+            pegging_model.save_pt(str(pegging_path))
+        elif pegging_model_type == "transformer":
+            pegging_path = models_dir / "pegging_transformer.pt"
             pegging_model.save_pt(str(pegging_path))
         elif pegging_model_type == "gbt":
             pegging_path = models_dir / "pegging_gbt.pkl"
@@ -1065,13 +1098,13 @@ if __name__ == "__main__":
     ap.add_argument(
         "--early_stop_patience",
         type=int,
-        default=2,
+        default=5,
         help="Stop after N epochs without loss improvement.",
     )
     ap.add_argument(
         "--early_stop_min_delta",
         type=float,
-        default=0.0,
+        default=1e-4,
         help="Minimum loss improvement to reset early stopping.",
     )
     ap.add_argument(
