@@ -32,6 +32,7 @@ from crib_ai_trainer.players.neural_player import (
     NeuralDiscardOnlyPlayer,
     NeuralPegOnlyPlayer,
     MLPValueModel,
+    PeggingRNNValueModel,
     GBTValueModel,
     RandomForestValueModel,
 )
@@ -148,22 +149,34 @@ def _build_player_factory(args, fallback_override: str | None):
     args.discard_feature_set = meta.get("discard_feature_set", args.discard_feature_set)
     args.pegging_feature_set = meta.get("pegging_feature_set", args.pegging_feature_set)
     model_type = meta.get("model_type", model_type)
+    discard_model_type = meta.get("discard_model_type", model_type)
+    pegging_model_type = meta.get("pegging_model_type", model_type)
     mlp_hidden = meta.get("mlp_hidden", None)
     discard_model_file = meta.get("discard_model_file")
     pegging_model_file = meta.get("pegging_model_file")
     if discard_model_file is None or pegging_model_file is None:
         raise SystemExit("model_meta.json missing discard_model_file or pegging_model_file.")
     if model_type == "mlp":
-        discard_hidden = meta.get("discard_mlp_hidden")
-        pegging_hidden = meta.get("pegging_mlp_hidden")
-        if discard_hidden is None or pegging_hidden is None:
-            if "mlp_hidden" not in meta:
-                raise SystemExit(
-                    "model_meta.json missing discard_mlp_hidden/pegging_mlp_hidden and no mlp_hidden fallback."
-                )
-            discard_hidden = meta["mlp_hidden"]
-            pegging_hidden = meta["mlp_hidden"]
-        if discard_hidden != pegging_hidden:
+        def _coerce_hidden(value):
+            if value is None:
+                return None
+            if isinstance(value, (list, tuple)):
+                return tuple(int(v) for v in value)
+            if isinstance(value, str):
+                parts = [p.strip() for p in value.split(",") if p.strip()]
+                if not parts:
+                    return None
+                return tuple(int(p) for p in parts)
+            return None
+
+        discard_hidden = _coerce_hidden(meta.get("discard_mlp_hidden"))
+        pegging_hidden = _coerce_hidden(meta.get("pegging_mlp_hidden"))
+        fallback_hidden = _coerce_hidden(meta.get("mlp_hidden"))
+        if discard_hidden is None:
+            discard_hidden = fallback_hidden
+        if pegging_hidden is None:
+            pegging_hidden = fallback_hidden
+        if discard_hidden is not None and pegging_hidden is not None and discard_hidden != pegging_hidden:
             d = "x".join(str(int(v)) for v in discard_hidden)
             p = "x".join(str(int(v)) for v in pegging_hidden)
             size_suffix = f"[d{d}_p{p}]"
@@ -173,36 +186,42 @@ def _build_player_factory(args, fallback_override: str | None):
     def _load_discard_model():
         if discard_model_file is not None:
             path = f"{args.models_dir}/{discard_model_file}"
-            if model_type == "mlp":
+            if discard_model_type == "mlp":
                 return MLPValueModel.load_pt(path)
-            if model_type == "gbt":
+            if discard_model_type == "gbt":
                 return GBTValueModel.load_joblib(path)
-            if model_type == "rf":
+            if discard_model_type == "rf":
                 return RandomForestValueModel.load_joblib(path)
             return LinearValueModel.load_npz(path)
-        if model_type == "mlp":
+        if discard_model_type == "mlp":
             return MLPValueModel.load_pt(f"{args.models_dir}/discard_mlp.pt")
-        if model_type == "gbt":
+        if discard_model_type == "gbt":
             return GBTValueModel.load_joblib(f"{args.models_dir}/discard_gbt.pkl")
-        if model_type == "rf":
+        if discard_model_type == "rf":
             return RandomForestValueModel.load_joblib(f"{args.models_dir}/discard_rf.pkl")
         return LinearValueModel.load_npz(f"{args.models_dir}/discard_linear.npz")
 
     def _load_pegging_model():
         if pegging_model_file is not None:
             path = f"{args.models_dir}/{pegging_model_file}"
-            if model_type == "mlp":
+            if pegging_model_type == "mlp":
                 return MLPValueModel.load_pt(path)
-            if model_type == "gbt":
+            if pegging_model_type == "gru" or pegging_model_type == "lstm":
+                return PeggingRNNValueModel.load_pt(path)
+            if pegging_model_type == "gbt":
                 return GBTValueModel.load_joblib(path)
-            if model_type == "rf":
+            if pegging_model_type == "rf":
                 return RandomForestValueModel.load_joblib(path)
             return LinearValueModel.load_npz(path)
-        if model_type == "mlp":
+        if pegging_model_type == "mlp":
             return MLPValueModel.load_pt(f"{args.models_dir}/pegging_mlp.pt")
-        if model_type == "gbt":
+        if pegging_model_type == "gru":
+            return PeggingRNNValueModel.load_pt(f"{args.models_dir}/pegging_gru.pt")
+        if pegging_model_type == "lstm":
+            return PeggingRNNValueModel.load_pt(f"{args.models_dir}/pegging_lstm.pt")
+        if pegging_model_type == "gbt":
             return GBTValueModel.load_joblib(f"{args.models_dir}/pegging_gbt.pkl")
-        if model_type == "rf":
+        if pegging_model_type == "rf":
             return RandomForestValueModel.load_joblib(f"{args.models_dir}/pegging_rf.pkl")
         return LinearValueModel.load_npz(f"{args.models_dir}/pegging_linear.npz")
 
@@ -284,7 +303,7 @@ def _build_player_factory(args, fallback_override: str | None):
             )
         return base_player_factory(name)
     
-    return player_factory, model_tag, model_type, size_suffix
+    return player_factory, model_tag, discard_model_type, size_suffix
 
 
 def _read_training_games_from_meta(models_dir: str) -> tuple[int | str, int | str, int | str]:

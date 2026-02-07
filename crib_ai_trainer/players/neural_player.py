@@ -1,5 +1,6 @@
 from itertools import combinations
 from functools import lru_cache
+import math
 import numpy as np
 from typing import List, Tuple
 
@@ -40,7 +41,7 @@ DISCARD_FEATURE_DIM = BASE_DISCARD_FEATURE_DIM + ENGINEERED_DISCARD_FEATURE_DIM
 
 # Pegging features
 PEGGING_BASE_FEATURE_DIM = 240  # hand(52) + table(52) + count(32) + candidate(52) + known(52)
-PEGGING_ENGINEERED_NO_SCORE_DIM = 29
+PEGGING_ENGINEERED_NO_SCORE_DIM = 32
 PEGGING_ENGINEERED_SCORE_DIM = 5
 PEGGING_ENGINEERED_FEATURE_DIM = PEGGING_ENGINEERED_NO_SCORE_DIM + PEGGING_ENGINEERED_SCORE_DIM
 PEGGING_FULL_FEATURE_DIM = PEGGING_BASE_FEATURE_DIM + 52 + 52 + PEGGING_ENGINEERED_FEATURE_DIM  # + opp_played + all_played
@@ -508,6 +509,7 @@ def featurize_pegging(
     known_cards_count = float(len(known_cards))
 
     # Opponent "go" danger: estimate if opponent has any playable card.
+    unseen_suit_counts = None
     if unseen_value_counts is None or unseen_count is None:
         known_set = set(known_cards) | set(all_played_cards) | set(hand)
         unseen = [c for c in _FULL_DECK if c not in known_set]
@@ -516,8 +518,10 @@ def featurize_pegging(
         for c in unseen:
             unseen_value_counts[c.get_value()] += 1
         unseen_rank_counts = np.zeros(13, dtype=np.int32)
+        unseen_suit_counts = np.zeros(4, dtype=np.int32)
         for c in unseen:
             unseen_rank_counts[RANK_TO_I[c.get_rank().lower()]] += 1
+            unseen_suit_counts[SUIT_TO_I[c.get_suit()]] += 1
     else:
         unseen_rank_counts = None
 
@@ -530,12 +534,14 @@ def featurize_pegging(
     opp_playable_count = float(playable_unseen_count)
     unseen_count = float(unseen_count)
 
-    if unseen_rank_counts is None:
+    if unseen_rank_counts is None or unseen_suit_counts is None:
         known_set = set(known_cards) | set(all_played_cards) | set(hand)
         unseen = [c for c in _FULL_DECK if c not in known_set]
         unseen_rank_counts = np.zeros(13, dtype=np.int32)
+        unseen_suit_counts = np.zeros(4, dtype=np.int32)
         for c in unseen:
             unseen_rank_counts[RANK_TO_I[c.get_rank().lower()]] += 1
+            unseen_suit_counts[SUIT_TO_I[c.get_suit()]] += 1
 
     def _response_counts(table_state: List[Card], count_state: int) -> dict[str, float]:
         resp_any = 0.0
@@ -605,6 +611,48 @@ def featurize_pegging(
                 if prev_resp["run"] > 0.0:
                     opp_skipped_run = 1.0
 
+    def _prob_at_least_k(total: int, success: int, draws: int, k: int) -> float:
+        if total <= 0 or success <= 0 or draws <= 0:
+            return 0.0
+        if draws > total or k > draws or k > success:
+            return 0.0
+        denom = math.comb(total, draws)
+        if denom <= 0:
+            return 0.0
+        prob = 0.0
+        max_t = min(success, draws)
+        for t in range(k, max_t + 1):
+            prob += math.comb(success, t) * math.comb(total - success, draws - t)
+        return float(prob / denom)
+
+    def _max_group_prob(counts: np.ndarray, draws: int, k: int, total: int) -> float:
+        if draws <= 0 or total <= 0:
+            return 0.0
+        best = 0.0
+        for c in counts:
+            prob = _prob_at_least_k(total, int(c), draws, k)
+            if prob > best:
+                best = prob
+        return best
+
+    opp_unknown_cards = int(max(0, int(opp_hand_count_est)))
+    unseen_total = int(unseen_count)
+    opp_flush_belief = _max_group_prob(unseen_suit_counts, opp_unknown_cards, 4, unseen_total)
+    opp_trip_belief = _max_group_prob(unseen_rank_counts, opp_unknown_cards, 3, unseen_total)
+    opp_quad_belief = _max_group_prob(unseen_rank_counts, opp_unknown_cards, 4, unseen_total)
+    tens_count = int(
+        unseen_rank_counts[RANK_TO_I["10"]]
+        + unseen_rank_counts[RANK_TO_I["j"]]
+        + unseen_rank_counts[RANK_TO_I["q"]]
+        + unseen_rank_counts[RANK_TO_I["k"]]
+    )
+    if opp_unknown_cards <= 0 or unseen_total <= 0 or tens_count < opp_unknown_cards:
+        opp_only_tens_belief = 0.0
+    else:
+        opp_only_tens_belief = float(
+            math.comb(tens_count, opp_unknown_cards) / math.comb(unseen_total, opp_unknown_cards)
+        )
+
     score_context = _score_context_features(player_score, opponent_score)
 
     engineered = np.array(
@@ -637,6 +685,10 @@ def featurize_pegging(
             opp_skipped_31,
             opp_skipped_pair,
             opp_skipped_run,
+            opp_flush_belief,
+            opp_trip_belief,
+            opp_quad_belief,
+            opp_only_tens_belief,
         ],
         dtype=np.float32,
     )

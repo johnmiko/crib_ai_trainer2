@@ -218,7 +218,12 @@ def build_benchmark_parser() -> argparse.ArgumentParser:
         default=DEFAULT_DISCARD_FEATURE_SET,
         choices=["base", "engineered_no_scores", "engineered_no_scores_pev", "full", "full_pev"],
     )
-    ap.add_argument("--pegging_feature_set", type=str, default=DEFAULT_PEGGING_MODEL_FEATURE_SET, choices=["base", "full_no_scores", "full"])
+    ap.add_argument(
+        "--pegging_feature_set",
+        type=str,
+        default=DEFAULT_PEGGING_MODEL_FEATURE_SET,
+        choices=["base", "full_no_scores", "full", "full_seq"],
+    )
     ap.add_argument("--auto_mixed_benchmarks", action="store_true", default=True)
     ap.add_argument("--no_auto_mixed_benchmarks", dest="auto_mixed_benchmarks", action="store_false")
     ap.add_argument("--only_mixed_benchmarks", action="store_true", default=False, help="Run only discard/pegging-only benchmarks.")
@@ -275,6 +280,8 @@ def build_do_everything_parser() -> argparse.ArgumentParser:
     ap.add_argument("--pegging_model_feature_set", type=str, default=DEFAULT_PEGGING_MODEL_FEATURE_SET, choices=["base", "full_no_scores", "full"])
     ap.add_argument("--model_type", type=str, default=DEFAULT_MODEL_TYPE, choices=["linear", "mlp", "gbt", "rf"])
     ap.add_argument("--mlp_hidden", type=str, default=DEFAULT_MLP_HIDDEN)
+    ap.add_argument("--discard_mlp_hidden", type=str, default=None, help="Override MLP sizes for discard head only.")
+    ap.add_argument("--pegging_mlp_hidden", type=str, default=None, help="Override MLP sizes for pegging head only.")
     ap.add_argument("--crib_ev_mode", type=str, default=DEFAULT_CRIB_EV_MODE, choices=["min", "mc"])
     ap.add_argument("--crib_mc_samples", type=int, default=DEFAULT_CRIB_MC_SAMPLES)
     ap.add_argument("--pegging_label_mode", type=str, default=DEFAULT_PEGGING_LABEL_MODE, choices=["immediate", "rollout1"])
@@ -337,9 +344,16 @@ def build_self_play_loop_parser() -> argparse.ArgumentParser:
         default=DEFAULT_DISCARD_FEATURE_SET,
         choices=["base", "engineered_no_scores", "engineered_no_scores_pev", "full", "full_pev"],
     )
-    ap.add_argument("--pegging_feature_set", type=str, default=DEFAULT_PEGGING_MODEL_FEATURE_SET, choices=["base", "full_no_scores", "full"])
+    ap.add_argument(
+        "--pegging_feature_set",
+        type=str,
+        default=DEFAULT_PEGGING_MODEL_FEATURE_SET,
+        choices=["base", "full_no_scores", "full", "full_seq"],
+    )
     ap.add_argument("--model_type", type=str, default=DEFAULT_MODEL_TYPE, choices=["linear", "mlp", "gbt", "rf"])
     ap.add_argument("--mlp_hidden", type=str, default=DEFAULT_MLP_HIDDEN)
+    ap.add_argument("--discard_mlp_hidden", type=str, default=None, help="Override MLP sizes for discard head only.")
+    ap.add_argument("--pegging_mlp_hidden", type=str, default=None, help="Override MLP sizes for pegging head only.")
     ap.add_argument("--pegging_ev_mode", type=str, default=DEFAULT_PEGGING_EV_MODE, choices=["off", "rollout"])
     ap.add_argument("--pegging_ev_rollouts", type=int, default=DEFAULT_PEGGING_EV_ROLLOUTS)
     ap.add_argument("--win_prob_mode", type=str, default=DEFAULT_WIN_PROB_MODE, choices=["off", "rollout"])

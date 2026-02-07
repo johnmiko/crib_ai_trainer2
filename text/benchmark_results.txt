@@ -159,5 +159,9 @@ MLPV5[011_medium] vs beginner after unknown training games avg point diff 2.05 (
 MLPV5-DiscardOnly vs beginner avg point diff 1.60 (95% CI 1.19 - 2.01) wins=7791/15000 winrate=51.94% (95% CI 51.14% - 52.74%)
 MLPV5-PegOnly vs beginner avg point diff -0.11 (95% CI -0.53 - 0.31) wins=7356/15000 winrate=49.04% (95% CI 48.24% - 49.84%)
 
-Going to start generating V9 pegging data and just copy V8 discard data into the V9 folder
+Going to start generating V9 pegging data (includes scoring-response belief features)
 V9 pegging - add in beliefs about what cards the opponent has
+
+what the command is to run do_everything with what I requested? Generate pegging V9 data for 500 games. train GRU pegging model on it. then benchmark GRU pegging only model against beginner, stopping the do_everything2.py script once the "early stopping" trigger happens in train_models
+
+Please work on setting up the transformer model, so once I'm doing trying out the GRP pegging model, I can try out the transfer on it

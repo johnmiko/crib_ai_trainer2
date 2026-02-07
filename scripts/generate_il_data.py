@@ -1366,16 +1366,18 @@ def save_data(
                 "count": "32 one-hot (0..31)",
                 "candidate": "52 one-hot",
                 "known_cards": "52 multi-hot",
-            "total_dim": pegging_dim,
-            "opponent_played": "52 multi-hot",
-            "all_played": "52 multi-hot",
-            "engineered": "34 scalar pegging features (15/31 flags, runs, setups, hand sizes, go-prob, score context, opponent response belief)",
-            "feature_set": pegging_feature_set,
+                "total_dim": pegging_dim,
+                "opponent_played": "52 multi-hot",
+                "all_played": "52 multi-hot",
+                "engineered": "37 scalar pegging features (15/31 flags, runs, setups, hand sizes, go-prob, score context, opponent response belief)",
+                "feature_set": pegging_feature_set,
             },
             "label": f"pegging_label_mode={pegging_label_mode}",
             "skipped": not save_pegging,
         },
     }
+    if pegging_feature_set == "full_seq":
+        dataset_meta["pegging"]["features"]["sequence"] = "8-step sequence (card+count) padded to length"
     meta_path = os.path.join(out_dir, "dataset_meta.json")
     with open(meta_path, "w", encoding="utf-8") as f:
         json.dump(dataset_meta, f, indent=2)
@@ -1427,6 +1429,8 @@ def save_data(
         f"  - total_dim: {dataset_meta['pegging']['features']['total_dim']}",
         f"pegging_label: {dataset_meta['pegging']['label']}",
     ]
+    if "sequence" in dataset_meta["pegging"]["features"]:
+        lines.insert(-2, f"  - {dataset_meta['pegging']['features']['sequence']}")
     with open(txt_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
     logger.debug(f"Saved dataset summary -> {txt_path}")
