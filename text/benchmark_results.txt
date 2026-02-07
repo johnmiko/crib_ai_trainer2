@@ -3,9 +3,6 @@ NeuralDiscardOnlyPlayer vs beginner [027] after 27414 training games avg point d
 NeuralPegOnlyPlayer vs beginner [027] after 27414 training games avg point diff 0.10 (95% CI -3.52 - 3.73) wins=102/200 winrate=51.0%
 
 Moving to discard V4. Add monte carlo estimates for crib, and for pegging rollout
-MLPVV4.003Player vs beginner [003] after 501 training games avg point diff -17.39 (95% CI -20.97 - -13.81) wins=49/200 winrate=24.5%
-NeuralDiscardOnlyPlayer vs beginner [003] after 501 training games avg point diff -16.59 (95% CI -20.62 - -12.55) wins=55/200 winrate=27.5%
-NeuralPegOnlyPlayer vs beginner [003] after 501 training games avg point diff -0.28 (95% CI -3.91 - 3.36) wins=100/200 winrate=50.0%
 MLPVV4.004Player vs beginner [004] after 1001 training games avg point diff -10.91 (95% CI -14.62 - -7.21) wins=72/200 winrate=36.0%
 NeuralDiscardOnlyPlayer vs beginner [004] after 1001 training games avg point diff -11.51 (95% CI -15.26 - -7.76) wins=64/200 winrate=32.0%
 NeuralPegOnlyPlayer vs beginner [004] after 1001 training games avg point diff 2.38 (95% CI -1.26 - 6.02) wins=108/200 winrate=54.0%
@@ -17,16 +14,10 @@ NeuralPegOnlyPlayer vs beginner [001] after 500 training games avg point diff -1
 MLPVV5.002Player vs beginner [002] after 1000 training games avg point diff -8.33 (95% CI -11.88 - -4.78) wins=65/200 winrate=32.5%
 MLPVV5.003Player vs beginner [003] after 1500 training games avg point diff -5.09 (95% CI -8.66 - -1.52) wins=83/200 winrate=41.5%
 MLPVV5.004Player vs beginner [004] after 2000 training games avg point diff -0.42 (95% CI -4.03 - 3.18) wins=106/200 winrate=53.0%
-MLPVV5.005Player vs beginner [005] after 2500 training games avg point diff -1.09 (95% CI -4.34 - 2.15) wins=95/200 winrate=47.5%
-MLPVV5.006Player vs beginner [006] after 3000 training games avg point diff 0.11 (95% CI -3.44 - 3.66) wins=103/200 winrate=51.5%
-MLPVV5.007Player vs beginner [007] after 3500 training games avg point diff -1.33 (95% CI -4.68 - 2.01) wins=97/200 winrate=48.5%
-NeuralDiscardOnlyPlayer vs beginner [007] after 3500 training games avg point diff 0.80 (95% CI -2.59 - 4.19) wins=107/200 winrate=53.5%
-NeuralPegOnlyPlayer vs beginner [007] after 3500 training games avg point diff 1.89 (95% CI -1.46 - 5.24) wins=101/200 winrate=50.5%
 MLPVV5.007Player vs beginner [007_medium] after 3500 training games avg point diff -1.39 (95% CI -5.01 - 2.24) wins=95/200 winrate=47.5%
 NeuralDiscardOnlyPlayer vs beginner [007_medium] after 3500 training games avg point diff -3.60 (95% CI -7.22 - 0.01) wins=87/200 winrate=43.5%
 NeuralPegOnlyPlayer vs beginner [007_medium] after 3500 training games avg point diff 0.22 (95% CI -3.16 - 3.60) wins=102/200 winrate=51.0%
 MLPVV5.008Player vs beginner [008] after 4000 training games avg point diff 0.63 (95% CI -0.49 - 1.75) wins=1007/2000 winrate=50.3%
-MLPVV5.009Player vs beginner [009] after 4500 training games avg point diff 0.13 (95% CI -0.96 - 1.23) wins=999/2000 winrate=50.0%
 MLPVV5.010Player vs beginner [010] after 5000 training games avg point diff 0.71 (95% CI -0.40 - 1.83) wins=997/2000 winrate=49.9%
 
 # Medium model doing better than simpler model after 5500 games (was not doing much better with only 3500 games)
@@ -34,32 +25,17 @@ MLPVV5.011Player vs beginner [011_small] after 5500 training games avg point dif
 MLPVV5.011Player vs beginner [011_medium] after 5500 training games avg point diff 2.73 (95% CI 1.63 - 3.83) wins=1083/2000 winrate=54.1%
 MLPVV5.011Player vs beginner [011_large] after 5500 training games avg point diff 2.31 (95% CI 1.18 - 3.43) wins=1095/2000 winrate=54.8%
  
-.\.venv\Scripts\python.exe .\scripts\do_everything2.py --il_games 1000 --loops -1 --dataset_version "discard_v5" --model_version "discard_v5" --strategy regression --discard_loss regression --benchmark_games 1000 --benchmark_mode full --model_type mlp --mlp_hidden "256,128"
 # Switching default model to medium size
-MLPVV5.013Player vs beginner [013] after 6500 training games avg point diff 1.78 (95% CI 0.20 - 3.36) wins=519/1000 winrate=51.9%
 MLPVV5.014Player vs beginner [014] after 8500 training games avg point diff 4.27 (95% CI 2.66 - 5.89) wins=554/1000 winrate=55.4%
-MLPVV5.015Player vs beginner [015] after 9500 training games avg point diff 1.40 (95% CI -0.21 - 3.00) wins=526/1000 winrate=52.6%
-MLPVV5.016Player vs beginner [016] after 10500 training games avg point diff 1.30 (95% CI -0.28 - 2.88) wins=527/1000 winrate=52.7%
 MLPVV5.017Player vs beginner [017_small] after 11500 training games avg point diff 2.71 (95% CI 1.60 - 3.81) wins=1075/2000 winrate=53.8%
 MLPVV5.017Player vs beginner [017_medium] after 11500 training games avg point diff 2.65 (95% CI 1.52 - 3.77) wins=1103/2000 winrate=55.1%
 MLPVV5.017Player vs beginner [017_large] after 11500 training games avg point diff 3.25 (95% CI 2.15 - 4.36) wins=1111/2000 winrate=55.5%
-
-.\.venv\Scripts\python.exe .\scripts\do_everything2.py --il_games 1000 --loops -1 --dataset_version "discard_v5" --model_version "discard_v5" --strategy regression --discard_loss regression --benchmark_games 1000 --benchmark_mode full --model_type mlp --mlp_hidden "256,128"
-
 MLPVV5.018Player vs beginner [018] after 12500 training games avg point diff 3.17 (95% CI 1.68 - 4.66) wins=550/1000 winrate=55.0%
-Start playing against medium
-MLPVV5.019Player vs medium [019] after 13500 training games avg point diff -1.40 (95% CI -2.96 - 0.15) wins=473/1000 winrate=47.3%
-MLPVV5.026Player vs medium [026] after 22500 training games avg point diff -0.66 (95% CI -1.75 - 0.44) wins=973/2000 winrate=48.6%
-MLPVV5.031Player vs medium [031] after 32500 training games avg point diff -0.93 (95% CI -2.03 - 0.16) wins=950/2000 winrate=47.5%
+
+Start benchmarking against medium
 MLPVV5.033Player vs medium [033] after 36500 training games avg point diff -0.29 (95% CI -1.40 - 0.82) wins=1011/2000 winrate=50.5%
 MLPVV5.036Player vs medium [036] after 42500 training games avg point diff -1.87 (95% CI -2.95 - -0.80) wins=941/2000 winrate=47.0%
 MLPVV5.044Player vs medium [044] after 58500 training games avg point diff -0.83 (95% CI -1.90 - 0.24) wins=957/2000 winrate=47.9%
-
-
-.\.venv\Scripts\python.exe .\scripts\train_linear_models.py --data_dir "datasets\discard_v5" --models_dir "models\regression" --model_version "discard_v5" --run_id 045_mini3 --discard_loss regression --model_type mlp --mlp_hidden "64,32,16"
-.\.venv\Scripts\python.exe .\scripts\train_linear_models.py --data_dir "datasets\discard_v5" --models_dir "models\regression" --model_version "discard_v5" --run_id 045_small3 --discard_loss regression --model_type mlp --mlp_hidden "128,64,32"
-.\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py --players NeuralRegressionPlayer,beginner --benchmark_games 6000 --models_dir "models\regression\discard_v5\045_mini3" --data_dir "datasets\discard_v5" --no_auto_mixed_benchmarks
-.\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py --players hard,medium --benchmark_games 1000 --models_dir "models\regression\discard_v5\045_mini3" --data_dir "datasets\discard_v5" --no_auto_mixed_benchmarks
 
 45 is medium size, against medium player
 MLPVV5.045Player vs medium [045] after 60500 training games avg point diff -1.32 (95% CI -2.42 - -0.22) wins=951/2000 winrate=47.5%
@@ -70,7 +46,6 @@ MLPVV5.045Player vs medium [045_extra_large] after 62500 training games avg poin
 MLPVV5.045Player vs medium [045_large] after 62500 training games avg point diff -0.79 (95% CI -1.41 - -0.16) wins=2891/6000 winrate=48.2%
 
 against beginner player
-medium vs beginner avg point diff 3.34 (95% CI 2.69 - 3.98) wins=3330/6000 winrate=55.50% (95% CI 54.24% - 56.75%)
 MLPVV5.0453Player vs beginner [045_mini3] after 62500 training games avg point diff 2.81 (95% CI 2.18 - 3.45) wins=3241/6000 winrate=54.02% (95% CI 52.75% - 55.27%)
 MLPVV5.0453Player vs beginner [045_small3] after 62500 training games avg point diff 3.12 (95% CI 2.47 - 3.76) wins=3319/6000 winrate=55.32% (95% CI 54.06% - 56.57%)
 MLPVV5.0173Player vs beginner [045_medium3] after 62500 training games avg point diff 2.88 (95% CI 2.25 - 3.51) wins=3303/6000 winrate=55.05% (95% CI 53.79% - 56.31%)
@@ -78,28 +53,12 @@ MLPVV5.0453Player vs beginner [045_large3] after 62500 training games avg point 
 MLPVV5.045Player vs beginner [045_large] after 62500 training games avg point diff 3.34 (95% CI 2.70 - 3.98) wins=3319/6000 winrate=55.3%
 MLPVV5.045Player vs beginner [045_extra_large] after 62500 training games avg point diff 2.74 (95% CI 2.09 - 3.38) wins=3246/6000 winrate=54.1%
 
-# self play loop with 2 layer medium size
-new after 1000 self play games, 1000 benchmark games vs best [001] wins=480/1000 winrate=0.480 avg_diff=-0.74, vs beginner: wins=592/1000 winrate=0.592 avg_diff=4.69, Best vs beginner: wins=543/1000 winrate=0.543 avg_diff=2.59
-
 start generating V6 data. taking too long only generate V6 data for discard
-.\.venv\Scripts\python.exe .\scripts\do_everything2.py --dataset_version "discard_v6" --model_version "discard_v6" --il_games 200 --loops 100 --il_workers 10 --il_games_per_worker 100 --benchmark_games 200 --benchmark_workers 10 --benchmark_games_per_worker 20 --benchmark_mode full --model_type mlp --mlp_hidden "128,64,32"
-.\.venv\Scripts\python.exe .\scripts\do_everything2.py --smoke
-.\.venv\Scripts\python.exe .\scripts\self_play_loop.py --model_version "discard_v5" --teacher_dataset_version "discard_v5" --selfplay_dataset_version "selfplay_v5" --games 250 --loops -1 --benchmark_opponent beginner --benchmark_games 500
-
-
 hard vs medium [045_mini3] after 62502 training games avg point diff 0.21 (95% CI -0.42 - 0.84) wins=3016/6000 winrate=50.27% (95% CI 49.00% - 51.53%)
-
 Took some shortcuts for V6 dataset generation, didn't end up working out
 MLPV6 vs medium [038] after 32401 training games avg point diff -2.38 (95% CI -3.88 - -0.87) wins=465/1000 winrate=46.50% (95% CI 43.41% - 49.59%)
- 
-to run tonight 
-.\.venv\Scripts\python.exe .\scripts\do_everything2.py --loops 100
 
 Moving to dataset V7, default model is small3 (128,64,32) size
-MLPV7 vs beginner [002] after 3000 training games avg point diff -0.46 (95% CI -2.01 - 1.09) wins=493/1000 winrate=49.30% (95% CI 46.20% - 52.40%)
-MLPV7 vs beginner [003] after 4000 training games avg point diff -0.54 (95% CI -1.44 - 0.36) wins=1484/3000 winrate=49.47% (95% CI 47.68% - 51.26%)
-MLPV7 vs beginner [004] after 5000 training games avg point diff -1.44 (95% CI -2.37 - -0.51) wins=1438/3000 winrate=47.93% (95% CI 46.15% - 49.72%)
-MLPV7 vs beginner [005] after 6000 training games avg point diff 0.07 (95% CI -0.82 - 0.97) wins=1481/3000 winrate=49.37% (95% CI 47.58% - 51.16%)
 MLPV7 vs beginner [007] after 12000 training games avg point diff 1.22 (95% CI 0.52 - 1.92) wins=2603/5000 winrate=52.06% (95% CI 50.68% - 53.44%)
 MLPV7 vs beginner [008] after 17000 training games avg point diff 1.65 (95% CI 0.95 - 2.34) wins=2614/5000 winrate=52.28% (95% CI 50.90% - 53.66%)
 MLPV7 vs beginner [009] after 22000 training games avg point diff 1.79 (95% CI 1.09 - 2.50) wins=2644/5000 winrate=52.88% (95% CI 51.50% - 54.26%)
@@ -111,32 +70,13 @@ MLPV7 vs beginner [016] after 62000 training games avg point diff 2.68 (95% CI 1
 MLPV7 vs beginner [017] after 67000 training games avg point diff 2.40 (95% CI 1.70 - 3.10) wins=2694/5000 winrate=53.88% (95% CI 52.50% - 55.26%)
 MLPV7 vs beginner [018] after 72000 training games avg point diff 2.73 (95% CI 2.03 - 3.43) wins=2718/5000 winrate=54.36% (95% CI 52.98% - 55.74%)
 
-
-Trying out different MLP models, Not seeded comparison
-MLPV3[018_mini3] vs beginner after 72000 training games avg point diff 2.39 (95% CI 1.74 - 3.04) wins=3215/6000 winrate=53.58% (95% CI 52.32% - 54.85%)
-MLPSmall[018_small] vs beginner after 72000 training games avg point diff 2.77 (95% CI 2.13 - 3.41) wins=3337/6000 winrate=55.62% (95% CI 54.36% - 56.87%)
-MLPMedium [018_medium] vs beginnerafter 72000 training games avg point diff 2.77 (95% CI 2.13 - 3.41) wins=3238/6000 winrate=53.97% (95% CI 52.71% - 55.23%)
-MLPV3[018_small3] vs beginner after 72000 training games avg point diff 2.25 (95% CI 1.60 - 2.89) wins=3241/6000 winrate=54.02% (95% CI 52.76% - 55.28%)
-MLPLarge[018_large] vs beginner after 72000 training games avg point diff 2.78 (95% CI 2.14 - 3.42) wins=3272/6000 winrate=54.53% (95% CI 53.27% - 55.79%)
-MLPXl[018_xl] vs beginner after 72000 training games avg point diff 2.69 (95% CI 2.04 - 3.33) wins=3289/6000 winrate=54.82% (95% CI 53.56% - 56.08%)
-
-Change benchmarking to be against medium player since we can beat the beginner player now
-# small=128,64
-# medium=256,128
-# large=512,256
-# large3=512,256,124
-# xl=1024,512
-# small3=128,64,32
-# mini3=64,32,16
-# medium3=256,128,64
-# mini=64,32
-.\.venv\Scripts\python.exe .\scripts\mlp_size_sweep.py `
-  --data_dir "datasets\discard_v8" `
-  --models_dir "models\regression" `
-  --model_version "discard_v8" `
-  --benchmark_games 10000 `
-  --mlp_variants "small=128,64;medium=256,128;large=512,256;xl=1024,512;small3=128,64,32;mini3=64,32,16;medium3=256,128,64;large3=512,256,128"
-
+Trying out different MLP sizes, Not seeded comparison
+MLPV7[018_mini3] vs beginner after 72000 training games avg point diff 2.39 (95% CI 1.74 - 3.04) wins=3215/6000 winrate=53.58% (95% CI 52.32% - 54.85%)
+MLPV7[018_small] vs beginner after 72000 training games avg point diff 2.77 (95% CI 2.13 - 3.41) wins=3337/6000 winrate=55.62% (95% CI 54.36% - 56.87%)
+MLPV7 [018_medium] vs beginnerafter 72000 training games avg point diff 2.77 (95% CI 2.13 - 3.41) wins=3238/6000 winrate=53.97% (95% CI 52.71% - 55.23%)
+MLPV7[018_small3] vs beginner after 72000 training games avg point diff 2.25 (95% CI 1.60 - 2.89) wins=3241/6000 winrate=54.02% (95% CI 52.76% - 55.28%)
+MLPV7[018_large] vs beginner after 72000 training games avg point diff 2.78 (95% CI 2.14 - 3.42) wins=3272/6000 winrate=54.53% (95% CI 53.27% - 55.79%)
+MLPV7[018_xl] vs beginner after 72000 training games avg point diff 2.69 (95% CI 2.04 - 3.33) wins=3289/6000 winrate=54.82% (95% CI 53.56% - 56.08%)
 
 MLPVV5.0453Player vs beginner [045_small3] after 62500 training games avg point diff 3.12 (95% CI 2.47 - 3.76) wins=3319/6000 winrate=55.32% (95% CI 54.06% - 56.57%)
 
@@ -150,31 +90,14 @@ MLPV7[018_small3] vs beginner after 77000 training games avg point diff 2.61 (95
 MLPV7[018_medium3] vs beginner after 77000 training games avg point diff 2.35 (95% CI 1.85 - 2.86) wins=5370/10000 winrate=53.70% (95% CI 52.72% - 54.68%)
 MLPV7[022_mini] vs beginner after 77000 training games avg point diff 2.48 (95% CI 1.98 - 2.98) wins=5333/10000 winrate=53.33% (95% CI 52.35% - 54.31%)
 
-  
-Moving to V8 with hard player
-.\.venv\Scripts\python.exe .\scripts\train_models.py `
-  --data_dir "datasets\discard_v8" `
-  --models_dir "models\regression" `
-  --model_version "discard_v8" `
-  --run_id "002_xl" `
-  --model_type mlp `
-  --mlp_hidden "1024,512"
-
-
-.\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py --players AIPlayer,beginner --benchmark_games 20000 --models_dir "models\regression\selfplayv8\039" --no_auto_mixed_benchmarks
-.\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py --players AIPlayer,hard --benchmark_games 20000 --models_dir "models\regression\selfplayv8\039"
-
+Moving to V8 with hard player as the one to generate the training data (discard values generated from database lookup)
 MLPV8[002_medium3] vs beginner after 70000 training games avg point diff 2.51 (95% CI 2.05 - 2.98) wins=6581/12000 winrate=54.84% (95% CI 53.95% - 55.73%)
 MLPV8[002_medium] vs beginner after 70000 training games avg point diff 2.27 (95% CI 1.82 - 2.73) wins=6557/12000 winrate=54.64% (95% CI 53.75% - 55.53%)
 MLPV8[002_small] vs beginner after 70000 training games avg point diff 2.07 (95% CI 1.60 - 2.53) wins=6490/12000 winrate=54.08% (95% CI 53.19% - 54.97%)
 MLPV8[002_large] vs beginner after 70000 training games avg point diff 2.36 (95% CI 1.90 - 2.82) wins=6443/12000 winrate=53.69% (95% CI 52.80% - 54.58%)
 MLPV8[002_small3] vs beginner after 70000 training games avg point diff 1.56 (95% CI 1.10 - 2.02) wins=6195/12000 winrate=51.62% (95% CI 50.73% - 52.52%)
 
-hard vs medium avg point diff 1.35 (95% CI 0.87 - 1.83) wins=5114/10000 winrate=51.14% (95% CI 50.16% - 52.12%)
-medium vs beginner avg point diff 3.34 (95% CI 2.69 - 3.98) wins=3330/6000 winrate=55.50% (95% CI 54.24% - 56.75%)
-hard vs beginner avg point diff 4.57 (95% CI 4.08 - 5.07) wins=5749/10000 winrate=57.49% (95% CI 56.52% - 58.46%)
-MLPV8[selfplayv8_004] vs beginner after 300 training games avg point diff 3.20 (95% CI 2.79 - 3.61) wins=8436/15000 winrate=56.24% (95% CI 55.45% - 57.03%)
-
+Using rl_loop, training new models on best vs best, no candidate vs best (mistake)
 Best model before switching to hand_per_game=2 is 014
 Best model before switching to hard vs hard, best vs hard is 021
 Best model before switching to single game benchmarks and evals, best vs hard is 030
@@ -182,7 +105,7 @@ Benchmarked model 039 against beginner for 20K games and winrate was 51% so it d
 
 Reverting back to model 004, now training on candidate data instead of best
 gunna try setting opponent to medium instead of hard for now
-Set model 005 to be medium3 and going to try playing against medium
+Set model 005 to be medium3 and going to try playing against MediumPlayer
 So doing a single iteration of rl against medium improved the model (made 006) but after that it's just garbage
 loop         | best_w/g     | best_wr | best_diff | cand_w/g     | cand_wr | cand_diff | result
 1/infinite   |     912/2000 |   0.456 |     -2.31 |     937/2000 |   0.469 |     -2.02 | accepted -> 006 (diff +0.29)
@@ -190,9 +113,51 @@ loop         | best_w/g     | best_wr | best_diff | cand_w/g     | cand_wr | can
 3/infinite   |     967/2000 |   0.483 |     -0.57 |     949/2000 |   0.474 |     -1.57 | rejected (diff -1.00)
 4/infinite   |     944/2000 |   0.472 |     -1.23 |     897/2000 |   0.449 |     -2.73 | rejected (diff -1.50)
 
-006 performance against beginner
+006 performance against beginner (models\regression\selfplayv8\006)
 MLPV8[medium3] vs beginner after 500 training games avg point diff 2.93 (95% CI 2.58 - 3.29) wins=11044/20000 winrate=55.22% (95% CI 54.53% - 55.91%)
 MLPV8DiscardOnlyPlayer[medium3] vs beginner avg point diff 2.31 (95% CI 1.95 - 2.66) wins=10739/20000 winrate=53.70% (95% CI 53.00% - 54.39%)
 
-large3=512,256,128
-xl=1024,512
+Running ppo selfplay with XL model
+benchmarking ppo\selfplayv8\008
+MLPV8008[008] vs beginner after unknown training games avg point diff 2.74 (95% CI 1.63 - 3.85) wins=1089/2000 winrate=54.45% (95% CI 52.27% - 56.63%)
+NeuralDiscardOnlyPlayer vs beginner avg point diff 1.44 (95% CI 0.30 - 2.58) wins=1049/2000 winrate=52.45% (95% CI 50.26% - 54.64%)
+NeuralPegOnlyPlayer vs beginner avg point diff 1.50 (95% CI 0.35 - 2.65) wins=1046/2000 winrate=52.30% (95% CI 50.11% - 54.49%)
+
+beginner, medium, hard players vs each other
+hard vs medium avg point diff 1.35 (95% CI 0.87 - 1.83) wins=5114/10000 winrate=51.14% (95% CI 50.16% - 52.12%)
+medium vs beginner avg point diff 3.34 (95% CI 2.69 - 3.98) wins=3330/6000 winrate=55.50% (95% CI 54.24% - 56.75%)
+hard vs beginner avg point diff 4.57 (95% CI 4.08 - 5.07) wins=5749/10000 winrate=57.49% (95% CI 56.52% - 58.46%)
+
+Best model so far
+MLPV8[selfplayv8_004 (medium size)] vs beginner avg point diff 3.20 (95% CI 2.79 - 3.61) wins=8436/15000 winrate=56.24% (95% CI 55.45% - 57.03%)
+Other potential models
+MLPV7[018_small] vs beginner after 72000 training games avg point diff 2.77 (95% CI 2.13 - 3.41) wins=3337/6000 winrate=55.62% (95% CI 54.36% - 56.87%)
+MLPVV5.045Player vs beginner [045_large] after 62500 training games avg point diff 3.34 (95% CI 2.70 - 3.98) wins=3319/6000 winrate=55.3%
+
+
+benchmark against beginner for reference before starting ppo loop
+MLPV8[002_xl3] vs hard after 70000 training games avg point diff -1.91 (95% CI -2.49 - -1.32) wins=3267/7000 winrate=46.67% (95% CI 45.50% - 47.84%)
+
+MLPV8[002_large]DiscardOnlyPlayer vs beginner avg point diff 2.85 (95% CI 2.38 - 3.31) wins=6651/12000 winrate=55.43% (95% CI 54.54% - 56.31%)
+MLPV8[002_medium]DiscardOnlyPlayer vs beginner avg point diff 2.71 (95% CI 2.25 - 3.17) wins=6598/12000 winrate=54.98% (95% CI 54.09% - 55.87%)
+MLPV8[002_medium3]DiscardOnlyPlayer vs beginner avg point diff 2.98 (95% CI 2.51 - 3.44) wins=6564/12000 winrate=54.70% (95% CI 53.81% - 55.59%)
+MLPV8[002_xl3]DiscardOnlyPlayer vs beginner avg point diff 2.65 (95% CI 2.04 - 3.25) wins=3797/7000 winrate=54.24% (95% CI 53.08% - 55.41%)
+MLPV8[002_small3]DiscardOnlyPlayer vs beginner avg point diff 2.47 (95% CI 2.01 - 2.93) wins=6404/12000 winrate=53.37% (95% CI 52.47% - 54.26%)
+MLPV8[002_small]DiscardOnlyPlayer vs beginner avg point diff 2.44 (95% CI 1.97 - 2.91) wins=6354/12000 winrate=52.95% (95% CI 52.06% - 53.84%)
+
+MLPV8[002_small]PegOnlyPlayer vs beginner avg point diff -0.28 (95% CI -0.75 - 0.19) wins=6060/12000 winrate=50.50% (95% CI 49.61% - 51.39%)
+MLPV8[002_medium3]PegOnlyPlayer vs beginner avg point diff -0.39 (95% CI -0.86 - 0.09) wins=6001/12000 winrate=50.01% (95% CI 49.11% - 50.90%)
+MLPV8[002_large]PegOnlyPlayer vs beginner avg point diff -0.26 (95% CI -0.73 - 0.21) wins=5993/12000 winrate=49.94% (95% CI 49.05% - 50.84%)
+MLPV8[002_medium]PegOnlyPlayer vs beginner avg point diff -0.59 (95% CI -1.05 - -0.12) wins=5918/12000 winrate=49.32% (95% CI 48.42% - 50.21%)
+MLPV8[002_xl3]PegOnlyPlayer vs beginner avg point diff -0.56 (95% CI -1.18 - 0.05) wins=3443/7000 winrate=49.19% (95% CI 48.01% - 50.36%)
+MLPV8[002_small3]PegOnlyPlayer vs beginner avg point diff -0.61 (95% CI -1.08 - -0.14) wins=5858/12000 winrate=48.82% (95% CI 47.92% - 49.71%)
+
+
+Original results
+Going to benchmark models\regression\discard_v5\011_medium to see if it does well with pegging, so either there is a regression or pegging just never did well
+MLPV5[011_medium] vs beginner after unknown training games avg point diff 2.05 (95% CI 1.63 - 2.46) wins=7833/15000 winrate=52.22% (95% CI 51.42% - 53.02%)
+MLPV5-DiscardOnly vs beginner avg point diff 1.60 (95% CI 1.19 - 2.01) wins=7791/15000 winrate=51.94% (95% CI 51.14% - 52.74%)
+MLPV5-PegOnly vs beginner avg point diff -0.11 (95% CI -0.53 - 0.31) wins=7356/15000 winrate=49.04% (95% CI 48.24% - 49.84%)
+
+Going to start generating V9 pegging data and just copy V8 discard data into the V9 folder
+V9 pegging - add in beliefs about what cards the opponent has

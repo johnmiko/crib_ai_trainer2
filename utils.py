@@ -221,9 +221,12 @@ def build_benchmark_parser() -> argparse.ArgumentParser:
     ap.add_argument("--pegging_feature_set", type=str, default=DEFAULT_PEGGING_MODEL_FEATURE_SET, choices=["base", "full_no_scores", "full"])
     ap.add_argument("--auto_mixed_benchmarks", action="store_true", default=True)
     ap.add_argument("--no_auto_mixed_benchmarks", dest="auto_mixed_benchmarks", action="store_false")
+    ap.add_argument("--only_mixed_benchmarks", action="store_true", default=False, help="Run only discard/pegging-only benchmarks.")
     ap.add_argument("--max_buffer_games", type=int, default=DEFAULT_MAX_BUFFER_GAMES)
     ap.add_argument("--benchmark_output_path", type=str, default=None)
     ap.add_argument("--experiments_output_path", type=str, default=None)
+    ap.add_argument("--queue_models", type=str, default=None, help="Comma-separated list of model dirs to benchmark.")
+    ap.add_argument("--queue_file", type=str, default=None, help="Path to a file with one models_dir per line.")
     return ap
 
 

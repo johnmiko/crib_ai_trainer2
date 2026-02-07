@@ -134,28 +134,52 @@ def _build_player_factory(args, fallback_override: str | None):
         # Default to models_dir basename (e.g., "ranking", "regression", "classification")
         return os.path.basename(os.path.normpath(args.models_dir))
 
-    # Load model metadata if available to align feature sets automatically.
+    # Load model metadata to align feature sets and model files.
     meta_path = os.path.join(args.models_dir, "model_meta.json")
     model_type = "linear"
     mlp_hidden = None
-    if os.path.exists(meta_path):
-        try:
-            with open(meta_path, "r", encoding="utf-8") as f:
-                meta = json.load(f)
-            args.discard_feature_set = meta.get("discard_feature_set", args.discard_feature_set)
-            args.pegging_feature_set = meta.get("pegging_feature_set", args.pegging_feature_set)
-            model_type = meta.get("model_type", model_type)
-            mlp_hidden = meta.get("mlp_hidden", None)
-        except Exception:
-            pass
-    else:
-        # Fallback: infer model type from files if metadata is missing.
-        if os.path.exists(os.path.join(args.models_dir, "discard_mlp.pt")):
-            model_type = "mlp"
+    discard_model_file = None
+    pegging_model_file = None
+    size_suffix = ""
+    if not os.path.exists(meta_path):
+        raise SystemExit(f"Expected model_meta.json at {meta_path} but it does not exist.")
+    with open(meta_path, "r", encoding="utf-8") as f:
+        meta = json.load(f)
+    args.discard_feature_set = meta.get("discard_feature_set", args.discard_feature_set)
+    args.pegging_feature_set = meta.get("pegging_feature_set", args.pegging_feature_set)
+    model_type = meta.get("model_type", model_type)
+    mlp_hidden = meta.get("mlp_hidden", None)
+    discard_model_file = meta.get("discard_model_file")
+    pegging_model_file = meta.get("pegging_model_file")
+    if discard_model_file is None or pegging_model_file is None:
+        raise SystemExit("model_meta.json missing discard_model_file or pegging_model_file.")
+    if model_type == "mlp":
+        discard_hidden = meta.get("discard_mlp_hidden")
+        pegging_hidden = meta.get("pegging_mlp_hidden")
+        if discard_hidden is None or pegging_hidden is None:
+            if "mlp_hidden" not in meta:
+                raise SystemExit(
+                    "model_meta.json missing discard_mlp_hidden/pegging_mlp_hidden and no mlp_hidden fallback."
+                )
+            discard_hidden = meta["mlp_hidden"]
+            pegging_hidden = meta["mlp_hidden"]
+        if discard_hidden != pegging_hidden:
+            d = "x".join(str(int(v)) for v in discard_hidden)
+            p = "x".join(str(int(v)) for v in pegging_hidden)
+            size_suffix = f"[d{d}_p{p}]"
 
     fallback_player_name = fallback_override or args.fallback_player
 
     def _load_discard_model():
+        if discard_model_file is not None:
+            path = f"{args.models_dir}/{discard_model_file}"
+            if model_type == "mlp":
+                return MLPValueModel.load_pt(path)
+            if model_type == "gbt":
+                return GBTValueModel.load_joblib(path)
+            if model_type == "rf":
+                return RandomForestValueModel.load_joblib(path)
+            return LinearValueModel.load_npz(path)
         if model_type == "mlp":
             return MLPValueModel.load_pt(f"{args.models_dir}/discard_mlp.pt")
         if model_type == "gbt":
@@ -165,6 +189,15 @@ def _build_player_factory(args, fallback_override: str | None):
         return LinearValueModel.load_npz(f"{args.models_dir}/discard_linear.npz")
 
     def _load_pegging_model():
+        if pegging_model_file is not None:
+            path = f"{args.models_dir}/{pegging_model_file}"
+            if model_type == "mlp":
+                return MLPValueModel.load_pt(path)
+            if model_type == "gbt":
+                return GBTValueModel.load_joblib(path)
+            if model_type == "rf":
+                return RandomForestValueModel.load_joblib(path)
+            return LinearValueModel.load_npz(path)
         if model_type == "mlp":
             return MLPValueModel.load_pt(f"{args.models_dir}/pegging_mlp.pt")
         if model_type == "gbt":
@@ -251,7 +284,7 @@ def _build_player_factory(args, fallback_override: str | None):
             )
         return base_player_factory(name)
     
-    return player_factory, model_tag, model_type
+    return player_factory, model_tag, model_type, size_suffix
 
 
 def _read_training_games_from_meta(models_dir: str) -> tuple[int | str, int | str, int | str]:
@@ -290,7 +323,7 @@ def _benchmark_single(
     fallback_override: str | None = None,
     games_override: int | None = None,
 ) -> dict:
-    player_factory, model_tag, model_type = _build_player_factory(args, fallback_override)
+    player_factory, model_tag, model_type, size_suffix = _build_player_factory(args, fallback_override)
 
     players_value = players_override or args.players
     player_names = players_value.split(",")
@@ -353,7 +386,14 @@ def _benchmark_single(
     else:
         model_prefix = "Linear"
     for name in player_names:
-        if name in {"AIPlayer", "MLPPlayer", "GBTPlayer", "RandomForestPlayer"}:
+        if name in {
+            "AIPlayer",
+            "MLPPlayer",
+            "GBTPlayer",
+            "RandomForestPlayer",
+            "NeuralDiscardOnlyPlayer",
+            "NeuralPegOnlyPlayer",
+        }:
             tag = model_tag
             # Prefer version like "discard_v6-008" -> V6.008 (for linear) or V6 (for mlp)
             version_digits = []
@@ -372,21 +412,26 @@ def _benchmark_single(
                     version_digits = []
             if version_digits:
                 if model_type == "mlp":
-                    display_names.append(f"{model_prefix}{''.join(version_digits)}")
+                    label = f"{model_prefix}{''.join(version_digits)}{size_suffix}"
                 else:
-                    display_names.append(f"{model_prefix}V{'.'.join(version_digits[0:])}Player")
+                    label = f"{model_prefix}V{'.'.join(version_digits[0:])}Player"
             else:
                 version_label = "".join(c for c in tag if c.isdigit())
                 if version_label:
                     if model_type == "mlp":
-                        display_names.append(f"{model_prefix}V{version_label}")
+                        label = f"{model_prefix}V{version_label}{size_suffix}"
                     else:
-                        display_names.append(f"{model_prefix}V{version_label}Player")
+                        label = f"{model_prefix}V{version_label}Player"
                 else:
                     if model_type == "mlp":
-                        display_names.append(f"{model_prefix}{tag.capitalize()}")
+                        label = f"{model_prefix}{tag.capitalize()}{size_suffix}"
                     else:
-                        display_names.append(f"{model_prefix}{tag.capitalize()}Player")
+                        label = f"{model_prefix}{tag.capitalize()}Player"
+            if name == "NeuralDiscardOnlyPlayer":
+                label = f"{label}-DiscardOnly"
+            elif name == "NeuralPegOnlyPlayer":
+                label = f"{label}-PegOnly"
+            display_names.append(label)
         else:
             display_names.append(name)
     return {
@@ -651,19 +696,41 @@ def benchmark_2_players(
 if __name__ == "__main__":
     args = build_benchmark_parser().parse_args()
     logger.info(f"models dir: {args.models_dir}")
-    benchmark_2_players(args)
-    if args.auto_mixed_benchmarks:
-        logger.info("Running discard-only and pegging-only benchmarks vs beginner fallback")
-        benchmark_2_players(
-            args,
-            players_override="NeuralDiscardOnlyPlayer,beginner",
-            fallback_override="beginner",
-        )
-        benchmark_2_players(
-            args,
-            players_override="NeuralPegOnlyPlayer,beginner",
-            fallback_override="beginner",
-        )
+    if args.queue_models and args.queue_file:
+        raise SystemExit("--queue_models and --queue_file cannot both be set.")
+    queue = []
+    if args.queue_models:
+        queue = [p.strip() for p in args.queue_models.split(",") if p.strip()]
+        if not queue:
+            raise SystemExit("--queue_models must include at least one models_dir.")
+    elif args.queue_file:
+        queue_path = Path(args.queue_file)
+        if not queue_path.exists():
+            raise SystemExit(f"--queue_file not found: {queue_path}")
+        queue = [line.strip() for line in queue_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+        if not queue:
+            raise SystemExit("--queue_file did not contain any models_dir entries.")
+    else:
+        queue = [args.models_dir]
+
+    for idx, models_dir in enumerate(queue, start=1):
+        if len(queue) > 1:
+            logger.info(f"Queue {idx}/{len(queue)}: {models_dir}")
+        args.models_dir = models_dir
+        if not args.only_mixed_benchmarks:
+            benchmark_2_players(args)
+        if args.auto_mixed_benchmarks or args.only_mixed_benchmarks:
+            logger.info("Running discard-only and pegging-only benchmarks vs beginner fallback")
+            benchmark_2_players(
+                args,
+                players_override="NeuralDiscardOnlyPlayer,beginner",
+                fallback_override="beginner",
+            )
+            benchmark_2_players(
+                args,
+                players_override="NeuralPegOnlyPlayer,beginner",
+                fallback_override="beginner",
+            )
 
 # python scripts/benchmark_2_players.py
 # python scripts/benchmark_2_players.py --players AIPlayer,beginner --games 200 --models_dir "models/ranking" --max_shards 6 --fallback_player beginner

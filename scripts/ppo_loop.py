@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import List
 
 import numpy as np
+import multiprocessing as mp
 
 import sys
 sys.path.insert(0, ".")
@@ -24,6 +25,7 @@ from crib_ai_trainer.players.neural_player import (
     get_pegging_feature_indices,
 )
 from cribbage.utils import play_game
+from cribbage.cribbagegame import CribbageGame
 
 
 @dataclass
@@ -182,6 +184,18 @@ def _ensure_unique_names(p0, p1):
     return p0, p1
 
 
+def _play_n_hands(p0, p1, seed: int | None, hands: int) -> float:
+    p0, p1 = _ensure_unique_names(p0, p1)
+    game = CribbageGame(players=[p0, p1], seed=seed, copy_players=False, fast_mode=True)
+    max_score = max(121, 121 * int(hands))
+    game.MAX_SCORE = max_score
+    game.board.max_score = max_score
+    game_score = [0, 0]
+    for _ in range(hands):
+        game_score = game.play_round(game_score, seed=game.round_seed)
+    return float(game_score[0] - game_score[1])
+
+
 def _next_run_id(base_dir: Path) -> str:
     base_dir.mkdir(parents=True, exist_ok=True)
     run_dirs = [p for p in base_dir.iterdir() if p.is_dir() and p.name.isdigit()]
@@ -249,6 +263,146 @@ def _build_policies(best_dir: Path, seed: int) -> tuple[PolicyMLP, PolicyMLP, di
     discard_policy.load_from_value_model(discard_model)
     pegging_policy.load_from_value_model(pegging_model)
     return discard_policy, pegging_policy, meta
+
+
+def _split_games(total: int, workers: int) -> list[int]:
+    if workers <= 0:
+        raise SystemExit("--workers must be > 0.")
+    if total < 0:
+        raise SystemExit("--games_per_iteration must be >= 0.")
+    q, r = divmod(total, workers)
+    return [(q + 1) if i < r else q for i in range(workers)]
+
+
+def _policy_state(policy: PolicyMLP) -> dict:
+    return {
+        "state_dict": policy.model.state_dict(),
+        "input_dim": policy.input_dim,
+        "hidden_sizes": policy.hidden_sizes,
+    }
+
+
+def _load_policy_from_state(state: dict) -> PolicyMLP:
+    import torch
+
+    policy = PolicyMLP(int(state["input_dim"]), tuple(int(h) for h in state["hidden_sizes"]), seed=0)
+    policy.model.load_state_dict(state["state_dict"])
+    policy.model.eval()
+    return policy
+
+
+def _collect_games_worker(args_tuple: tuple) -> tuple[list[PPODecision], list[PPODecision]]:
+    (
+        discard_state,
+        pegging_state,
+        discard_feature_set,
+        pegging_feature_set,
+        best_dir_str,
+        games,
+        seed,
+        worker_idx,
+        hands_per_game,
+    ) = args_tuple
+    if games <= 0:
+        return [], []
+    rng = np.random.default_rng(int(seed) + int(worker_idx))
+    discard_policy = _load_policy_from_state(discard_state)
+    pegging_policy = _load_policy_from_state(pegging_state)
+    best_dir = Path(best_dir_str)
+    best_discard, best_pegging, _ = _load_value_models(best_dir)
+    opponent = AIPlayer(
+        best_discard,
+        best_pegging,
+        name=f"best:{best_dir.name}",
+        discard_feature_set=discard_feature_set,
+        pegging_feature_set=pegging_feature_set,
+    )
+    candidate = PPOPlayer(
+        discard_policy,
+        pegging_policy,
+        name="candidate",
+        discard_feature_set=discard_feature_set,
+        pegging_feature_set=pegging_feature_set,
+        rng=rng,
+        deterministic=False,
+    )
+    _ensure_unique_names(candidate, opponent)
+    discard_samples: list[PPODecision] = []
+    pegging_samples: list[PPODecision] = []
+    base_seed = int(seed) + int(worker_idx) * 100000
+    for i in range(games):
+        candidate.reset_logs()
+        game_seed = base_seed + i
+        if hands_per_game is None:
+            if i % 2 == 0:
+                s0, s1 = play_game(candidate, opponent, seed=game_seed, fast_mode=True, copy_players=False)
+                diff = float(s0 - s1)
+            else:
+                s0, s1 = play_game(opponent, candidate, seed=game_seed, fast_mode=True, copy_players=False)
+                diff = float(s1 - s0)
+        else:
+            if i % 2 == 0:
+                diff = _play_n_hands(candidate, opponent, game_seed, hands_per_game)
+            else:
+                diff = -_play_n_hands(opponent, candidate, game_seed, hands_per_game)
+        disc_logs, peg_logs = candidate.pop_logs()
+        for feats, idx, logp in disc_logs:
+            discard_samples.append(PPODecision(feats, idx, logp, diff))
+        for feats, idx, logp in peg_logs:
+            pegging_samples.append(PPODecision(feats, idx, logp, diff))
+    return discard_samples, pegging_samples
+
+
+def _evaluate_worker(args_tuple: tuple) -> tuple[int, float, int]:
+    (
+        discard_state,
+        pegging_state,
+        discard_feature_set,
+        pegging_feature_set,
+        best_dir_str,
+        games,
+        seed,
+        worker_idx,
+    ) = args_tuple
+    if games <= 0:
+        return 0, 0.0, 0
+    rng = np.random.default_rng(int(seed) + int(worker_idx))
+    discard_policy = _load_policy_from_state(discard_state)
+    pegging_policy = _load_policy_from_state(pegging_state)
+    best_dir = Path(best_dir_str)
+    best_discard, best_pegging, _ = _load_value_models(best_dir)
+    opponent = AIPlayer(
+        best_discard,
+        best_pegging,
+        name=f"best:{best_dir.name}",
+        discard_feature_set=discard_feature_set,
+        pegging_feature_set=pegging_feature_set,
+    )
+    candidate = PPOPlayer(
+        discard_policy,
+        pegging_policy,
+        name="candidate",
+        discard_feature_set=discard_feature_set,
+        pegging_feature_set=pegging_feature_set,
+        rng=rng,
+        deterministic=True,
+    )
+    _ensure_unique_names(candidate, opponent)
+    wins = 0
+    diff_sum = 0.0
+    base_seed = int(seed) + int(worker_idx) * 100000
+    for i in range(games):
+        game_seed = base_seed + i
+        if i % 2 == 0:
+            s0, s1 = play_game(candidate, opponent, seed=game_seed, fast_mode=True, copy_players=False)
+            diff = float(s0 - s1)
+        else:
+            s0, s1 = play_game(opponent, candidate, seed=game_seed, fast_mode=True, copy_players=False)
+            diff = float(s1 - s0)
+        if diff > 0:
+            wins += 1
+        diff_sum += diff
+    return wins, diff_sum, games
 
 
 def _collect_games(
@@ -379,7 +533,10 @@ def main() -> int:
     ap.add_argument("--best_file", type=str, default="text/best_models_ppo.json")
     ap.add_argument("--best_run_id", type=str, default=None, help="Override best_file and use this run id.")
     ap.add_argument("--games_per_iteration", type=int, default=200)
+    ap.add_argument("--hands_per_game", type=int, default=None, help="Use N hands per game for training only.")
+    ap.add_argument("--workers", type=int, default=10)
     ap.add_argument("--eval_games", type=int, default=200)
+    ap.add_argument("--eval_workers", type=int, default=10)
     ap.add_argument("--loops", type=int, default=100)
     ap.add_argument("--lr", type=float, default=1e-4)
     ap.add_argument("--ppo_epochs", type=int, default=2)
@@ -397,11 +554,15 @@ def main() -> int:
         raise SystemExit("--games_per_iteration must be > 0.")
     if args.eval_games <= 0:
         raise SystemExit("--eval_games must be > 0.")
+    if args.workers <= 0:
+        raise SystemExit("--workers must be > 0.")
+    if args.eval_workers <= 0:
+        raise SystemExit("--eval_workers must be > 0.")
+    if args.hands_per_game is not None and args.hands_per_game <= 0:
+        raise SystemExit("--hands_per_game must be > 0 if provided.")
 
     seed = int(args.seed) if args.seed is not None else int(np.random.default_rng().integers(1, 2**31 - 1))
     print(f"Using random seed: {seed}")
-    rng = np.random.default_rng(seed)
-
     best_file = Path(args.best_file)
     base_models_dir = Path(args.models_dir) / args.model_version
     base_models_dir.mkdir(parents=True, exist_ok=True)
@@ -420,32 +581,33 @@ def main() -> int:
         discard_feature_set = meta.get("discard_feature_set", "full")
         pegging_feature_set = meta.get("pegging_feature_set", "full")
 
-        best_discard, best_pegging, _ = _load_value_models(best_dir)
-        opponent = AIPlayer(
-            best_discard,
-            best_pegging,
-            name=f"best:{best_dir.name}",
-            discard_feature_set=discard_feature_set,
-            pegging_feature_set=pegging_feature_set,
-        )
-
-        candidate = PPOPlayer(
-            discard_policy,
-            pegging_policy,
-            name="candidate",
-            discard_feature_set=discard_feature_set,
-            pegging_feature_set=pegging_feature_set,
-            rng=rng,
-            deterministic=False,
-        )
-        _ensure_unique_names(candidate, opponent)
-
-        discard_samples, pegging_samples = _collect_games(
-            candidate,
-            opponent,
-            games=args.games_per_iteration,
-            seed=seed + loop_idx * 1000,
-        )
+        discard_state = _policy_state(discard_policy)
+        pegging_state = _policy_state(pegging_policy)
+        collect_counts = _split_games(args.games_per_iteration, args.workers)
+        collect_tasks = []
+        for idx, count in enumerate(collect_counts):
+            if count <= 0:
+                continue
+            collect_tasks.append(
+                (
+                    discard_state,
+                    pegging_state,
+                    discard_feature_set,
+                    pegging_feature_set,
+                    str(best_dir),
+                    int(count),
+                    seed + loop_idx * 1000,
+                    idx,
+                    args.hands_per_game,
+                )
+            )
+        ctx = mp.get_context("spawn")
+        discard_samples: list[PPODecision] = []
+        pegging_samples: list[PPODecision] = []
+        with ctx.Pool(processes=args.workers) as pool:
+            for d_s, p_s in pool.imap_unordered(_collect_games_worker, collect_tasks):
+                discard_samples.extend(d_s)
+                pegging_samples.extend(p_s)
         _normalize_advantages(discard_samples)
         _normalize_advantages(pegging_samples)
 
@@ -469,7 +631,41 @@ def main() -> int:
         )
 
         eval_seed = seed + loop_idx * 2000
-        eval_result = _evaluate(candidate, opponent, games=args.eval_games, seed=eval_seed)
+        eval_counts = _split_games(args.eval_games, args.eval_workers)
+        eval_tasks = []
+        discard_state = _policy_state(discard_policy)
+        pegging_state = _policy_state(pegging_policy)
+        for idx, count in enumerate(eval_counts):
+            if count <= 0:
+                continue
+            eval_tasks.append(
+                (
+                    discard_state,
+                    pegging_state,
+                    discard_feature_set,
+                    pegging_feature_set,
+                    str(best_dir),
+                    int(count),
+                    eval_seed,
+                    idx,
+                )
+            )
+        wins = 0
+        total_games = 0
+        diff_sum = 0.0
+        with ctx.Pool(processes=args.eval_workers) as pool:
+            for w, d_sum, g in pool.imap_unordered(_evaluate_worker, eval_tasks):
+                wins += int(w)
+                diff_sum += float(d_sum)
+                total_games += int(g)
+        if total_games <= 0:
+            raise SystemExit("No eval games were played.")
+        eval_result = {
+            "wins": wins,
+            "games": total_games,
+            "winrate": wins / total_games,
+            "avg_diff": diff_sum / total_games,
+        }
         print(
             f"eval: wins={eval_result['wins']}/{eval_result['games']} "
             f"winrate={eval_result['winrate']:.3f} avg_diff={eval_result['avg_diff']:.2f}"
@@ -483,6 +679,7 @@ def main() -> int:
                 "model_version": args.model_version,
                 "run_id": run_id,
                 "source_best": str(best_dir),
+                "model_type": "mlp",
                 "discard_feature_set": discard_feature_set,
                 "pegging_feature_set": pegging_feature_set,
                 "discard_feature_dim": discard_policy.input_dim,

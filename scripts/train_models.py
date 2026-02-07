@@ -64,7 +64,9 @@ def _resolve_models_dir(base_models_dir: str, model_version: str, run_id: str | 
         run_id = _next_run_id(str(version_dir))
     return str(version_dir / run_id)
 
-def _parse_hidden_sizes(value: str) -> tuple[int, ...]:
+def _parse_hidden_sizes(value: str | None) -> tuple[int, ...]:
+    if value is None:
+        return (128, 64)
     parts = [p.strip() for p in value.split(",") if p.strip()]
     if not parts:
         return (128, 64)
@@ -136,6 +138,8 @@ def train_models(args) -> int:
     if args.rank_pairs_per_hand <= 0:
         raise SystemExit("--rank_pairs_per_hand must be > 0.")
     discard_only = bool(getattr(args, "discard_only", False))
+    early_stop_patience = getattr(args, "early_stop_patience", None)
+    early_stop_min_delta = getattr(args, "early_stop_min_delta", 0.0)
     data_dir = Path(args.data_dir)
     pegging_data_dir = Path(args.pegging_data_dir) if getattr(args, "pegging_data_dir", None) else data_dir
     extra_data_dir = Path(args.extra_data_dir) if args.extra_data_dir else None
@@ -172,6 +176,9 @@ def train_models(args) -> int:
             pegging_shards = pegging_shards[: args.max_shards]
         logger.info(f"Limiting training to first {args.max_shards} shard(s)")
 
+    last_discard_shard = discard_shards[-1].name
+    last_pegging_shard = None if discard_only else pegging_shards[-1].name
+
     discard_games_used = _max_games_from_shards(discard_shards, "discard")
     pegging_games_used = 0 if discard_only else _max_games_from_shards(pegging_shards, "pegging")
 
@@ -189,6 +196,8 @@ def train_models(args) -> int:
     pegging_feature_indices = [] if discard_only else get_pegging_feature_indices(args.pegging_feature_set)
     model_type = args.model_type
     mlp_hidden = _parse_hidden_sizes(args.mlp_hidden)
+    discard_mlp_hidden = _parse_hidden_sizes(args.discard_mlp_hidden or args.mlp_hidden)
+    pegging_mlp_hidden = _parse_hidden_sizes(args.pegging_mlp_hidden or args.mlp_hidden)
     incremental = bool(getattr(args, "incremental", False))
     incremental_from = getattr(args, "incremental_from", None)
     incremental_start_shard = getattr(args, "incremental_start_shard", 0)
@@ -209,6 +218,8 @@ def train_models(args) -> int:
             raise SystemExit("--incremental only supports model_type=mlp or linear.")
         if args.max_train_samples is not None:
             raise SystemExit("--incremental does not support --max_train_samples.")
+        if early_stop_patience is not None:
+            raise SystemExit("--early_stop_patience is not supported with --incremental.")
         if incremental_from is None:
             raise SystemExit("--incremental requires --incremental_from.")
         if len(discard_shards) != len(pegging_shards):
@@ -231,7 +242,7 @@ def train_models(args) -> int:
     else:
         with np.load(discard_shards[0]) as d0:
             if model_type == "mlp":
-                discard_model = MLPValueModel(int(len(discard_feature_indices)), mlp_hidden, seed=args.seed or 0)
+                discard_model = MLPValueModel(int(len(discard_feature_indices)), discard_mlp_hidden, seed=args.seed or 0)
             elif model_type == "gbt":
                 discard_model = GBTValueModel(seed=args.seed or 0, max_iter=int(args.epochs))
             elif model_type == "rf":
@@ -241,7 +252,7 @@ def train_models(args) -> int:
     if not discard_only:
         with np.load(pegging_shards[0]) as p0:
             if model_type == "mlp":
-                pegging_model = MLPValueModel(int(len(pegging_feature_indices)), mlp_hidden, seed=args.seed or 0)
+                pegging_model = MLPValueModel(int(len(pegging_feature_indices)), pegging_mlp_hidden, seed=args.seed or 0)
             elif model_type == "gbt":
                 pegging_model = GBTValueModel(seed=args.seed or 0, max_iter=int(args.epochs))
             elif model_type == "rf":
@@ -308,6 +319,7 @@ def train_models(args) -> int:
             y_all = y_all[idx]
         return X_all, y_all
 
+    epochs_trained = 0
     if incremental:
         inc_epochs = incremental_epochs or args.epochs
         discard_model, pegging_model = _load_incremental_models(Path(incremental_from), model_type)
@@ -416,6 +428,7 @@ def train_models(args) -> int:
         discard_losses = _train_discard()
 
         last_discard_loss = float(discard_losses[-1]) if discard_losses else last_discard_loss
+        epochs_trained = 1
         if not discard_only:
             Xp_all, yp_all = _load_all_pegging()
 
@@ -432,6 +445,8 @@ def train_models(args) -> int:
                 pegging_losses = _train_pegging()
             last_pegging_loss = float(pegging_losses[-1]) if pegging_losses else last_pegging_loss
     else:
+        best_epoch_loss = None
+        epochs_no_improve = 0
         if discard_only:
             for epoch in range(args.epochs):
                 print(f"Epoch {epoch + 1}/{args.epochs}")
@@ -486,6 +501,22 @@ def train_models(args) -> int:
                         )
 
                     last_discard_loss = float(discard_losses[-1]) if discard_losses else last_discard_loss
+                epochs_trained += 1
+                if early_stop_patience is not None:
+                    epoch_loss = last_discard_loss
+                    if epoch_loss is None:
+                        raise SystemExit("Early stopping requires discard loss to be available.")
+                    if best_epoch_loss is None or (best_epoch_loss - epoch_loss) > early_stop_min_delta:
+                        best_epoch_loss = epoch_loss
+                        epochs_no_improve = 0
+                    else:
+                        epochs_no_improve += 1
+                    if epochs_no_improve >= early_stop_patience:
+                        print(
+                            f"Early stopping at epoch {epoch + 1} on shard {last_discard_shard} "
+                            f"(no improvement for {early_stop_patience} epochs)."
+                        )
+                        break
         else:
             for epoch in range(args.epochs):
                 print(f"Epoch {epoch + 1}/{args.epochs}")
@@ -573,6 +604,22 @@ def train_models(args) -> int:
                             "Pegging loss became NaN/inf. Try a smaller --lr (e.g., 5e-5), "
                             "a larger --batch_size (e.g., 2048+), or increase --l2."
                         )
+                epochs_trained += 1
+                if early_stop_patience is not None:
+                    if last_discard_loss is None or last_pegging_loss is None:
+                        raise SystemExit("Early stopping requires discard and pegging losses to be available.")
+                    epoch_loss = 0.5 * (last_discard_loss + last_pegging_loss)
+                    if best_epoch_loss is None or (best_epoch_loss - epoch_loss) > early_stop_min_delta:
+                        best_epoch_loss = epoch_loss
+                        epochs_no_improve = 0
+                    else:
+                        epochs_no_improve += 1
+                    if epochs_no_improve >= early_stop_patience:
+                        print(
+                            f"Early stopping at epoch {epoch + 1} on shard {last_pegging_shard} "
+                            f"(no improvement for {early_stop_patience} epochs)."
+                        )
+                        break
 
     if model_type == "mlp":
         discard_path = models_dir / "discard_mlp.pt"
@@ -692,12 +739,17 @@ def train_models(args) -> int:
         "discard_feature_dim": int(len(discard_feature_indices)),
         "pegging_feature_dim": int(len(pegging_feature_indices)) if not discard_only else 0,
         "mlp_hidden": list(mlp_hidden),
+        "discard_mlp_hidden": list(discard_mlp_hidden),
+        "pegging_mlp_hidden": list(pegging_mlp_hidden),
         "epochs": args.epochs,
+        "epochs_trained": epochs_trained,
         "lr": args.lr,
         "batch_size": args.batch_size,
         "l2": args.l2,
         "seed": args.seed,
         "max_shards": args.max_shards,
+        "early_stop_patience": early_stop_patience,
+        "early_stop_min_delta": early_stop_min_delta,
         "num_shards_used": len(discard_shards),
         "discard_games_used": discard_games_used,
         "pegging_games_used": pegging_games_used,
@@ -745,6 +797,8 @@ def train_models(args) -> int:
         f"discard_feature_dim: {model_meta['discard_feature_dim']}",
         f"pegging_feature_dim: {model_meta['pegging_feature_dim']}",
         f"mlp_hidden: {model_meta['mlp_hidden']}",
+        f"discard_mlp_hidden: {model_meta['discard_mlp_hidden']}",
+        f"pegging_mlp_hidden: {model_meta['pegging_mlp_hidden']}",
         f"epochs: {model_meta['epochs']}",
         f"lr: {model_meta['lr']}",
         f"batch_size: {model_meta['batch_size']}",
@@ -789,6 +843,8 @@ if __name__ == "__main__":
     ap.add_argument("--pegging_feature_set", type=str, default=DEFAULT_PEGGING_MODEL_FEATURE_SET, choices=["base", "full_no_scores", "full"])
     ap.add_argument("--model_type", type=str, default=DEFAULT_MODEL_TYPE, choices=["linear", "mlp", "gbt", "rf"])
     ap.add_argument("--mlp_hidden", type=str, default=DEFAULT_MLP_HIDDEN, help="Comma-separated hidden sizes, e.g. 128,64")
+    ap.add_argument("--discard_mlp_hidden", type=str, default=None, help="Override MLP sizes for discard head only.")
+    ap.add_argument("--pegging_mlp_hidden", type=str, default=None, help="Override MLP sizes for pegging head only.")
     ap.add_argument("--lr", type=float, default=DEFAULT_LR)
     ap.add_argument("--epochs", type=int, default=DEFAULT_EPOCHS)
     ap.add_argument("--batch_size", type=int, default=DEFAULT_BATCH_SIZE)
@@ -814,6 +870,18 @@ if __name__ == "__main__":
         type=int,
         default=None,
         help="For GBT/RF only: cap total training samples to control memory.",
+    )
+    ap.add_argument(
+        "--early_stop_patience",
+        type=int,
+        default=2,
+        help="Stop after N epochs without loss improvement.",
+    )
+    ap.add_argument(
+        "--early_stop_min_delta",
+        type=float,
+        default=0.0,
+        help="Minimum loss improvement to reset early stopping.",
     )
     ap.add_argument(
         "--discard_only",

@@ -40,16 +40,22 @@ DISCARD_FEATURE_DIM = BASE_DISCARD_FEATURE_DIM + ENGINEERED_DISCARD_FEATURE_DIM
 
 # Pegging features
 PEGGING_BASE_FEATURE_DIM = 240  # hand(52) + table(52) + count(32) + candidate(52) + known(52)
-PEGGING_ENGINEERED_NO_SCORE_DIM = 20
+PEGGING_ENGINEERED_NO_SCORE_DIM = 29
 PEGGING_ENGINEERED_SCORE_DIM = 5
 PEGGING_ENGINEERED_FEATURE_DIM = PEGGING_ENGINEERED_NO_SCORE_DIM + PEGGING_ENGINEERED_SCORE_DIM
 PEGGING_FULL_FEATURE_DIM = PEGGING_BASE_FEATURE_DIM + 52 + 52 + PEGGING_ENGINEERED_FEATURE_DIM  # + opp_played + all_played
+PEGGING_SEQ_LEN = 8
+PEGGING_SEQ_STEP_DIM = 84  # card(52) + count(32)
+PEGGING_SEQ_FEATURE_DIM = PEGGING_SEQ_LEN * PEGGING_SEQ_STEP_DIM
+PEGGING_FULL_SEQ_FEATURE_DIM = PEGGING_FULL_FEATURE_DIM + PEGGING_SEQ_FEATURE_DIM
 
 def get_pegging_feature_dim(feature_set: str) -> int:
     if feature_set == "basic":
         return PEGGING_BASE_FEATURE_DIM
     if feature_set == "full":
         return PEGGING_FULL_FEATURE_DIM
+    if feature_set == "full_seq":
+        return PEGGING_FULL_SEQ_FEATURE_DIM
     if feature_set == "full_no_scores":
         return PEGGING_BASE_FEATURE_DIM + 52 + 52 + PEGGING_ENGINEERED_NO_SCORE_DIM
     raise ValueError(f"Unknown pegging feature_set: {feature_set}")
@@ -78,6 +84,8 @@ def get_pegging_feature_indices(feature_set: str) -> np.ndarray:
     if feature_set == "full_no_scores":
         end = PEGGING_BASE_FEATURE_DIM + 52 + 52 + PEGGING_ENGINEERED_NO_SCORE_DIM
         return np.arange(end, dtype=np.int64)
+    if feature_set == "full_seq":
+        return np.arange(PEGGING_FULL_SEQ_FEATURE_DIM, dtype=np.int64)
     if feature_set == "full":
         return np.arange(PEGGING_FULL_FEATURE_DIM, dtype=np.int64)
     raise ValueError(f"Unknown pegging feature_set: {feature_set}")
@@ -408,6 +416,21 @@ def featurize_pegging(
     if opponent_score is None:
         opponent_score = 0
     
+    def _pegging_sequence_features(table_cards: List[Card]) -> np.ndarray:
+        seq_cards = table_cards[-PEGGING_SEQ_LEN:]
+        steps: List[np.ndarray] = []
+        count_so_far = 0
+        for c in seq_cards:
+            card_vec = np.zeros(52, dtype=np.float32)
+            card_vec[c.to_index()] = 1.0
+            count_vec = one_hot_count(count_so_far)
+            steps.append(np.concatenate([card_vec, count_vec]))
+            count_so_far += c.get_value()
+        if len(steps) < PEGGING_SEQ_LEN:
+            pad = PEGGING_SEQ_LEN - len(steps)
+            steps.extend([np.zeros(PEGGING_SEQ_STEP_DIM, dtype=np.float32) for _ in range(pad)])
+        return np.concatenate(steps).astype(np.float32, copy=False)
+
     hand_vec = multi_hot_cards(hand)           # (52,)
     table_vec = multi_hot_cards(table)         # (52,)
     count_vec = one_hot_count(count)           # (32,)
@@ -492,6 +515,11 @@ def featurize_pegging(
         unseen_value_counts = np.zeros(11, dtype=np.int32)
         for c in unseen:
             unseen_value_counts[c.get_value()] += 1
+        unseen_rank_counts = np.zeros(13, dtype=np.int32)
+        for c in unseen:
+            unseen_rank_counts[RANK_TO_I[c.get_rank().lower()]] += 1
+    else:
+        unseen_rank_counts = None
 
     max_val = 10 if remaining_to_31 >= 10 else remaining_to_31
     if max_val < 1:
@@ -501,6 +529,81 @@ def featurize_pegging(
     opp_can_play_prob = float(playable_unseen_count / max(1, unseen_count))
     opp_playable_count = float(playable_unseen_count)
     unseen_count = float(unseen_count)
+
+    if unseen_rank_counts is None:
+        known_set = set(known_cards) | set(all_played_cards) | set(hand)
+        unseen = [c for c in _FULL_DECK if c not in known_set]
+        unseen_rank_counts = np.zeros(13, dtype=np.int32)
+        for c in unseen:
+            unseen_rank_counts[RANK_TO_I[c.get_rank().lower()]] += 1
+
+    def _response_counts(table_state: List[Card], count_state: int) -> dict[str, float]:
+        resp_any = 0.0
+        resp_15 = 0.0
+        resp_31 = 0.0
+        resp_pair = 0.0
+        resp_run = 0.0
+        for rv in range(1, 14):
+            count_cards = float(unseen_rank_counts[rv - 1])
+            if count_cards <= 0.0:
+                continue
+            rank_str = RANKS[rv - 1]
+            c = Card(f"{rank_str}h")
+            new_count = count_state + c.get_value()
+            if new_count > 31:
+                continue
+            seq = table_state + [c]
+            immediate_points = float(score_play(seq)[0])
+            pair_points = float(HasPairTripleQuad().check(seq)[0])
+            run_len = float(HasStraight_DuringPlay().check(seq)[0])
+            if immediate_points > 0.0:
+                resp_any += count_cards
+            if new_count == 15:
+                resp_15 += count_cards
+            if new_count == 31:
+                resp_31 += count_cards
+            if pair_points > 0.0:
+                resp_pair += count_cards
+            if run_len >= 3.0:
+                resp_run += count_cards
+        return {
+            "any": resp_any,
+            "r15": resp_15,
+            "r31": resp_31,
+            "pair": resp_pair,
+            "run": resp_run,
+        }
+
+    seq_after = table + [candidate]
+    new_count = count + candidate.get_value()
+    resp_counts = _response_counts(seq_after, new_count)
+    denom = max(1.0, unseen_count)
+    opp_resp_any_prob = resp_counts["any"] / denom
+    opp_resp_15_prob = resp_counts["r15"] / denom
+    opp_resp_31_prob = resp_counts["r31"] / denom
+    opp_resp_pair_prob = resp_counts["pair"] / denom
+    opp_resp_run_prob = resp_counts["run"] / denom
+
+    opp_skipped_15 = 0.0
+    opp_skipped_31 = 0.0
+    opp_skipped_pair = 0.0
+    opp_skipped_run = 0.0
+    if len(table) >= 1:
+        last_card = table[-1]
+        prev_table = table[:-1]
+        prev_count = count - last_card.get_value()
+        if prev_count >= 0:
+            last_points = float(score_play(prev_table + [last_card])[0])
+            if last_points <= 0.0:
+                prev_resp = _response_counts(prev_table, prev_count)
+                if prev_resp["r15"] > 0.0:
+                    opp_skipped_15 = 1.0
+                if prev_resp["r31"] > 0.0:
+                    opp_skipped_31 = 1.0
+                if prev_resp["pair"] > 0.0:
+                    opp_skipped_pair = 1.0
+                if prev_resp["run"] > 0.0:
+                    opp_skipped_run = 1.0
 
     score_context = _score_context_features(player_score, opponent_score)
 
@@ -525,6 +628,15 @@ def featurize_pegging(
             opp_can_play_prob,
             opp_playable_count,
             unseen_count,
+            opp_resp_any_prob,
+            opp_resp_15_prob,
+            opp_resp_31_prob,
+            opp_resp_pair_prob,
+            opp_resp_run_prob,
+            opp_skipped_15,
+            opp_skipped_31,
+            opp_skipped_pair,
+            opp_skipped_run,
         ],
         dtype=np.float32,
     )
@@ -559,6 +671,17 @@ def featurize_pegging(
             engineered,
         ])
         assert out.shape[0] == PEGGING_FULL_FEATURE_DIM, f"pegging features dim {out.shape[0]} != {PEGGING_FULL_FEATURE_DIM}"
+        return out
+    if feature_set == "full_seq":
+        out = np.concatenate([
+            base,
+            opp_played_vec,
+            all_played_vec,
+            engineered,
+        ])
+        seq = _pegging_sequence_features(table)
+        out = np.concatenate([out, seq])
+        assert out.shape[0] == PEGGING_FULL_SEQ_FEATURE_DIM, f"pegging features dim {out.shape[0]} != {PEGGING_FULL_SEQ_FEATURE_DIM}"
         return out
     raise ValueError(f"Unknown pegging feature_set: {feature_set}")
 
@@ -970,6 +1093,187 @@ class MLPValueModel:
         m = cls(int(data["input_dim"]), tuple(int(h) for h in data["hidden_sizes"]))
         m.model.load_state_dict(data["state_dict"])
         m.model.eval()
+        return m
+
+
+class PeggingRNNValueModel:
+    """GRU/LSTM regressor over pegging sequences plus static features."""
+
+    def __init__(
+        self,
+        static_dim: int,
+        *,
+        rnn_type: str = "gru",
+        rnn_hidden: int = 64,
+        head_hidden: Tuple[int, ...] = (128, 64),
+        seq_len: int = PEGGING_SEQ_LEN,
+        step_dim: int = PEGGING_SEQ_STEP_DIM,
+        seed: int | None = 0,
+    ):
+        import torch
+        import torch.nn as nn
+
+        torch.manual_seed(0 if seed is None else int(seed))
+        rnn_type = rnn_type.lower()
+        if rnn_type not in {"gru", "lstm"}:
+            raise ValueError(f"Unsupported rnn_type: {rnn_type}")
+        self.rnn_type = rnn_type
+        self.seq_len = int(seq_len)
+        self.step_dim = int(step_dim)
+        self.static_dim = int(static_dim)
+        self.rnn_hidden = int(rnn_hidden)
+        self.head_hidden = tuple(int(h) for h in head_hidden)
+
+        if rnn_type == "gru":
+            self.rnn = nn.GRU(self.step_dim, self.rnn_hidden, batch_first=True)
+        else:
+            self.rnn = nn.LSTM(self.step_dim, self.rnn_hidden, batch_first=True)
+
+        head_layers = []
+        prev = self.rnn_hidden + self.static_dim
+        for h in self.head_hidden:
+            head_layers.append(nn.Linear(prev, h))
+            head_layers.append(nn.ReLU())
+            prev = h
+        head_layers.append(nn.Linear(prev, 1))
+        self.head = nn.Sequential(*head_layers)
+
+    def _split(self, X: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        static = X[:, : self.static_dim]
+        seq_flat = X[:, self.static_dim :]
+        expected = self.seq_len * self.step_dim
+        if seq_flat.shape[1] != expected:
+            raise ValueError(f"Expected seq_flat dim {expected}, got {seq_flat.shape[1]}")
+        seq = seq_flat.reshape(-1, self.seq_len, self.step_dim)
+        return static, seq
+
+    def predict(self, x: np.ndarray) -> float:
+        import torch
+
+        with torch.no_grad():
+            X = x.astype(np.float32, copy=False).reshape(1, -1)
+            static, seq = self._split(X)
+            t_static = torch.tensor(static, dtype=torch.float32)
+            t_seq = torch.tensor(seq, dtype=torch.float32)
+            if self.rnn_type == "gru":
+                _, h = self.rnn(t_seq)
+            else:
+                _, (h, _) = self.rnn(t_seq)
+            h_last = h.squeeze(0)
+            feats = torch.cat([t_static, h_last], dim=1)
+            y = self.head(feats).squeeze(1).item()
+        return float(y)
+
+    def predict_batch(self, X: np.ndarray) -> np.ndarray:
+        import torch
+
+        with torch.no_grad():
+            X = X.astype(np.float32, copy=False)
+            static, seq = self._split(X)
+            t_static = torch.tensor(static, dtype=torch.float32)
+            t_seq = torch.tensor(seq, dtype=torch.float32)
+            if self.rnn_type == "gru":
+                _, h = self.rnn(t_seq)
+            else:
+                _, (h, _) = self.rnn(t_seq)
+            h_last = h.squeeze(0)
+            feats = torch.cat([t_static, h_last], dim=1)
+            y = self.head(feats).squeeze(1).cpu().numpy()
+        return y.astype(np.float32, copy=False)
+
+    def fit_mse(
+        self,
+        X: np.ndarray,
+        y: np.ndarray,
+        *,
+        lr: float = 0.001,
+        epochs: int = 5,
+        batch_size: int = 1024,
+        l2: float = 0.0,
+        seed: int = 0,
+        shuffle: bool = True,
+    ) -> List[float]:
+        import torch
+        import torch.nn as nn
+        import torch.optim as optim
+
+        torch.manual_seed(0 if seed is None else int(seed))
+        X = X.astype(np.float32, copy=False)
+        y = y.astype(np.float32, copy=False)
+        N = X.shape[0]
+
+        optimizer = optim.Adam(
+            list(self.rnn.parameters()) + list(self.head.parameters()),
+            lr=lr,
+            weight_decay=l2,
+        )
+        loss_fn = nn.MSELoss()
+
+        losses: List[float] = []
+        for _ in range(epochs):
+            idx = np.arange(N)
+            if shuffle:
+                np.random.default_rng(seed).shuffle(idx)
+            epoch_loss = 0.0
+            n_seen = 0
+            for start in range(0, N, batch_size):
+                batch_idx = idx[start:start + batch_size]
+                Xb = X[batch_idx]
+                yb = y[batch_idx]
+                static, seq = self._split(Xb)
+                t_static = torch.tensor(static, dtype=torch.float32)
+                t_seq = torch.tensor(seq, dtype=torch.float32)
+                t_y = torch.tensor(yb, dtype=torch.float32)
+                optimizer.zero_grad()
+                if self.rnn_type == "gru":
+                    _, h = self.rnn(t_seq)
+                else:
+                    _, (h, _) = self.rnn(t_seq)
+                h_last = h.squeeze(0)
+                feats = torch.cat([t_static, h_last], dim=1)
+                pred = self.head(feats).squeeze(1)
+                loss = loss_fn(pred, t_y)
+                loss.backward()
+                optimizer.step()
+                epoch_loss += float(loss.item()) * len(batch_idx)
+                n_seen += len(batch_idx)
+            losses.append(epoch_loss / max(1, n_seen))
+        return losses
+
+    def save_pt(self, path: str) -> None:
+        import torch
+
+        torch.save(
+            {
+                "rnn_state": self.rnn.state_dict(),
+                "head_state": self.head.state_dict(),
+                "rnn_type": self.rnn_type,
+                "rnn_hidden": self.rnn_hidden,
+                "head_hidden": self.head_hidden,
+                "static_dim": self.static_dim,
+                "seq_len": self.seq_len,
+                "step_dim": self.step_dim,
+            },
+            path,
+        )
+
+    @classmethod
+    def load_pt(cls, path: str) -> "PeggingRNNValueModel":
+        import torch
+
+        data = torch.load(path, map_location="cpu")
+        m = cls(
+            int(data["static_dim"]),
+            rnn_type=str(data["rnn_type"]),
+            rnn_hidden=int(data["rnn_hidden"]),
+            head_hidden=tuple(int(h) for h in data["head_hidden"]),
+            seq_len=int(data["seq_len"]),
+            step_dim=int(data["step_dim"]),
+        )
+        m.rnn.load_state_dict(data["rnn_state"])
+        m.head.load_state_dict(data["head_state"])
+        m.rnn.eval()
+        m.head.eval()
         return m
 
 
