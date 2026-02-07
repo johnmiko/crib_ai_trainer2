@@ -124,6 +124,7 @@ Change benchmarking to be against medium player since we can beat the beginner p
 # small=128,64
 # medium=256,128
 # large=512,256
+# large3=512,256,124
 # xl=1024,512
 # small3=128,64,32
 # mini3=64,32,16
@@ -135,7 +136,6 @@ Change benchmarking to be against medium player since we can beat the beginner p
   --model_version "discard_v8" `
   --benchmark_games 10000 `
   --mlp_variants "small=128,64;medium=256,128;large=512,256;xl=1024,512;small3=128,64,32;mini3=64,32,16;medium3=256,128,64;large3=512,256,128"
-
 
 
 MLPVV5.0453Player vs beginner [045_small3] after 62500 training games avg point diff 3.12 (95% CI 2.47 - 3.76) wins=3319/6000 winrate=55.32% (95% CI 54.06% - 56.57%)
@@ -150,20 +150,8 @@ MLPV7[018_small3] vs beginner after 77000 training games avg point diff 2.61 (95
 MLPV7[018_medium3] vs beginner after 77000 training games avg point diff 2.35 (95% CI 1.85 - 2.86) wins=5370/10000 winrate=53.70% (95% CI 52.72% - 54.68%)
 MLPV7[022_mini] vs beginner after 77000 training games avg point diff 2.48 (95% CI 1.98 - 2.98) wins=5333/10000 winrate=53.33% (95% CI 52.35% - 54.31%)
 
-
-.\.venv\Scripts\python.exe .\scripts\autopilot.py `
-  --dataset_version "discard_v8" `
-  --model_version "discard_v8" `
-  --teacher_player hard `
-  --il_games 10000 `
-  --benchmark_games 10000 `
-  --mlp_hidden "64,32" `
-  --model_tag_suffix "001_mini"
   
 Moving to V8 with hard player
-
-.\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py --players AIPlayer,beginner --benchmark_games 12000 --models_dir "models\regression\discard_v8\002_medium3" --no_auto_mixed_benchmarks
-
 .\.venv\Scripts\python.exe .\scripts\train_models.py `
   --data_dir "datasets\discard_v8" `
   --models_dir "models\regression" `
@@ -182,29 +170,10 @@ MLPV8[002_small] vs beginner after 70000 training games avg point diff 2.07 (95%
 MLPV8[002_large] vs beginner after 70000 training games avg point diff 2.36 (95% CI 1.90 - 2.82) wins=6443/12000 winrate=53.69% (95% CI 52.80% - 54.58%)
 MLPV8[002_small3] vs beginner after 70000 training games avg point diff 1.56 (95% CI 1.10 - 2.02) wins=6195/12000 winrate=51.62% (95% CI 50.73% - 52.52%)
 
-RL self play double check that things are improving. self play v8 model 004
-MLPV8[002_medium] vs beginner after 300 training games avg point diff 3.20 (95% CI 2.79 - 3.61) wins=8436/15000 winrate=56.24% (95% CI 55.45% - 57.03%)
-MLPV8[002_medium] vs hard after 400 training games avg point diff -1.73 (95% CI -2.13 - -1.33) wins=7131/15000 winrate=47.54% (95% CI 46.74% - 48.34%)
-
 hard vs medium avg point diff 1.35 (95% CI 0.87 - 1.83) wins=5114/10000 winrate=51.14% (95% CI 50.16% - 52.12%)
 medium vs beginner avg point diff 3.34 (95% CI 2.69 - 3.98) wins=3330/6000 winrate=55.50% (95% CI 54.24% - 56.75%)
 hard vs beginner avg point diff 4.57 (95% CI 4.08 - 5.07) wins=5749/10000 winrate=57.49% (95% CI 56.52% - 58.46%)
-
-.\.venv\Scripts\python.exe .\scripts\rl_loop.py `
-  --model_version "selfplayv8" `
-  --games_per_iteration 1 `
-  --hands_per_game 2 `
-  --eval_games 1 `
-  --loops -1 `
-  --lr 1e-5 `
-  --epochs 1 `
-  --no-train_from_saved_shards `
-  --accept_margin 0.01 `
-  --baseline_mode hard_vs_hard `
-  --no-save_data
-  --target_mode score_aware `
-  --winrate_weight 0.5 `
-
+MLPV8[selfplayv8_004] vs beginner after 300 training games avg point diff 3.20 (95% CI 2.79 - 3.61) wins=8436/15000 winrate=56.24% (95% CI 55.45% - 57.03%)
 
 Best model before switching to hand_per_game=2 is 014
 Best model before switching to hard vs hard, best vs hard is 021
@@ -220,3 +189,10 @@ loop         | best_w/g     | best_wr | best_diff | cand_w/g     | cand_wr | can
 2/infinite   |     986/2000 |   0.493 |     -0.55 |     946/2000 |   0.473 |     -1.51 | rejected (diff -0.96)      
 3/infinite   |     967/2000 |   0.483 |     -0.57 |     949/2000 |   0.474 |     -1.57 | rejected (diff -1.00)
 4/infinite   |     944/2000 |   0.472 |     -1.23 |     897/2000 |   0.449 |     -2.73 | rejected (diff -1.50)
+
+006 performance against beginner
+MLPV8[medium3] vs beginner after 500 training games avg point diff 2.93 (95% CI 2.58 - 3.29) wins=11044/20000 winrate=55.22% (95% CI 54.53% - 55.91%)
+MLPV8DiscardOnlyPlayer[medium3] vs beginner avg point diff 2.31 (95% CI 1.95 - 2.66) wins=10739/20000 winrate=53.70% (95% CI 53.00% - 54.39%)
+
+large3=512,256,128
+xl=1024,512

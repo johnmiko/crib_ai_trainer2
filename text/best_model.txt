@@ -1,6 +1,6 @@
 {
   "path": "C:\\Users\\johnm\\ccode\\crib_ai_trainer2\\models\\regression\\selfv7\\001",
   "benchmarks": {},
-  "selfplay_data_dir": "C:\\Users\\johnm\\ccode\\crib_ai_trainer2\\datasets\\selfplayv7\\001",
+  "selfplay_data_dir": "C:\\Users\\johnm\\ccode\\crib_ai_trainer2\\datasets\\selfplayv7",
   "selfplay_shards_used": 20
 }
