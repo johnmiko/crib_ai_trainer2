@@ -1,5 +1,5 @@
 .\.venv\Scripts\python.exe .\scripts\shard_sweep.py `
-  --data_dir "il_datasets\discard_v7\001" `
+  --data_dir "datasets\discard_v7" `
   --models_dir "models\regression" `
   --model_version "discard_v7" `
   --model_type mlp `

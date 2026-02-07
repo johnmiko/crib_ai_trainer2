@@ -22,7 +22,7 @@ def run_script(path: Path, argv: list[str]) -> None:
 
 def test_generate_il_data_creates_npz_files(tmp_path: Path) -> None:
     logger.info(tmp_path)
-    out_dir = tmp_path / "il_datasets"    
+    out_dir = tmp_path / "datasets"    
 
     # small + deterministic
     generate_il_data(50, str(out_dir), 0)    

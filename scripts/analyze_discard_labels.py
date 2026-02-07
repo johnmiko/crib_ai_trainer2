@@ -164,7 +164,7 @@ def analyze(data_dir: Path, max_shards: int | None, max_hands: int, seed: int) -
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--data_dir", type=str, default="il_datasets")
+    ap.add_argument("--data_dir", type=str, default="datasets")
     ap.add_argument("--max_shards", type=int, default=1)
     ap.add_argument("--max_hands", type=int, default=200)
     ap.add_argument("--seed", type=int, default=0)

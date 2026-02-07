@@ -4,7 +4,6 @@ from crib_ai_trainer.constants import (
     MODELS_DIR,
     TRAINING_DATA_DIR,
     DEFAULT_DATASET_VERSION,
-    DEFAULT_DATASET_RUN_ID,
     DEFAULT_MODEL_VERSION,
     DEFAULT_MODEL_RUN_ID,
     DEFAULT_STRATEGY,
@@ -80,17 +79,6 @@ def build_generate_il_parser() -> argparse.ArgumentParser:
     )
     ap.add_argument("--out_dir", type=str, default=TRAINING_DATA_DIR)
     ap.add_argument("--dataset_version", type=str, default=DEFAULT_DATASET_VERSION)
-    ap.add_argument(
-        "--run_id",
-        type=str,
-        default=DEFAULT_DATASET_RUN_ID or None,
-        help="Run id folder (e.g., 001). Omit to append to latest run unless --new_run is set.",
-    )
-    ap.add_argument(
-        "--new_run",
-        action="store_true",
-        help="Create a new run folder even if one already exists for this dataset_version.",
-    )
     ap.add_argument("--seed", type=int, default=_default_seed(), help="Random seed. Omit to use a random seed.")
     ap.add_argument("--strategy", type=str, default=DEFAULT_STRATEGY)
     ap.add_argument(
@@ -185,7 +173,6 @@ def build_generate_self_play_parser() -> argparse.ArgumentParser:
     ap.add_argument("--workers", type=int, default=1, help="Number of worker processes for self-play generation.")
     ap.add_argument("--out_dir", type=str, default=TRAINING_DATA_DIR)
     ap.add_argument("--dataset_version", type=str, default=DEFAULT_DATASET_VERSION)
-    ap.add_argument("--run_id", type=str, default=DEFAULT_DATASET_RUN_ID or None)
     ap.add_argument("--models_dir", type=str, required=True)
     ap.add_argument("--model_version", type=str, default=None)
     ap.add_argument("--model_run_id", type=str, default=None)
@@ -258,7 +245,6 @@ def build_do_everything_parser() -> argparse.ArgumentParser:
     ap.add_argument("--training_dir", type=str, default=TRAINING_DATA_DIR)
     ap.add_argument("--pegging_data_dir", type=str, default=DEFAULT_PEGGING_DATA_DIR, help="Dataset dir for pegging shards.")
     ap.add_argument("--dataset_version", type=str, default=DEFAULT_DATASET_VERSION)
-    ap.add_argument("--dataset_run_id", type=str, default=DEFAULT_DATASET_RUN_ID or None)
     ap.add_argument("--strategy", type=str, default=DEFAULT_STRATEGY)
     ap.add_argument("--pegging_feature_set", type=str, default=DEFAULT_PEGGING_FEATURE_SET, choices=["basic", "full"])
     ap.add_argument("--seed", type=int, default=_default_seed())

@@ -26,7 +26,6 @@ sys.path.insert(0, ".")
 from crib_ai_trainer.constants import (
     TRAINING_DATA_DIR,
     DEFAULT_DATASET_VERSION,
-    DEFAULT_DATASET_RUN_ID,
     DEFAULT_STRATEGY,
     DEFAULT_PEGGING_FEATURE_SET,
     DEFAULT_GAMES_PER_LOOP,
@@ -1322,12 +1321,10 @@ def save_data(
     # Write/update dataset metadata for easy inspection.
     # This overwrites each time with the latest shard info.
     out_path = Path(out_dir)
-    dataset_version = out_path.parent.name
-    run_id = out_path.name
+    dataset_version = out_path.name
     dataset_meta = {
         "updated_at_utc": datetime.now(timezone.utc).isoformat(),
         "dataset_version": dataset_version,
-        "run_id": run_id,
         "strategy": strategy,
         "crib_ev_mode": crib_ev_mode,
         "crib_mc_samples": crib_mc_samples,
@@ -1389,7 +1386,6 @@ def save_data(
     lines = [
         f"updated_at_utc: {dataset_meta['updated_at_utc']}",
         f"dataset_version: {dataset_meta['dataset_version']}",
-        f"run_id: {dataset_meta['run_id']}",
         f"strategy: {dataset_meta['strategy']}",
         f"crib_ev_mode: {dataset_meta['crib_ev_mode']}",
         f"crib_mc_samples: {dataset_meta['crib_mc_samples']}",
@@ -1435,38 +1431,13 @@ def save_data(
         f.write("\n".join(lines) + "\n")
     logger.debug(f"Saved dataset summary -> {txt_path}")
 
-def _next_run_id(base_dir: str) -> str:
-    base = Path(base_dir)
-    base.mkdir(parents=True, exist_ok=True)
-    existing = [p.name for p in base.iterdir() if p.is_dir() and p.name.isdigit()]
-    if not existing:
-        return "001"
-    max_id = max(int(x) for x in existing)
-    return f"{max_id + 1:03d}"
-
-def _latest_run_id(base_dir: str) -> str | None:
-    base = Path(base_dir)
-    if not base.exists():
-        return None
-    existing = [p.name for p in base.iterdir() if p.is_dir() and p.name.isdigit()]
-    if not existing:
-        return None
-    max_id = max(int(x) for x in existing)
-    return f"{max_id:03d}"
-
 def _resolve_output_dir(
     base_out_dir: str,
     dataset_version: str,
-    run_id: str | None,
-    new_run: bool,
 ) -> str:
     version_dir = Path(base_out_dir) / dataset_version
-    if run_id is None:
-        if new_run:
-            run_id = _next_run_id(str(version_dir))
-        else:
-            run_id = _latest_run_id(str(version_dir)) or "001"
-    return str(version_dir / run_id)
+    version_dir.mkdir(parents=True, exist_ok=True)
+    return str(version_dir)
 
 
 def get_cumulative_game_count(out_dir):
@@ -1505,7 +1476,7 @@ def _init_logging_players(
     pegging_ev_mode: str,
     pegging_ev_rollouts: int,
     log_pegging: bool = True,
-    teacher_player: str = "medium",
+    teacher_player: str = "hard",
 ):
     if teacher_player == "hard":
         PlayerCls = LoggingHardPlayer
@@ -1713,7 +1684,7 @@ def generate_il_data(
     workers: int = 1,
     save_pegging: bool = True,
     max_buffer_games: int | None = 500,
-    teacher_player: str = "medium",
+    teacher_player: str = "hard",
 ) -> int:
     if seed is None:
         seed = secrets.randbits(32)
@@ -1949,7 +1920,7 @@ if __name__ == "__main__":
     )
     if args.win_prob_min_score < 0:
         raise ValueError("win_prob_min_score must be >= 0")
-    resolved_out_dir = _resolve_output_dir(args.out_dir, args.dataset_version, args.run_id, args.new_run)
+    resolved_out_dir = _resolve_output_dir(args.out_dir, args.dataset_version)
     generate_il_data(
         args.games,
         resolved_out_dir,
@@ -1972,12 +1943,12 @@ if __name__ == "__main__":
     )
 
 # python .\scripts\generate_il_data.py
-# python .\scripts\generate_il_data.py --games -1 --out_dir "il_datasets" --dataset_version "discard_v2" --strategy regression
+# python .\scripts\generate_il_data.py --games -1 --out_dir "datasets" --dataset_version "discard_v2" --strategy regression
 
-# .\.venv\Scripts\python.exe .\scripts\generate_il_data.py --games 4000 --out_dir "il_datasets" --dataset_version "discard_v2" --strategy regression
+# .\.venv\Scripts\python.exe .\scripts\generate_il_data.py --games 4000 --out_dir "datasets" --dataset_version "discard_v2" --strategy regression
 
 
-# .\.venv\Scripts\python.exe .\scripts\train_models.py --data_dir "il_datasets\discard_v2\001" --models_dir "models" --model_version "discard_v2" --run_id 003 --discard_loss regression --epochs 5 --eval_samples 2048 --lr 0.0001 --l2 0.001 --batch_size 1024
+# .\.venv\Scripts\python.exe .\scripts\train_models.py --data_dir "datasets\discard_v2" --models_dir "models" --model_version "discard_v2" --run_id 003 --discard_loss regression --epochs 5 --eval_samples 2048 --lr 0.0001 --l2 0.001 --batch_size 1024
 
 # .\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py --players AIPlayer,beginner --games 200 --models_dir "models\discard_v2\003"
 

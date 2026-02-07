@@ -25,27 +25,15 @@ def _run_do_everything_smoke(training_dir: str, models_dir: str) -> None:
     args.dataset_version = "discard_smoke"
     args.model_version = "discard_smoke"
 
-    if args.data_dir is None:
-        args.data_dir = args.training_dir
-
     base_models_dir = args.models_dir
     training_path = Path(args.training_dir)
     has_shards = bool(list(training_path.glob("discard_*.npz"))) or bool(
         list(training_path.glob("pegging_*.npz"))
     )
-    if has_shards and (args.dataset_run_id is not None):
+    if has_shards:
         dataset_dir = str(training_path)
     else:
-        base_out_dir = args.training_dir
-        if has_shards and args.dataset_version not in training_path.parts:
-            base_out_dir = str(training_path.parent.parent)
-        dataset_dir = _resolve_output_dir(
-            base_out_dir,
-            args.dataset_version,
-            args.dataset_run_id,
-            new_run=False,
-        )
-    args.data_dir = dataset_dir
+        dataset_dir = _resolve_output_dir(args.training_dir, args.dataset_version)
     data_pegging_feature_set = args.pegging_feature_set
 
     _gen_il(
@@ -86,7 +74,7 @@ def _run_do_everything_smoke(training_dir: str, models_dir: str) -> None:
 
 def test_do_everything_smoke():
     with tempfile.TemporaryDirectory() as tmpdir:
-        training_dir = str(Path(tmpdir) / "il_datasets")
+        training_dir = str(Path(tmpdir) / "datasets")
         models_dir = str(Path(tmpdir) / "models")
         _run_do_everything_smoke(training_dir, models_dir)
 

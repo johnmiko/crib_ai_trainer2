@@ -161,31 +161,37 @@ def _winrate(result: dict | None) -> float:
     return float(result.get("winrate", 0.0))
 
 
-def _load_best_record(best_file: Path) -> dict:
+def _load_best_map(best_file: Path) -> dict:
     if not best_file.exists():
         raise SystemExit(f"Best model file not found: {best_file}")
     raw = best_file.read_text(encoding="utf-8").strip()
     if not raw:
         raise SystemExit(f"Best model file is empty: {best_file}")
-    try:
-        data = json.loads(raw)
-        if isinstance(data, dict) and "path" in data:
-            return data
-    except Exception:
-        pass
-    # Backward compatibility: plain path
-    return {"path": raw, "benchmarks": {}}
+    data = json.loads(raw)
+    if not isinstance(data, dict):
+        raise SystemExit(f"Best model file must be a JSON object: {best_file}")
+    return data
 
 
-def _write_best_record(best_file: Path, record: dict) -> None:
-    best_file.write_text(json.dumps(record, indent=2), encoding="utf-8")
+def _write_best_record(best_file: Path, model_version: str, record: dict) -> None:
+    data = _load_best_map(best_file)
+    data[model_version] = record
+    best_file.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+
+def _get_best_record(best_file: Path, model_version: str) -> dict:
+    data = _load_best_map(best_file)
+    record = data.get(model_version)
+    if not isinstance(record, dict):
+        raise SystemExit(f"Best model file missing entry for {model_version}: {best_file}")
+    if not record.get("path"):
+        raise SystemExit(f"Best model entry missing path for {model_version}: {best_file}")
+    return record
 
 
 def _get_best_path(best_file: Path, models_dir: Path, model_version: str) -> Path:
-    record = _load_best_record(best_file)
-    if record.get("path"):
-        return Path(str(record["path"]).strip())
-    raise SystemExit(f"Best model file missing path field: {best_file}")
+    record = _get_best_record(best_file, model_version)
+    return Path(str(record["path"]).strip())
 
 
 def _next_run_id(version_dir: Path) -> str:
@@ -223,14 +229,14 @@ if __name__ == "__main__":
         args.benchmark_games = 2
         args.benchmark_workers = 1
     if not args.best_file:
-        args.best_file = f"text/best_model_{args.model_version}.txt"
+        args.best_file = "text/best_models_selfplay.json"
     if not args.selfplay_dataset_version:
         args.selfplay_dataset_version = _selfplay_version_from_model_version(args.model_version)
 
     models_dir = Path(args.models_dir)
     best_file = Path(args.best_file)
-    teacher_dir = _resolve_output_dir(TRAINING_DATA_DIR, args.teacher_dataset_version, None, new_run=False)
-    selfplay_dir = _resolve_output_dir(TRAINING_DATA_DIR, args.selfplay_dataset_version, None, new_run=False)
+    teacher_dir = _resolve_output_dir(TRAINING_DATA_DIR, args.teacher_dataset_version)
+    selfplay_dir = _resolve_output_dir(TRAINING_DATA_DIR, args.selfplay_dataset_version)
 
     i = 0
     no_improve_streak = 0
@@ -238,7 +244,7 @@ if __name__ == "__main__":
     while True:
         i += 1
         print(f"\n=== Self-play loop {i} ===")
-        best_record = _load_best_record(best_file)
+        best_record = _get_best_record(best_file, args.model_version)
         best_path = _get_best_path(best_file, models_dir, args.model_version)
         print(f"Frozen best: {best_path}")
         print(f"Best model run: {best_path.name} (version: {best_path.parent.name})")
@@ -288,7 +294,7 @@ if __name__ == "__main__":
                         raise SystemExit(f"No self-play discard shards found in {selfplay_dir}")
                     best_record["selfplay_data_dir"] = str(selfplay_dir)
                     best_record["selfplay_shards_used"] = len(shards)
-                    _write_best_record(best_file, best_record)
+                    _write_best_record(best_file, args.model_version, best_record)
                 if Path(best_record["selfplay_data_dir"]) != Path(selfplay_dir):
                     raise SystemExit(
                         f"best_model selfplay_data_dir={best_record['selfplay_data_dir']} "
@@ -309,7 +315,7 @@ if __name__ == "__main__":
                 raise SystemExit("--selfplay_ratio must be between 0 and 1.")
             best_record["selfplay_data_dir"] = str(selfplay_dir)
             best_record["selfplay_shards_used"] = len(selfplay_shards)
-            _write_best_record(best_file, best_record)
+            _write_best_record(best_file, args.model_version, best_record)
 
         train_args = argparse.Namespace(
             data_dir=selfplay_dir if args.incremental else teacher_dir,
@@ -411,7 +417,7 @@ if __name__ == "__main__":
                     **best_vs_medium,
                     "benchmark_games": args.benchmark_games,
                 }
-                _write_best_record(best_file, best_record)
+                _write_best_record(best_file, args.model_version, best_record)
 
             if args.benchmark_opponent == "beginner":
                 print("Benchmark: NEW vs BEGINNER")
@@ -477,7 +483,7 @@ if __name__ == "__main__":
                     "benchmark_games": args.benchmark_games,
                 }
             if not args.smoke:
-                _write_best_record(best_file, new_record)
+                _write_best_record(best_file, args.model_version, new_record)
             print("Accepted new model.")
             no_improve_streak = 0
         else:

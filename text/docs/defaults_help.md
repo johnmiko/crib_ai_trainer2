@@ -9,7 +9,7 @@ Edit this file to change the defaults:
 ## Key Defaults (from .env)
 These affect all four scripts:
 - `TRAINING_DATA_DIR` and `MODELS_DIR`: base folders for data and models
-- `DATASET_VERSION`, `DATASET_RUN_ID`: where new IL data is stored
+- `DATASET_VERSION`: where new IL data is stored
 - `MODEL_VERSION`, `MODEL_RUN_ID`: where new models are stored
 - `STRATEGY` and `DISCARD_LOSS`: classification vs regression vs ranking
 - `PEGGING_FEATURE_SET`: feature set used when **generating datasets** (`basic` or `full`)
@@ -45,7 +45,7 @@ Run any of these without flags and they will use `.env`:
 ```
 
 Benchmark results are also logged in structured form to:
-`C:\Users\johnm\ccode\crib_ai_trainer2\experiments.jsonl`
+`C:\Users\johnm\ccode\crib_ai_trainer2\text\experiments.jsonl`
 
 ## Self-Play (On-Policy) Data
 Generate self-play data using the latest model:

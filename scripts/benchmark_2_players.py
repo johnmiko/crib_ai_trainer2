@@ -668,9 +668,9 @@ if __name__ == "__main__":
 # python scripts/benchmark_2_players.py
 # python scripts/benchmark_2_players.py --players AIPlayer,beginner --games 200 --models_dir "models/ranking" --max_shards 6 --fallback_player beginner
 
-# .\.venv\Scripts\python.exe .\scripts\generate_il_data.py --games 4000 --out_dir "il_datasets" --dataset_version "discard_v2" --run_id 001 --strategy regression
+# .\.venv\Scripts\python.exe .\scripts\generate_il_data.py --games 4000 --out_dir "datasets" --dataset_version "discard_v2" --strategy regression
 
-# .\.venv\Scripts\python.exe .\scripts\train_models.py --data_dir "il_datasets\discard_v3\001" --models_dir "models" --model_version "discard_v3" --run_id 002 --discard_loss regression --epochs 5 --eval_samples 2048 --lr 0.00005 --l2 0.001 --batch_size 2048
+# .\.venv\Scripts\python.exe .\scripts\train_models.py --data_dir "datasets\discard_v3" --models_dir "models" --model_version "discard_v3" --run_id 002 --discard_loss regression --epochs 5 --eval_samples 2048 --lr 0.00005 --l2 0.001 --batch_size 2048
 
 # .\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py --players AIPlayer,beginner --benchmark_games 200 --models_dir "models\regression\"
 # .\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py

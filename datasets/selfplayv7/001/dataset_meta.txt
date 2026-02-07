@@ -1,0 +1,43 @@
+updated_at_utc: 2026-02-05T22:51:02.373863+00:00
+dataset_version: selfplayv7
+run_id: 001
+strategy: regression
+crib_ev_mode: mc
+crib_mc_samples: 32
+pegging_label_mode: rollout2
+pegging_rollouts: 32
+win_prob_mode: rollout
+win_prob_rollouts: 16
+win_prob_min_score: 90
+pegging_ev_mode: off
+pegging_ev_rollouts: 8
+has_discard_win_prob: False
+cumulative_games: 2502
+seed: 432393143
+
+discard_file: discard_2502.npz
+discard_X_shape: [13590, 161]
+discard_y_shape: [13590]
+discard_features:
+  - 52 multi-hot discards
+  - 52 multi-hot kept
+  - 1 float (1.0 if dealer_is_self else 0.0)
+  - player_score, opponent_score, score_margin, endgame_self, endgame_opp, endgame_any
+  - total_dim: 161
+discard_label: avg_total_score (crib_ev_mode=mc)
+
+pegging_file: pegging_2502.npz
+pegging_X_shape: [8749, 369]
+pegging_y_shape: [8749]
+pegging_features:
+  - 52 multi-hot
+  - 52 multi-hot
+  - 32 one-hot (0..31)
+  - 52 one-hot
+  - 52 multi-hot
+  - 52 multi-hot
+  - 52 multi-hot
+  - 25 scalar pegging features (15/31 flags, runs, setups, hand sizes, go-prob, scores, endgame)
+  - feature_set: full
+  - total_dim: 369
+pegging_label: pegging_label_mode=rollout2

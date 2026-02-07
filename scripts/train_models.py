@@ -1,7 +1,7 @@
 """Train models from sharded datasets.
 
 Usage:
-  python scripts/train_models.py --data_dir il_datasets --models_dir models --epochs 20
+  python scripts/train_models.py --data_dir datasets --models_dir models --epochs 20
 """
 
 from __future__ import annotations
@@ -759,6 +759,6 @@ if __name__ == "__main__":
     train_models(args)
 
 # python .\scripts\train_models.py
-# .\.venv\Scripts\python.exe .\scripts\train_models.py --data_dir "il_datasets/discard_v3/001" --models_dir "models" --model_version "discard_v3" --discard_loss regression --epochs 5 --eval_samples 2048 --lr 0.00005 --batch_size 2048 --l2 0.001
+# .\.venv\Scripts\python.exe .\scripts\train_models.py --data_dir "datasets/discard_v3" --models_dir "models" --model_version "discard_v3" --discard_loss regression --epochs 5 --eval_samples 2048 --lr 0.00005 --batch_size 2048 --l2 0.001
 
 # Script summary: train discard/pegging value models from IL datasets and write model artifacts.

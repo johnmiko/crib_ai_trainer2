@@ -6,6 +6,7 @@ import json
 import random
 import shutil
 from datetime import datetime, timezone
+import json
 from pathlib import Path
 
 import numpy as np
@@ -24,6 +25,8 @@ from crib_ai_trainer.players.neural_player import (
     get_pegging_feature_indices,
 )
 from cribbage.players.hard_player import HardPlayer
+from cribbage.players.medium_player import MediumPlayer
+from cribbage.players.beginner_player import BeginnerPlayer
 from cribbage.utils import play_game
 from cribbage.cribbagegame import CribbageGame
 
@@ -125,6 +128,7 @@ def _save_models(model_dir: Path, discard_model: MLPValueModel, pegging_model: M
 
 
 def _evaluate(player: AIPlayer, opponent, games: int, seed: int) -> dict:
+    _ensure_unique_names(player, opponent)
     wins = 0
     diffs = []
     for i in range(games):
@@ -143,8 +147,19 @@ def _evaluate(player: AIPlayer, opponent, games: int, seed: int) -> dict:
     return {"wins": wins, "games": games, "winrate": winrate, "avg_diff": avg_diff}
 
 
+def _ensure_unique_names(p0, p1):
+    if getattr(p0, "name", None) == getattr(p1, "name", None):
+        p0.name = f"{p0.name}_0"
+        p1.name = f"{p1.name}_1"
+    return p0, p1
+
+
 def _play_n_hands(p0, p1, seed: int | None, hands: int) -> float:
+    p0, p1 = _ensure_unique_names(p0, p1)
     game = CribbageGame(players=[p0, p1], seed=seed, copy_players=False, fast_mode=True)
+    max_score = max(121, 121 * int(hands))
+    game.MAX_SCORE = max_score
+    game.board.max_score = max_score
     game_score = [0, 0]
     for _ in range(hands):
         game_score = game.play_round(game_score, seed=game.round_seed)
@@ -170,9 +185,19 @@ def _compute_target(diff: float, target_mode: str, winrate_weight: float) -> flo
     return (winrate_weight * win) + ((1.0 - winrate_weight) * diff)
 
 
+def _build_opponent(name: str):
+    if name == "hard":
+        return HardPlayer(name="hard")
+    if name == "medium":
+        return MediumPlayer(name="medium")
+    if name == "beginner":
+        return BeginnerPlayer(name="beginner")
+    raise SystemExit(f"Unsupported opponent: {name}")
+
+
 def _collect_training_batch(args_tuple: tuple) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     (
-        best_dir_str,
+        source_dir_str,
         discard_feature_set,
         pegging_feature_set,
         games,
@@ -180,17 +205,20 @@ def _collect_training_batch(args_tuple: tuple) -> tuple[np.ndarray, np.ndarray, 
         target_mode,
         winrate_weight,
         hands_per_game,
+        baseline_mode,
+        opponent_name,
     ) = args_tuple
-    best_dir = Path(best_dir_str)
-    discard_model, pegging_model, _ = _load_best_models(best_dir)
+    source_dir = Path(source_dir_str)
+    discard_model, pegging_model, _ = _load_best_models(source_dir)
     learner = RLLoggingPlayer(
         discard_model,
         pegging_model,
-        name=f"learner:{best_dir.name}",
+        name=f"learner:{source_dir.name}",
         discard_feature_set=discard_feature_set,
         pegging_feature_set=pegging_feature_set,
     )
-    opponent = HardPlayer(name="hard")
+    opponent = _build_opponent(opponent_name)
+    baseline_opponent = HardPlayer(name="hard")
 
     Xd_list: list[np.ndarray] = []
     Xp_list: list[np.ndarray] = []
@@ -212,6 +240,16 @@ def _collect_training_batch(args_tuple: tuple) -> tuple[np.ndarray, np.ndarray, 
                 diff = _play_n_hands(learner, opponent, game_seed, hands_per_game)
             else:
                 diff = -_play_n_hands(opponent, learner, game_seed, hands_per_game)
+        if baseline_mode == "hard_vs_hard":
+            if hands_per_game is None:
+                b0_player = baseline_opponent
+                b1_player = HardPlayer(name="hard")
+                _ensure_unique_names(b0_player, b1_player)
+                b0, b1 = play_game(b0_player, b1_player, seed=game_seed, fast_mode=True, copy_players=False)
+                baseline_diff = float(b0 - b1)
+            else:
+                baseline_diff = _play_n_hands(baseline_opponent, HardPlayer(name="hard"), game_seed, hands_per_game)
+            diff = diff - baseline_diff
         target = _compute_target(diff, target_mode, winrate_weight)
         d_feats, p_feats = learner.get_logged_features()
         Xd_list.extend(d_feats)
@@ -234,7 +272,38 @@ def _collect_training_batch(args_tuple: tuple) -> tuple[np.ndarray, np.ndarray, 
     return Xd, yd, Xp, yp
 
 
+def _load_best_map(best_file: Path) -> dict:
+    if not best_file.exists():
+        raise SystemExit(f"Best model file not found: {best_file}")
+    raw = best_file.read_text(encoding="utf-8").strip()
+    if not raw:
+        raise SystemExit(f"Best model file is empty: {best_file}")
+    data = json.loads(raw)
+    if not isinstance(data, dict):
+        raise SystemExit(f"Best model file must be a JSON object: {best_file}")
+    return data
+
+
+def _get_best_dir(best_file: Path, model_version: str) -> Path:
+    data = _load_best_map(best_file)
+    entry = data.get(model_version)
+    if not isinstance(entry, dict) or not entry.get("path"):
+        raise SystemExit(f"Best model entry missing path for {model_version} in {best_file}")
+    return Path(str(entry["path"]).strip())
+
+
+def _write_best_dir(best_file: Path, model_version: str, best_dir: Path) -> None:
+    data = _load_best_map(best_file)
+    entry = data.get(model_version)
+    if not isinstance(entry, dict):
+        entry = {}
+    entry["path"] = str(best_dir)
+    data[model_version] = entry
+    best_file.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+
 def _evaluate_hands(player: AIPlayer, opponent, games: int, seed: int, hands: int) -> dict:
+    _ensure_unique_names(player, opponent)
     wins = 0
     diffs = []
     for i in range(games):
@@ -264,7 +333,9 @@ if __name__ == "__main__":
     ap.add_argument("--accept_margin", type=float, default=0.0)
     ap.add_argument("--hands_per_game", type=int, default=None, help="If set, play this many hands per game for training instead of full games.")
     ap.add_argument("--eval_hands_per_game", type=int, default=None, help="If set, play this many hands per eval game instead of full games.")
-    ap.add_argument("--save_data_dir", type=str, default="il_datasets/selfplayv8/rl")
+    ap.add_argument("--baseline_mode", type=str, default="none", choices=["none", "hard_vs_hard"])
+    ap.add_argument("--opponent", type=str, default="hard", choices=["hard", "medium", "beginner"])
+    ap.add_argument("--save_data_dir", type=str, default=None)
     ap.add_argument("--save_data", action=argparse.BooleanOptionalAction, default=True)
     ap.add_argument("--max_saved_shards", type=int, default=500)
     ap.add_argument("--train_from_saved_shards", action=argparse.BooleanOptionalAction, default=True)
@@ -304,38 +375,43 @@ if __name__ == "__main__":
         print(f"Using random seed: {base_seed}")
 
     base_dir = Path(args.models_dir) / args.model_version
-    default_best_file = Path(f"text/best_model_{args.model_version}.txt")
+    default_best_file = Path("text/best_models_selfplay.json")
     best_file = Path(args.best_file) if args.best_file else default_best_file
+    if args.save_data_dir is None:
+        args.save_data_dir = f"datasets/{args.model_version}/rl"
 
     if args.best_run_id:
         best_dir = base_dir / args.best_run_id
     else:
-        if not best_file.exists():
-            raise SystemExit(f"Expected best_file at {best_file} but it does not exist.")
-        best_dir = Path(best_file.read_text(encoding="utf-8").strip())
+        best_dir = _get_best_dir(best_file, args.model_version)
         if not best_dir.exists():
             raise SystemExit(f"Best model path from {best_file} does not exist: {best_dir}")
 
     loop_idx = 0
     max_loops = None if args.loops < 0 else args.loops
 
+    header_printed = False
     while True:
         loop_idx += 1
         loop_label = "infinite" if max_loops is None else str(max_loops)
-        print(f"=== RL loop {loop_idx}/{loop_label} ===")
 
         discard_model, pegging_model, meta = _load_best_models(best_dir)
         discard_feature_set = meta.get("discard_feature_set", "full")
         pegging_feature_set = meta.get("pegging_feature_set", "full")
 
+        candidate_dir = base_dir / "_candidate"
+        if candidate_dir.exists():
+            shutil.rmtree(candidate_dir)
+        _save_models(candidate_dir, discard_model, pegging_model, meta)
+
         learner = RLLoggingPlayer(
             discard_model,
             pegging_model,
-            name=f"learner:{best_dir.name}",
+            name=f"learner:{candidate_dir.name}",
             discard_feature_set=discard_feature_set,
             pegging_feature_set=pegging_feature_set,
         )
-        opponent = HardPlayer(name="hard")
+        opponent = _build_opponent(args.opponent)
 
         Xd_list: list[np.ndarray] = []
         Xp_list: list[np.ndarray] = []
@@ -350,7 +426,7 @@ if __name__ == "__main__":
         if args.workers == 1:
             Xd, yd, Xp, yp = _collect_training_batch(
                 (
-                    str(best_dir),
+                    str(candidate_dir),
                     discard_feature_set,
                     pegging_feature_set,
                     games_total,
@@ -358,6 +434,8 @@ if __name__ == "__main__":
                     args.target_mode,
                     args.winrate_weight,
                     args.hands_per_game,
+                    args.baseline_mode,
+                    args.opponent,
                 )
             )
         else:
@@ -371,7 +449,7 @@ if __name__ == "__main__":
                     continue
                 tasks.append(
                     (
-                        str(best_dir),
+                        str(candidate_dir),
                         discard_feature_set,
                         pegging_feature_set,
                         n_games,
@@ -379,6 +457,8 @@ if __name__ == "__main__":
                         args.target_mode,
                         args.winrate_weight,
                         args.hands_per_game,
+                        args.baseline_mode,
+                        args.opponent,
                     )
                 )
             if not tasks:
@@ -488,26 +568,87 @@ if __name__ == "__main__":
         if args.eval_hands_per_game is None:
             best_eval = _evaluate(best_player, opponent, eval_games, eval_seed)
             cand_eval = _evaluate(cand_player, opponent, eval_games, eval_seed)
+            if args.baseline_mode == "hard_vs_hard":
+                baseline_eval = _evaluate(HardPlayer(name="hard"), HardPlayer(name="hard"), eval_games, eval_seed)
+            else:
+                baseline_eval = None
         else:
             best_eval = _evaluate_hands(best_player, opponent, eval_games, eval_seed, args.eval_hands_per_game)
             cand_eval = _evaluate_hands(cand_player, opponent, eval_games, eval_seed, args.eval_hands_per_game)
-        print(
-            "eval | "
-            f"best {best_eval['wins']}/{best_eval['games']} wr={best_eval['winrate']:.3f} diff={best_eval['avg_diff']:.2f} | "
-            f"cand {cand_eval['wins']}/{cand_eval['games']} wr={cand_eval['winrate']:.3f} diff={cand_eval['avg_diff']:.2f}"
-        )
+            if args.baseline_mode == "hard_vs_hard":
+                baseline_eval = _evaluate_hands(HardPlayer(name="hard"), HardPlayer(name="hard"), eval_games, eval_seed, args.eval_hands_per_game)
+            else:
+                baseline_eval = None
+        best_adj = best_eval["avg_diff"]
+        cand_adj = cand_eval["avg_diff"]
+        if baseline_eval is not None:
+            best_adj = best_adj - baseline_eval["avg_diff"]
+            cand_adj = cand_adj - baseline_eval["avg_diff"]
+        def _fmt(val: str, width: int, align: str = "left") -> str:
+            if align == "right":
+                return str(val).rjust(width)
+            return str(val).ljust(width)
 
-        if cand_eval["avg_diff"] >= (best_eval["avg_diff"] + args.accept_margin):
+        cols = [
+            ("loop", 12, "left"),
+            ("best_w/g", 12, "right"),
+            ("best_wr", 7, "right"),
+            ("best_diff", 9, "right"),
+        ]
+        if baseline_eval is not None:
+            cols += [
+                ("base_diff", 9, "right"),
+                ("best_adj", 9, "right"),
+            ]
+        cols += [
+            ("cand_w/g", 12, "right"),
+            ("cand_wr", 7, "right"),
+            ("cand_diff", 9, "right"),
+        ]
+        if baseline_eval is not None:
+            cols.append(("cand_adj", 9, "right"))
+        cols.append(("result", 14, "left"))
+
+        if not header_printed:
+            header = " | ".join(_fmt(name, width, "left") for name, width, _ in cols)
+            print(header)
+            header_printed = True
+        values = [
+            f"{loop_idx}/{loop_label}",
+            f"{best_eval['wins']}/{best_eval['games']}",
+            f"{best_eval['winrate']:.3f}",
+            f"{best_eval['avg_diff']:.2f}",
+        ]
+        if baseline_eval is not None:
+            values += [
+                f"{baseline_eval['avg_diff']:.2f}",
+                f"{best_adj:.2f}",
+            ]
+        values += [
+            f"{cand_eval['wins']}/{cand_eval['games']}",
+            f"{cand_eval['winrate']:.3f}",
+            f"{cand_eval['avg_diff']:.2f}",
+        ]
+        if baseline_eval is not None:
+            values.append(f"{cand_adj:.2f}")
+
+        accepted = cand_adj >= (best_adj + args.accept_margin)
+        result_text = "rejected"
+        if accepted:
             new_run_id = _next_run_id(base_dir)
             new_best_dir = base_dir / new_run_id
-            print(f"Accepted candidate (higher avg_diff). Saving as {new_run_id}.")
+            result_text = f"accepted -> {new_run_id}"
             shutil.copytree(candidate_dir, new_best_dir)
             best_dir = new_best_dir
-            best_file.write_text(str(best_dir))
-        else:
-            print("Rejected candidate (did not improve).")
+            _write_best_dir(best_file, args.model_version, best_dir)
+        values.append(result_text)
+        eval_line = " | ".join(
+            _fmt(val, width, align)
+            for (val, (name, width, align)) in zip(values, cols)
+        )
+        print(eval_line)
 
         if max_loops is not None and loop_idx >= max_loops:
             break
 
-# Script summary: play games vs hard, label decisions by final point diff, and update the best MLP if it improves.
+# Script summary: play games vs the chosen opponent, label decisions by final point diff, and update the best MLP if it improves.

@@ -20,7 +20,6 @@ sys.path.insert(0, ".")
 from crib_ai_trainer.constants import (
     TRAINING_DATA_DIR,
     DEFAULT_DATASET_VERSION,
-    DEFAULT_DATASET_RUN_ID,
     DEFAULT_STRATEGY,
     DEFAULT_PEGGING_FEATURE_SET,
     DEFAULT_GAMES_PER_LOOP,
@@ -522,7 +521,7 @@ if __name__ == "__main__":
         ],
     )
 
-    resolved_out_dir = _resolve_output_dir(args.out_dir, args.dataset_version, args.run_id, new_run=False)
+    resolved_out_dir = _resolve_output_dir(args.out_dir, args.dataset_version)
     models_dir = _resolve_models_dir(args.models_dir, args.model_version, args.model_run_id)
     generate_self_play_data(
         args.games,

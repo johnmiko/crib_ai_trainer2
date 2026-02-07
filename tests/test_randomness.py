@@ -32,7 +32,7 @@ def test_benchmark_seed_stability(capsys, tmp_path: Path) -> None:
     # Run the same 2-game beginner vs medium benchmark twice with a fixed seed.
     # We assert stdout/stderr match exactly to catch RNG sources that aren't
     # being seeded or reset consistently.
-    data_dir = str(tmp_path / "il_datasets")
+    data_dir = str(tmp_path / "datasets")
     models_dir = str(tmp_path / "models")
 
     _run_benchmark(data_dir, models_dir)

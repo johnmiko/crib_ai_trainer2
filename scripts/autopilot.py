@@ -82,7 +82,6 @@ def _read_mlp_hidden(models_dir: str) -> tuple[int, ...]:
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--dataset_version", type=str, default=DEFAULT_DATASET_VERSION)
-    ap.add_argument("--dataset_run_id", type=str, default="001")
     ap.add_argument("--models_dir", type=str, default=MODELS_DIR)
     ap.add_argument("--model_version", type=str, default=DEFAULT_MODEL_VERSION)
     ap.add_argument("--model_run_id", type=str, default=None)
@@ -175,7 +174,7 @@ if __name__ == "__main__":
     for loop_idx in range(1, args.loops + 1):
         _log(log_path, f"=== Autopilot loop {loop_idx} ===")
         if args.generate_il and (args.generate_il_each_loop or loop_idx == 1):
-            dataset_dir = _resolve_output_dir(TRAINING_DATA_DIR, args.dataset_version, args.dataset_run_id, new_run=False)
+            dataset_dir = _resolve_output_dir(TRAINING_DATA_DIR, args.dataset_version)
             _log(log_path, f"Generating IL data into {dataset_dir} (games={args.il_games})")
             generate_il_data(
                 args.il_games,
@@ -198,7 +197,7 @@ if __name__ == "__main__":
                 args.teacher_player,
             )
         if dataset_dir is None:
-            dataset_dir = _resolve_output_dir(TRAINING_DATA_DIR, args.dataset_version, args.dataset_run_id, new_run=False)
+            dataset_dir = _resolve_output_dir(TRAINING_DATA_DIR, args.dataset_version)
 
         model_dir = _resolve_models_dir(args.models_dir, args.model_version, args.model_run_id)
         _log(log_path, f"Training model in {model_dir}")

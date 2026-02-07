@@ -107,7 +107,7 @@ def _load_incremental_models(model_dir: Path, model_type: str, discard_dim: int,
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--data_dir", type=str, required=True, help="Dataset shard directory (e.g., il_datasets/xxx/001).")
+    ap.add_argument("--data_dir", type=str, required=True, help="Dataset shard directory (e.g., datasets/xxx).")
     ap.add_argument("--pegging_data_dir", type=str, default=None, help="Optional pegging shard dir.")
     ap.add_argument("--models_dir", type=str, default=MODELS_DIR)
     ap.add_argument("--model_version", type=str, default=DEFAULT_MODEL_VERSION)

@@ -56,10 +56,10 @@ MLPVV5.036Player vs medium [036] after 42500 training games avg point diff -1.87
 MLPVV5.044Player vs medium [044] after 58500 training games avg point diff -0.83 (95% CI -1.90 - 0.24) wins=957/2000 winrate=47.9%
 
 
-.\.venv\Scripts\python.exe .\scripts\train_linear_models.py --data_dir "il_datasets\discard_v5\001" --models_dir "models\regression" --model_version "discard_v5" --run_id 045_mini3 --discard_loss regression --model_type mlp --mlp_hidden "64,32,16"
-.\.venv\Scripts\python.exe .\scripts\train_linear_models.py --data_dir "il_datasets\discard_v5\001" --models_dir "models\regression" --model_version "discard_v5" --run_id 045_small3 --discard_loss regression --model_type mlp --mlp_hidden "128,64,32"
-.\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py --players NeuralRegressionPlayer,beginner --benchmark_games 6000 --models_dir "models\regression\discard_v5\045_mini3" --data_dir "il_datasets\discard_v5\001" --no_auto_mixed_benchmarks
-.\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py --players hard,medium --benchmark_games 1000 --models_dir "models\regression\discard_v5\045_mini3" --data_dir "il_datasets\discard_v5\001" --no_auto_mixed_benchmarks
+.\.venv\Scripts\python.exe .\scripts\train_linear_models.py --data_dir "datasets\discard_v5" --models_dir "models\regression" --model_version "discard_v5" --run_id 045_mini3 --discard_loss regression --model_type mlp --mlp_hidden "64,32,16"
+.\.venv\Scripts\python.exe .\scripts\train_linear_models.py --data_dir "datasets\discard_v5" --models_dir "models\regression" --model_version "discard_v5" --run_id 045_small3 --discard_loss regression --model_type mlp --mlp_hidden "128,64,32"
+.\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py --players NeuralRegressionPlayer,beginner --benchmark_games 6000 --models_dir "models\regression\discard_v5\045_mini3" --data_dir "datasets\discard_v5" --no_auto_mixed_benchmarks
+.\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py --players hard,medium --benchmark_games 1000 --models_dir "models\regression\discard_v5\045_mini3" --data_dir "datasets\discard_v5" --no_auto_mixed_benchmarks
 
 45 is medium size, against medium player
 MLPVV5.045Player vs medium [045] after 60500 training games avg point diff -1.32 (95% CI -2.42 - -0.22) wins=951/2000 winrate=47.5%
@@ -130,7 +130,7 @@ Change benchmarking to be against medium player since we can beat the beginner p
 # medium3=256,128,64
 # mini=64,32
 .\.venv\Scripts\python.exe .\scripts\mlp_size_sweep.py `
-  --data_dir "il_datasets\discard_v8\001" `
+  --data_dir "datasets\discard_v8" `
   --models_dir "models\regression" `
   --model_version "discard_v8" `
   --benchmark_games 10000 `
@@ -165,7 +165,7 @@ Moving to V8 with hard player
 .\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py --players AIPlayer,beginner --benchmark_games 12000 --models_dir "models\regression\discard_v8\002_medium3" --no_auto_mixed_benchmarks
 
 .\.venv\Scripts\python.exe .\scripts\train_models.py `
-  --data_dir "il_datasets\discard_v8\001" `
+  --data_dir "datasets\discard_v8" `
   --models_dir "models\regression" `
   --model_version "discard_v8" `
   --run_id "002_xl" `
@@ -173,13 +173,8 @@ Moving to V8 with hard player
   --mlp_hidden "1024,512"
 
 
-.\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py --players AIPlayer,beginner --benchmark_games 20000 --models_dir "models\regression\discard_v8\007" --no_auto_mixed_benchmarks
-
-.\.venv\Scripts\python.exe .\scripts\evo_loop.py `
-  --model_version "discard_v8" `
-  --best_run_id "002_medium" `
-  --games_per_opponent 10 `
-  --loops 1
+.\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py --players AIPlayer,beginner --benchmark_games 20000 --models_dir "models\regression\selfplayv8\039" --no_auto_mixed_benchmarks
+.\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py --players AIPlayer,hard --benchmark_games 20000 --models_dir "models\regression\selfplayv8\039"
 
 MLPV8[002_medium3] vs beginner after 70000 training games avg point diff 2.51 (95% CI 2.05 - 2.98) wins=6581/12000 winrate=54.84% (95% CI 53.95% - 55.73%)
 MLPV8[002_medium] vs beginner after 70000 training games avg point diff 2.27 (95% CI 1.82 - 2.73) wins=6557/12000 winrate=54.64% (95% CI 53.75% - 55.53%)
@@ -197,15 +192,31 @@ hard vs beginner avg point diff 4.57 (95% CI 4.08 - 5.07) wins=5749/10000 winrat
 
 .\.venv\Scripts\python.exe .\scripts\rl_loop.py `
   --model_version "selfplayv8" `
-  --games_per_iteration 2000 `
+  --games_per_iteration 1 `
   --hands_per_game 2 `
-  --eval_games 500 `
+  --eval_games 1 `
   --loops -1 `
-  --target_mode point_diff `
   --lr 1e-5 `
   --epochs 1 `
   --no-train_from_saved_shards `
-  --accept_margin 0.01
+  --accept_margin 0.01 `
+  --baseline_mode hard_vs_hard `
+  --no-save_data
+  --target_mode score_aware `
+  --winrate_weight 0.5 `
+
 
 Best model before switching to hand_per_game=2 is 014
+Best model before switching to hard vs hard, best vs hard is 021
+Best model before switching to single game benchmarks and evals, best vs hard is 030
+Benchmarked model 039 against beginner for 20K games and winrate was 51% so it drifted
 
+Reverting back to model 004, now training on candidate data instead of best
+gunna try setting opponent to medium instead of hard for now
+Set model 005 to be medium3 and going to try playing against medium
+So doing a single iteration of rl against medium improved the model (made 006) but after that it's just garbage
+loop         | best_w/g     | best_wr | best_diff | cand_w/g     | cand_wr | cand_diff | result
+1/infinite   |     912/2000 |   0.456 |     -2.31 |     937/2000 |   0.469 |     -2.02 | accepted -> 006 (diff +0.29)
+2/infinite   |     986/2000 |   0.493 |     -0.55 |     946/2000 |   0.473 |     -1.51 | rejected (diff -0.96)      
+3/infinite   |     967/2000 |   0.483 |     -0.57 |     949/2000 |   0.474 |     -1.57 | rejected (diff -1.00)
+4/infinite   |     944/2000 |   0.472 |     -1.23 |     897/2000 |   0.449 |     -2.73 | rejected (diff -1.50)

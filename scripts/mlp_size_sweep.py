@@ -16,7 +16,6 @@ from crib_ai_trainer.constants import (
     TRAINING_DATA_DIR,
     MODELS_DIR,
     DEFAULT_DATASET_VERSION,
-    DEFAULT_DATASET_RUN_ID,
     DEFAULT_MODEL_VERSION,
     DEFAULT_DISCARD_LOSS,
     DEFAULT_DISCARD_FEATURE_SET,
@@ -55,12 +54,12 @@ def _resolve_variant_dir(base_models_dir: str, model_version: str, label: str) -
     return str(version_dir / f"{latest_run}_{label}")
 
 
-def _resolve_dataset_dir(base_dir: str, version: str, run_id: str | None) -> str:
+def _resolve_dataset_dir(base_dir: str, version: str) -> str:
     base = Path(base_dir)
     has_shards = bool(list(base.glob("discard_*.npz"))) or bool(list(base.glob("pegging_*.npz")))
     if has_shards:
         return str(base)
-    return _resolve_output_dir(base_dir, version, run_id, new_run=False)
+    return _resolve_output_dir(base_dir, version)
 
 
 def _train_mlp(args, dataset_dir: str, hidden: str, models_dir: str) -> str:
@@ -120,7 +119,6 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--data_dir", type=str, default=TRAINING_DATA_DIR)
     ap.add_argument("--dataset_version", type=str, default=DEFAULT_DATASET_VERSION)
-    ap.add_argument("--dataset_run_id", type=str, default=DEFAULT_DATASET_RUN_ID or None)
     ap.add_argument("--models_dir", type=str, default=MODELS_DIR)
     ap.add_argument("--model_version", type=str, default=DEFAULT_MODEL_VERSION)
     ap.add_argument("--discard_loss", type=str, default=DEFAULT_DISCARD_LOSS, choices=["classification", "regression", "ranking"])
@@ -177,7 +175,7 @@ if __name__ == "__main__":
     )
     args = ap.parse_args()
 
-    dataset_dir = _resolve_dataset_dir(args.data_dir, args.dataset_version, args.dataset_run_id)
+    dataset_dir = _resolve_dataset_dir(args.data_dir, args.dataset_version)
     print(f"Dataset dir: {dataset_dir}")
 
     variants: dict[str, str] = {}

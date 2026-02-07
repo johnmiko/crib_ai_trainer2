@@ -38,7 +38,7 @@ def _getenv_bool(name: str, default: bool) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
-TRAINING_DATA_DIR = _getenv_str("TRAINING_DATA_DIR", "il_datasets")
+TRAINING_DATA_DIR = _getenv_str("TRAINING_DATA_DIR", "datasets")
 MODELS_DIR = _getenv_str("MODELS_DIR", "models")
 
 # Shared defaults for scripts

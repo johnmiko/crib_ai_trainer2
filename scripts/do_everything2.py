@@ -1,5 +1,5 @@
-# python .\scripts\generate_il_data.py --games 2000 --out_dir "il_datasets/"
-# python .\scripts\train_models.py --data_dir "il_datasets/" --out_dir models --epochs 20
+# python .\scripts\generate_il_data.py --games 2000 --out_dir "datasets/"
+# python .\scripts\train_models.py --data_dir "datasets/" --out_dir models --epochs 20
 # python .\scripts\benchmark_2_players.py --players neural,random --games 500 --models_dir models
 import sys
 import argparse
@@ -33,25 +33,15 @@ if __name__ == "__main__":
         raise SystemExit("--loops must be >= 1")
 
     base_models_dir = args.models_dir
-    # Resolve dataset directory. If training_dir points to a run folder but a different
-    # dataset_version is provided, prefer the versioned path.
+    # Resolve dataset directory. If training_dir already has shards, use it directly.
     training_path = Path(args.training_dir)
     has_shards = bool(list(training_path.glob("discard_*.npz"))) or bool(
         list(training_path.glob("pegging_*.npz"))
     )
-    if has_shards and (args.dataset_run_id is not None):
+    if has_shards:
         dataset_dir = str(training_path)
     else:
-        base_out_dir = args.training_dir
-        if has_shards and args.dataset_version not in training_path.parts:
-            # training_dir is a run folder (e.g., discard_v2/001). Use its parent parent as base.
-            base_out_dir = str(training_path.parent.parent)
-        dataset_dir = _resolve_output_dir(
-            base_out_dir,
-            args.dataset_version,
-            args.dataset_run_id,
-            new_run=False,
-        )
+        dataset_dir = _resolve_output_dir(args.training_dir, args.dataset_version)
 
     data_pegging_feature_set = args.pegging_feature_set
 

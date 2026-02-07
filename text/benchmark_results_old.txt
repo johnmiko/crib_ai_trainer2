@@ -155,10 +155,10 @@ MLPVV5.036Player vs medium [036] after 42500 training games avg point diff -1.87
 MLPVV5.044Player vs medium [044] after 58500 training games avg point diff -0.83 (95% CI -1.90 - 0.24) wins=957/2000 winrate=47.9%
 
 
-.\.venv\Scripts\python.exe .\scripts\train_linear_models.py --data_dir "il_datasets\discard_v5\001" --models_dir "models\regression" --model_version "discard_v5" --run_id 045_mini3 --discard_loss regression --model_type mlp --mlp_hidden "64,32,16"
-.\.venv\Scripts\python.exe .\scripts\train_linear_models.py --data_dir "il_datasets\discard_v5\001" --models_dir "models\regression" --model_version "discard_v5" --run_id 045_small3 --discard_loss regression --model_type mlp --mlp_hidden "128,64,32"
-.\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py --players NeuralRegressionPlayer,beginner --benchmark_games 6000 --models_dir "models\regression\discard_v5\045_mini3" --data_dir "il_datasets\discard_v5\001" --no_auto_mixed_benchmarks
-.\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py --players hard,medium --benchmark_games 1000 --models_dir "models\regression\discard_v5\045_mini3" --data_dir "il_datasets\discard_v5\001" --no_auto_mixed_benchmarks
+.\.venv\Scripts\python.exe .\scripts\train_linear_models.py --data_dir "datasets\discard_v5" --models_dir "models\regression" --model_version "discard_v5" --run_id 045_mini3 --discard_loss regression --model_type mlp --mlp_hidden "64,32,16"
+.\.venv\Scripts\python.exe .\scripts\train_linear_models.py --data_dir "datasets\discard_v5" --models_dir "models\regression" --model_version "discard_v5" --run_id 045_small3 --discard_loss regression --model_type mlp --mlp_hidden "128,64,32"
+.\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py --players NeuralRegressionPlayer,beginner --benchmark_games 6000 --models_dir "models\regression\discard_v5\045_mini3" --data_dir "datasets\discard_v5" --no_auto_mixed_benchmarks
+.\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py --players hard,medium --benchmark_games 1000 --models_dir "models\regression\discard_v5\045_mini3" --data_dir "datasets\discard_v5" --no_auto_mixed_benchmarks
 
 45 is medium size, against medium player
 MLPVV5.045Player vs medium [045] after 60500 training games avg point diff -1.32 (95% CI -2.42 - -0.22) wins=951/2000 winrate=47.5%
