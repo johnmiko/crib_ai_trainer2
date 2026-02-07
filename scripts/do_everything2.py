@@ -29,6 +29,16 @@ if __name__ == "__main__":
         args.benchmark_workers = 1
         args.no_benchmark_write = True
 
+    if args.skip_discard_data and not args.pegging_only:
+        raise SystemExit("--skip_discard_data requires --pegging_only.")
+    if args.pegging_only and args.skip_pegging_data:
+        raise SystemExit("--pegging_only cannot be combined with --skip_pegging_data.")
+    if args.pegging_model_type in {"gru", "lstm"}:
+        if args.pegging_feature_set != "full_seq":
+            raise SystemExit("--pegging_model_type gru/lstm requires --pegging_feature_set full_seq.")
+        if args.pegging_model_feature_set != "full_seq":
+            raise SystemExit("--pegging_model_type gru/lstm requires --pegging_model_feature_set full_seq.")
+
     if args.loops <= 0:
         raise SystemExit("--loops must be >= 1")
 
@@ -64,6 +74,7 @@ if __name__ == "__main__":
         print(f"\n=== Loop {i}/{args.loops} ===")
         _loop_t0 = time.perf_counter()
         _loop_start = datetime.now()
+        _loop_early_stop = False
 
         print(f"dataset_dir: {dataset_dir}", flush=True)
         print(f"next_model_version: {args.model_version}", flush=True)
@@ -89,6 +100,7 @@ if __name__ == "__main__":
                 args.win_prob_min_score,
                 args.il_workers,
                 not args.skip_pegging_data,
+                not args.skip_discard_data,
                 args.max_buffer_games,
                 args.teacher_player,
             )
@@ -100,6 +112,7 @@ if __name__ == "__main__":
 
         print("step: train_models", flush=True)
         args.pegging_feature_set = args.pegging_model_feature_set
+        args.data_dir = dataset_dir
         args.models_dir = _resolve_models_dir(base_models_dir, args.model_version, args.model_run_id)
         args.pegging_data_dir = args.pegging_data_dir or dataset_dir
         print(f"models_dir: {args.models_dir}", flush=True)
@@ -113,6 +126,7 @@ if __name__ == "__main__":
             raise
         _end = datetime.now()
         _log_step_end("train_models", _end, time.perf_counter() - _t0)
+        _loop_early_stop = bool(getattr(args, "early_stopped", False))
 
         print("step: benchmark", flush=True)
         args.games = args.benchmark_games
@@ -129,14 +143,18 @@ if __name__ == "__main__":
             bench_args = argparse.Namespace(**vars(args))
             if hasattr(bench_args, "data_dir"):
                 delattr(bench_args, "data_dir")
-            benchmark_2_players(bench_args)
-            if args.benchmark_mode == "all":
-                parts = [p.strip() for p in args.players.split(",") if p.strip()]
-                opponent = parts[1] if len(parts) >= 2 else "beginner"
-                bench_args.players = f"NeuralDiscardOnlyPlayer,{opponent}"
+            if args.pegging_only:
+                bench_args.players = "NeuralPegOnlyPlayer,beginner"
                 benchmark_2_players(bench_args)
-                bench_args.players = f"NeuralPegOnlyPlayer,{opponent}"
+            else:
                 benchmark_2_players(bench_args)
+                if args.benchmark_mode == "all":
+                    parts = [p.strip() for p in args.players.split(",") if p.strip()]
+                    opponent = parts[1] if len(parts) >= 2 else "beginner"
+                    bench_args.players = f"NeuralDiscardOnlyPlayer,{opponent}"
+                    benchmark_2_players(bench_args)
+                    bench_args.players = f"NeuralPegOnlyPlayer,{opponent}"
+                    benchmark_2_players(bench_args)
         except MemoryError as exc:
             print("MemoryError during benchmark_2_players. This likely ran out of RAM.", flush=True)
             raise
@@ -150,6 +168,10 @@ if __name__ == "__main__":
         print(f"loop {i} start: {_loop_start.isoformat(timespec='seconds')}", flush=True)
         print(f"loop {i} end:   {_loop_end.isoformat(timespec='seconds')}", flush=True)
         print(f"loop {i} elapsed: {_format_elapsed(_loop_elapsed)}", flush=True)
+
+        if _loop_early_stop:
+            print("Early stopping triggered in train_models. Stopping do_everything.", flush=True)
+            break
 
         if i >= args.loops:
             break

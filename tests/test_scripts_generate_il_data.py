@@ -25,7 +25,7 @@ def test_generate_il_data_creates_npz_files(tmp_path: Path) -> None:
     out_dir = tmp_path / "datasets"    
 
     # small + deterministic
-    generate_il_data(50, str(out_dir), 0)    
+    generate_il_data(50, str(out_dir), 0, "regression", "full", "mc", 32, "immediate", 32, "off", 16, 90, "off", 16, 1, True, True, 500, "hard")
 
     discard = out_dir / "discard_00001.npz"
     pegging = out_dir / "pegging_00001.npz"

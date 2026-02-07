@@ -89,15 +89,27 @@ def build_generate_il_parser() -> argparse.ArgumentParser:
         help="Which teacher player to use for IL generation.",
     )
     ap.add_argument(
+        "--teacher_player",
+        type=str,
+        default="hard",
+        choices=["medium", "hard"],
+        help="Which teacher player to use for IL generation.",
+    )
+    ap.add_argument(
         "--skip_pegging_data",
         action="store_true",
         help="Generate only discard data (skip pegging logging and files).",
     )
     ap.add_argument(
+        "--skip_discard_data",
+        action="store_true",
+        help="Generate only pegging data (skip discard logging and files).",
+    )
+    ap.add_argument(
         "--pegging_feature_set",
         type=str,
         default=DEFAULT_PEGGING_FEATURE_SET,
-        choices=["basic", "full"],
+        choices=["basic", "full", "full_seq"],
         help="Which pegging feature set to use.",
     )
     ap.add_argument(
@@ -179,7 +191,12 @@ def build_generate_self_play_parser() -> argparse.ArgumentParser:
     ap.add_argument("--opponent_models_dir", type=str, default=None)
     ap.add_argument("--seed", type=int, default=None)
     ap.add_argument("--strategy", type=str, default=DEFAULT_STRATEGY)
-    ap.add_argument("--pegging_feature_set", type=str, default=DEFAULT_PEGGING_FEATURE_SET, choices=["basic", "full"])
+    ap.add_argument(
+        "--pegging_feature_set",
+        type=str,
+        default=DEFAULT_PEGGING_FEATURE_SET,
+        choices=["basic", "full", "full_seq"],
+    )
     ap.add_argument("--crib_ev_mode", type=str, default=DEFAULT_CRIB_EV_MODE, choices=["min", "mc"])
     ap.add_argument("--crib_mc_samples", type=int, default=DEFAULT_CRIB_MC_SAMPLES)
     ap.add_argument("--pegging_label_mode", type=str, default=DEFAULT_PEGGING_LABEL_MODE, choices=["immediate", "rollout1", "rollout2"])
@@ -254,7 +271,19 @@ def build_do_everything_parser() -> argparse.ArgumentParser:
     ap.add_argument("--pegging_data_dir", type=str, default=DEFAULT_PEGGING_DATA_DIR, help="Dataset dir for pegging shards.")
     ap.add_argument("--dataset_version", type=str, default=DEFAULT_DATASET_VERSION)
     ap.add_argument("--strategy", type=str, default=DEFAULT_STRATEGY)
-    ap.add_argument("--pegging_feature_set", type=str, default=DEFAULT_PEGGING_FEATURE_SET, choices=["basic", "full"])
+    ap.add_argument(
+        "--teacher_player",
+        type=str,
+        default="hard",
+        choices=["medium", "hard"],
+        help="Which teacher player to use for IL generation.",
+    )
+    ap.add_argument(
+        "--pegging_feature_set",
+        type=str,
+        default=DEFAULT_PEGGING_FEATURE_SET,
+        choices=["basic", "full", "full_seq"],
+    )
     ap.add_argument("--seed", type=int, default=_default_seed())
     ap.add_argument("--epochs", type=int, default=DEFAULT_EPOCHS)
     ap.add_argument("--players", type=str, default=DEFAULT_BENCHMARK_PLAYERS)
@@ -277,8 +306,33 @@ def build_do_everything_parser() -> argparse.ArgumentParser:
         default=DEFAULT_DISCARD_FEATURE_SET,
         choices=["base", "engineered_no_scores", "engineered_no_scores_pev", "full", "full_pev"],
     )
-    ap.add_argument("--pegging_model_feature_set", type=str, default=DEFAULT_PEGGING_MODEL_FEATURE_SET, choices=["base", "full_no_scores", "full"])
+    ap.add_argument(
+        "--pegging_model_feature_set",
+        type=str,
+        default=DEFAULT_PEGGING_MODEL_FEATURE_SET,
+        choices=["base", "full_no_scores", "full", "full_seq"],
+    )
     ap.add_argument("--model_type", type=str, default=DEFAULT_MODEL_TYPE, choices=["linear", "mlp", "gbt", "rf"])
+    ap.add_argument(
+        "--discard_model_type",
+        type=str,
+        default=None,
+        choices=["linear", "mlp", "gbt", "rf"],
+        help="Override model type for discard head only.",
+    )
+    ap.add_argument(
+        "--pegging_model_type",
+        type=str,
+        default=None,
+        choices=["linear", "mlp", "gbt", "rf", "gru", "lstm"],
+        help="Override model type for pegging head only.",
+    )
+    ap.add_argument(
+        "--pegging_rnn_hidden",
+        type=int,
+        default=64,
+        help="Hidden size for GRU/LSTM pegging model.",
+    )
     ap.add_argument("--mlp_hidden", type=str, default=DEFAULT_MLP_HIDDEN)
     ap.add_argument("--discard_mlp_hidden", type=str, default=None, help="Override MLP sizes for discard head only.")
     ap.add_argument("--pegging_mlp_hidden", type=str, default=None, help="Override MLP sizes for pegging head only.")
@@ -314,10 +368,34 @@ def build_do_everything_parser() -> argparse.ArgumentParser:
     ap.add_argument("--incremental_start_shard", type=int, default=0)
     ap.add_argument("--incremental_epochs", type=int, default=None)
     ap.add_argument(
+        "--early_stop_patience",
+        type=int,
+        default=2,
+        help="Stop after N epochs without loss improvement.",
+    )
+    ap.add_argument(
+        "--early_stop_min_delta",
+        type=float,
+        default=0.0,
+        help="Minimum loss improvement to reset early stopping.",
+    )
+    ap.add_argument(
+        "--pegging_only",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Train/benchmark only the pegging model (skip discard training).",
+    )
+    ap.add_argument(
         "--skip_pegging_data",
         action="store_true",
         default=False,
         help="Generate only discard data (skip pegging logging and files).",
+    )
+    ap.add_argument(
+        "--skip_discard_data",
+        action="store_true",
+        default=False,
+        help="Generate only pegging data (skip discard logging and files).",
     )
     return ap
 

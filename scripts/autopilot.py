@@ -193,6 +193,7 @@ if __name__ == "__main__":
                 args.pegging_ev_rollouts,
                 args.il_workers,
                 not args.skip_pegging_data,
+                True,
                 args.max_buffer_games,
                 args.teacher_player,
             )

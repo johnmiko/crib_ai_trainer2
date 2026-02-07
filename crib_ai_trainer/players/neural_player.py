@@ -18,6 +18,7 @@ RANKS = ["a", "2", "3", "4", "5", "6", "7", "8", "9", "10", "j", "q", "k"]
 RANK_TO_I = {r: i for i, r in enumerate(RANKS)}
 TENS_RANKS = {"10", "j", "q", "k"}
 _SUITS = ["h", "d", "c", "s"]
+SUIT_TO_I = {s: i for i, s in enumerate(_SUITS)}
 _FULL_DECK = get_full_deck()
 
 # Base discard features (52 discards + 52 kept + 1 dealer flag)
@@ -42,7 +43,7 @@ DISCARD_FEATURE_DIM = BASE_DISCARD_FEATURE_DIM + ENGINEERED_DISCARD_FEATURE_DIM
 # Pegging features
 PEGGING_BASE_FEATURE_DIM = 240  # hand(52) + table(52) + count(32) + candidate(52) + known(52)
 PEGGING_ENGINEERED_NO_SCORE_DIM = 32
-PEGGING_ENGINEERED_SCORE_DIM = 5
+PEGGING_ENGINEERED_SCORE_DIM = 6
 PEGGING_ENGINEERED_FEATURE_DIM = PEGGING_ENGINEERED_NO_SCORE_DIM + PEGGING_ENGINEERED_SCORE_DIM
 PEGGING_FULL_FEATURE_DIM = PEGGING_BASE_FEATURE_DIM + 52 + 52 + PEGGING_ENGINEERED_FEATURE_DIM  # + opp_played + all_played
 PEGGING_SEQ_LEN = 8

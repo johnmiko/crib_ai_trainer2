@@ -616,6 +616,7 @@ class LoggingBeginnerPlayer(BeginnerPlayer):
         win_prob_min_score: int = 90,
         pegging_ev_mode: str = "off",
         pegging_ev_rollouts: int = 16,
+        log_discard: bool = True,
     ):
         super().__init__(name=name)
         self._rng = random.Random(seed)
@@ -693,8 +694,9 @@ class LoggingBeginnerPlayer(BeginnerPlayer):
         # log ONE example for this 6-card hand:
         # X_hand is (15, D), label is best option index 0..14
         X_hand = np.stack(Xs, axis=0).astype(np.float32)  # (15, D)
-        self._log.X_discard.append(X_hand) # type: ignore
-        self._log.y_discard.append(best_i) # type: ignore
+        if self._log_discard:
+            self._log.X_discard.append(X_hand) # type: ignore
+            self._log.y_discard.append(best_i) # type: ignore
 
         return discards_list[best_i]
 
@@ -742,21 +744,22 @@ class LoggingBeginnerPlayer(BeginnerPlayer):
                     self._pegging_ev_rollouts,
                 )
             x = featurize_discard(kept, discards, dealer_is_self, your_score, opponent_score, pegging_ev=pegging_ev)
-            self._log.X_discard.append(x)
-            self._log.y_discard.append(float(y))
-            if self._win_prob_mode == "rollout":
-                y_win = estimate_win_prob_discard_rollout(
-                    hand=hand,
-                    kept=kept,
-                    discards=discards,
-                    dealer_is_self=dealer_is_self,
-                    player_score=your_score,
-                    opponent_score=opponent_score,
-                    rng=self._rng,
-                    n_rollouts=self._win_prob_rollouts,
-                    min_score_for_eval=self._win_prob_min_score,
-                )
-                self._log.y_discard_win.append(float(y_win))
+            if self._log_discard:
+                self._log.X_discard.append(x)
+                self._log.y_discard.append(float(y))
+                if self._win_prob_mode == "rollout":
+                    y_win = estimate_win_prob_discard_rollout(
+                        hand=hand,
+                        kept=kept,
+                        discards=discards,
+                        dealer_is_self=dealer_is_self,
+                        player_score=your_score,
+                        opponent_score=opponent_score,
+                        rng=self._rng,
+                        n_rollouts=self._win_prob_rollouts,
+                        min_score_for_eval=self._win_prob_min_score,
+                    )
+                    self._log.y_discard_win.append(float(y_win))
 
             if y > best_y:
                 best_y = y
@@ -862,6 +865,7 @@ class LoggingMediumPlayer(MediumPlayer):
         pegging_ev_mode: str = "off",
         pegging_ev_rollouts: int = 16,
         log_pegging: bool = True,
+        log_discard: bool = True,
     ):
         super().__init__(name=name)
         self._rng = random.Random(seed)
@@ -941,12 +945,14 @@ class LoggingHardPlayer(HardPlayer):
         pegging_ev_mode: str = "off",
         pegging_ev_rollouts: int = 16,
         log_pegging: bool = True,
+        log_discard: bool = True,
     ):
         super().__init__(name=name)
         self._rng = random.Random(seed)
         self._full_deck = get_full_deck()
         self._log = log
         self._log_pegging = log_pegging
+        self._log_discard = log_discard
         if discard_strategy == "classification":
             self._discard_strategy_mode = "classification"
         elif discard_strategy == "ranking":
@@ -967,6 +973,7 @@ class LoggingHardPlayer(HardPlayer):
         self._pegging_ev_mode = pegging_ev_mode
         self._pegging_ev_rollouts = pegging_ev_rollouts
         self._rng_np = np.random.default_rng(seed)
+        self._log_discard = log_discard
 
     def select_crib_cards(self, player_state, round_state) -> Tuple[Card, Card]:
         hand = player_state.hand
@@ -1129,9 +1136,10 @@ class LoggingHardPlayer(HardPlayer):
         # log ONE example for this 6-card hand:
         # X_hand is (15, D), label is best option index 0..14
         X_hand = np.stack(Xs, axis=0).astype(np.float32)  # (15, D)
-        self._log.X_discard.append(X_hand) # type: ignore
         best_i = int(np.argmax(np.array(ys, dtype=np.float32)))
-        self._log.y_discard.append(best_i) # type: ignore
+        if self._log_discard:
+            self._log.X_discard.append(X_hand) # type: ignore
+            self._log.y_discard.append(best_i) # type: ignore
 
         return tuple(best_discards_cards)
        
@@ -1172,8 +1180,9 @@ class LoggingHardPlayer(HardPlayer):
         # Log the full 15-option set with their scores.
         X_hand = np.stack(Xs, axis=0).astype(np.float32)  # (15, D)
         y_hand = np.array(ys, dtype=np.float32)           # (15,)
-        self._log.X_discard.append(X_hand)  # type: ignore
-        self._log.y_discard.append(y_hand)  # type: ignore
+        if self._log_discard:
+            self._log.X_discard.append(X_hand)  # type: ignore
+            self._log.y_discard.append(y_hand)  # type: ignore
 
         best_i = int(np.argmax(y_hand))
         return discards_list[best_i]
@@ -1207,21 +1216,22 @@ class LoggingHardPlayer(HardPlayer):
                     self._pegging_ev_rollouts,
                 )
             x = featurize_discard(kept_list, discards_list, dealer_is_self, your_score, opponent_score, pegging_ev=pegging_ev)
-            self._log.X_discard.append(x)
-            self._log.y_discard.append(float(y))
-            if self._win_prob_mode == "rollout":
-                y_win = estimate_win_prob_discard_rollout(
-                    hand=hand,
-                    kept=kept_list,
-                    discards=discards_list,
-                    dealer_is_self=dealer_is_self,
-                    player_score=your_score,
-                    opponent_score=opponent_score,
-                    rng=self._rng,
-                    n_rollouts=self._win_prob_rollouts,
-                    min_score_for_eval=self._win_prob_min_score,
-                )
-                self._log.y_discard_win.append(float(y_win))
+            if self._log_discard:
+                self._log.X_discard.append(x)
+                self._log.y_discard.append(float(y))
+                if self._win_prob_mode == "rollout":
+                    y_win = estimate_win_prob_discard_rollout(
+                        hand=hand,
+                        kept=kept_list,
+                        discards=discards_list,
+                        dealer_is_self=dealer_is_self,
+                        player_score=your_score,
+                        opponent_score=opponent_score,
+                        rng=self._rng,
+                        n_rollouts=self._win_prob_rollouts,
+                        min_score_for_eval=self._win_prob_min_score,
+                    )
+                    self._log.y_discard_win.append(float(y_win))
 
         best_discards_str = df3.loc[df3["avg_total_score"] == df3["avg_total_score"].max()]["crib_key"].values[0]
         best_discards = best_discards_str.lower().replace("t", "10").split("|")
@@ -1246,12 +1256,16 @@ def save_data(
     win_prob_rollouts: int,
     win_prob_min_score: int,
     save_pegging: bool = True,
+    save_discard: bool = True,
 ):
     """Save accumulated training data to disk."""
     os.makedirs(out_dir, exist_ok=True)
     
+    if not save_discard and not save_pegging:
+        raise ValueError("At least one of save_discard or save_pegging must be True.")
+
     # check that we did not use the wrong logging structure
-    if log.X_discard:
+    if save_discard and getattr(log, "X_discard", None):
         x0 = log.X_discard[0]
         if strategy == "classification":
             assert x0.shape == (15, DISCARD_FEATURE_DIM)
@@ -1261,15 +1275,19 @@ def save_data(
             assert x0.shape == (DISCARD_FEATURE_DIM,)
     
     y_discard_win = None
-    if hasattr(log, "y_discard_win") and getattr(log, "y_discard_win"):
+    if save_discard and hasattr(log, "y_discard_win") and getattr(log, "y_discard_win"):
         try:
             y_discard_win = np.array(getattr(log, "y_discard_win"), dtype=np.float32)
         except Exception:
             y_discard_win = None
 
     if strategy == "classification":
-        Xd = np.stack(log.X_discard).astype(np.float32) if log.X_discard else np.zeros((0, 15, DISCARD_FEATURE_DIM), np.float32)
-        yd = np.array(log.y_discard, dtype=np.int64)
+        if save_discard and getattr(log, "X_discard", None):
+            Xd = np.stack(log.X_discard).astype(np.float32)
+            yd = np.array(log.y_discard, dtype=np.int64)
+        else:
+            Xd = np.zeros((0, 15, DISCARD_FEATURE_DIM), np.float32)
+            yd = np.zeros((0,), np.int64)
 
         assert Xd.ndim == 3
         assert Xd.shape[1] == 15
@@ -1279,8 +1297,12 @@ def save_data(
         assert yd.min() >= 0 and yd.max() < 15
 
     elif strategy == "regression":
-        Xd = np.stack(log.X_discard).astype(np.float32) if log.X_discard else np.zeros((0, DISCARD_FEATURE_DIM), np.float32)
-        yd = np.array(log.y_discard, dtype=np.float32)
+        if save_discard and getattr(log, "X_discard", None):
+            Xd = np.stack(log.X_discard).astype(np.float32)
+            yd = np.array(log.y_discard, dtype=np.float32)
+        else:
+            Xd = np.zeros((0, DISCARD_FEATURE_DIM), np.float32)
+            yd = np.zeros((0,), np.float32)
 
         assert Xd.ndim == 2
         assert Xd.shape[1] == DISCARD_FEATURE_DIM
@@ -1288,8 +1310,12 @@ def save_data(
         assert yd.shape[0] == Xd.shape[0]
 
     elif strategy == "ranking":
-        Xd = np.stack(log.X_discard).astype(np.float32) if log.X_discard else np.zeros((0, 15, DISCARD_FEATURE_DIM), np.float32)
-        yd = np.stack(log.y_discard).astype(np.float32) if log.y_discard else np.zeros((0, 15), np.float32)
+        if save_discard and getattr(log, "X_discard", None):
+            Xd = np.stack(log.X_discard).astype(np.float32)
+            yd = np.stack(log.y_discard).astype(np.float32)
+        else:
+            Xd = np.zeros((0, 15, DISCARD_FEATURE_DIM), np.float32)
+            yd = np.zeros((0, 15), np.float32)
 
         assert Xd.ndim == 3
         assert Xd.shape[1] == 15
@@ -1304,18 +1330,20 @@ def save_data(
 
     out_path_discard = os.path.join(out_dir, f"discard_{cumulative_games}.npz")
     out_path_pegging = os.path.join(out_dir, f"pegging_{cumulative_games}.npz")
-    if save_pegging:
+    if save_discard and save_pegging:
         logger.debug(f"Saving to {out_path_discard} and {out_path_pegging}")
-    else:
+    elif save_discard:
         logger.debug(f"Saving to {out_path_discard} (pegging skipped)")
-    if y_discard_win is not None and y_discard_win.shape[0] == yd.shape[0]:
-        np.savez(out_path_discard, X=Xd, y=yd, y_win=y_discard_win)
     else:
-        np.savez(out_path_discard, X=Xd, y=yd)
+        logger.debug(f"Saving to {out_path_pegging} (discard skipped)")
+    if save_discard:
+        if y_discard_win is not None and y_discard_win.shape[0] == yd.shape[0]:
+            np.savez(out_path_discard, X=Xd, y=yd, y_win=y_discard_win)
+        else:
+            np.savez(out_path_discard, X=Xd, y=yd)
+        logger.debug(f"Saved discard: X={Xd.shape} y={yd.shape}")
     if save_pegging:
         np.savez(out_path_pegging, X=Xp, y=yp)
-    logger.debug(f"Saved discard: X={Xd.shape} y={yd.shape}")
-    if save_pegging:
         logger.debug(f"Saved pegging: X={Xp.shape} y={yp.shape}")
 
     # Write/update dataset metadata for easy inspection.
@@ -1339,9 +1367,13 @@ def save_data(
         "cumulative_games": cumulative_games,
         "seed": seed,
         "discard": {
-            "file": os.path.basename(out_path_discard),
-            "X_shape": list(Xd.shape),
-            "y_shape": list(yd.shape),
+            "file": os.path.basename(out_path_discard) if save_discard else None,
+            "X_shape": list(Xd.shape) if save_discard else (
+                [0, 15, DISCARD_FEATURE_DIM] if strategy in {"classification", "ranking"} else [0, DISCARD_FEATURE_DIM]
+            ),
+            "y_shape": list(yd.shape) if save_discard else (
+                [0, 15] if strategy == "ranking" else [0]
+            ),
             "features": {
                 "discard_features": "52 multi-hot discards",
                 "kept_features": "52 multi-hot kept",
@@ -1355,6 +1387,7 @@ def save_data(
                 "regression": f"avg_total_score (crib_ev_mode={crib_ev_mode})",
                 "ranking": f"avg_total_score (crib_ev_mode={crib_ev_mode})",
             }.get(strategy, "unknown"),
+            "skipped": not save_discard,
         },
         "pegging": {
             "file": os.path.basename(out_path_pegging) if save_pegging else None,
@@ -1448,11 +1481,13 @@ def get_cumulative_game_count(out_dir):
     """Get the cumulative game count from existing files."""
     out_dir_path = Path(out_dir)
     existing_discard = sorted(out_dir_path.glob("discard_*.npz"))
-    
+    existing_pegging = sorted(out_dir_path.glob("pegging_*.npz"))
+
+    candidates = existing_discard or existing_pegging
     cumulative_games = 0
-    if existing_discard:
+    if candidates:
         # Extract numbers from filenames and find max
-        for f in existing_discard:
+        for f in candidates:
             try:
                 num = int(f.stem.split('_')[1])
                 cumulative_games = max(cumulative_games, num)
@@ -1480,6 +1515,7 @@ def _init_logging_players(
     pegging_ev_mode: str,
     pegging_ev_rollouts: int,
     log_pegging: bool = True,
+    log_discard: bool = True,
     teacher_player: str = "hard",
 ):
     if teacher_player == "hard":
@@ -1505,6 +1541,7 @@ def _init_logging_players(
             pegging_ev_mode=pegging_ev_mode,
             pegging_ev_rollouts=pegging_ev_rollouts,
             log_pegging=log_pegging,
+            log_discard=log_discard,
         )
         p2 = PlayerCls(
             "teacher2",
@@ -1523,6 +1560,7 @@ def _init_logging_players(
             pegging_ev_mode=pegging_ev_mode,
             pegging_ev_rollouts=pegging_ev_rollouts,
             log_pegging=log_pegging,
+            log_discard=log_discard,
         )
     elif strategy == "ranking":
         log = LoggedRegPegRankDiscardData()
@@ -1543,6 +1581,7 @@ def _init_logging_players(
             pegging_ev_mode=pegging_ev_mode,
             pegging_ev_rollouts=pegging_ev_rollouts,
             log_pegging=log_pegging,
+            log_discard=log_discard,
         )
         p2 = PlayerCls(
             "teacher2",
@@ -1561,9 +1600,10 @@ def _init_logging_players(
             pegging_ev_mode=pegging_ev_mode,
             pegging_ev_rollouts=pegging_ev_rollouts,
             log_pegging=log_pegging,
+            log_discard=log_discard,
         )
     elif strategy == "regression":
-        log = LoggedRegPegRegDiscardData()
+        log = LoggedRegPegRegDiscardData() if log_discard else LoggedRegressionPegData()
         p1 = PlayerCls(
             "teacher1",
             log,
@@ -1581,6 +1621,7 @@ def _init_logging_players(
             pegging_ev_mode=pegging_ev_mode,
             pegging_ev_rollouts=pegging_ev_rollouts,
             log_pegging=log_pegging,
+            log_discard=log_discard,
         )
         p2 = PlayerCls(
             "teacher2",
@@ -1597,6 +1638,7 @@ def _init_logging_players(
             win_prob_rollouts=win_prob_rollouts,
             win_prob_min_score=win_prob_min_score,
             log_pegging=log_pegging,
+            log_discard=log_discard,
         )
     else:
         raise ValueError(f"Unknown strategy: {strategy}")
@@ -1619,6 +1661,7 @@ def _collect_il_data_worker(
     seed: int,
     worker_id: int,
     log_pegging: bool,
+    log_discard: bool,
     teacher_player: str,
 ) -> dict:
     try:
@@ -1636,12 +1679,18 @@ def _collect_il_data_worker(
             pegging_ev_mode,
             pegging_ev_rollouts,
             log_pegging,
+            log_discard,
             teacher_player,
         )
         if not log_pegging:
             # Avoid collecting pegging data when skipping pegging generation.
             log.X_pegging.clear()
             log.y_pegging.clear()
+        if not log_discard and getattr(log, "X_discard", None) is not None:
+            log.X_discard.clear()
+            log.y_discard.clear()
+            if hasattr(log, "y_discard_win"):
+                log.y_discard_win.clear()
         i = 0
         while i < games:
             if (i % 2) == 1:
@@ -1653,8 +1702,8 @@ def _collect_il_data_worker(
         result = {
             "worker_id": worker_id,
             "games": games,
-            "X_discard": log.X_discard,
-            "y_discard": log.y_discard,
+            "X_discard": getattr(log, "X_discard", []),
+            "y_discard": getattr(log, "y_discard", []),
             "y_discard_win": getattr(log, "y_discard_win", None),
             "X_pegging": log.X_pegging,
             "y_pegging": log.y_pegging,
@@ -1687,9 +1736,12 @@ def generate_il_data(
     pegging_ev_rollouts: int = 16,
     workers: int = 1,
     save_pegging: bool = True,
+    save_discard: bool = True,
     max_buffer_games: int | None = 500,
     teacher_player: str = "hard",
 ) -> int:
+    if not save_discard and not save_pegging:
+        raise ValueError("At least one of save_discard or save_pegging must be True.")
     if seed is None:
         seed = secrets.randbits(32)
         logger.info(f"No seed provided, using random seed={seed}")
@@ -1748,6 +1800,7 @@ def generate_il_data(
                     worker_seed,
                     worker_id,
                     save_pegging,
+                    save_discard,
                     teacher_player,
                 )
             )
@@ -1778,12 +1831,14 @@ def generate_il_data(
                     pegging_ev_mode,
                     pegging_ev_rollouts,
                     save_pegging,
+                    save_discard,
                     teacher_player,
                 )
-                log.X_discard.extend(result["X_discard"])
-                log.y_discard.extend(result["y_discard"])
-                if hasattr(log, "y_discard_win") and result.get("y_discard_win"):
-                    log.y_discard_win.extend(result["y_discard_win"])
+                if save_discard:
+                    log.X_discard.extend(result["X_discard"])
+                    log.y_discard.extend(result["y_discard"])
+                    if hasattr(log, "y_discard_win") and result.get("y_discard_win"):
+                        log.y_discard_win.extend(result["y_discard_win"])
                 if save_pegging:
                     log.X_pegging.extend(result["X_pegging"])
                     log.y_pegging.extend(result["y_pegging"])
@@ -1805,6 +1860,7 @@ def generate_il_data(
                     win_prob_rollouts,
                     win_prob_min_score,
                     save_pegging,
+                    save_discard,
                 )
         return 0
 
@@ -1824,6 +1880,7 @@ def generate_il_data(
         pegging_ev_mode,
         pegging_ev_rollouts,
         save_pegging,
+        save_discard,
         teacher_player,
     )
 
@@ -1867,13 +1924,15 @@ def generate_il_data(
                 win_prob_rollouts,
                 win_prob_min_score,
                 save_pegging,
+                save_discard,
             )
             
             # Clear the logs to save memory
-            log.X_discard.clear()
-            log.y_discard.clear()
-            if hasattr(log, "y_discard_win"):
-                log.y_discard_win.clear()
+            if save_discard and getattr(log, "X_discard", None) is not None:
+                log.X_discard.clear()
+                log.y_discard.clear()
+                if hasattr(log, "y_discard_win"):
+                    log.y_discard_win.clear()
             if save_pegging:
                 log.X_pegging.clear()
                 log.y_pegging.clear()
@@ -1904,6 +1963,7 @@ def generate_il_data(
             win_prob_rollouts,
             win_prob_min_score,
             save_pegging,
+            save_discard,
         )
     
     return 0
@@ -1942,6 +2002,7 @@ if __name__ == "__main__":
         args.pegging_ev_rollouts,
         args.workers,
         not args.skip_pegging_data,
+        not args.skip_discard_data,
         args.max_buffer_games,
         args.teacher_player,
     )

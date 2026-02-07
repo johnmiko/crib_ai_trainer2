@@ -151,11 +151,20 @@ def _build_player_factory(args, fallback_override: str | None):
     model_type = meta.get("model_type", model_type)
     discard_model_type = meta.get("discard_model_type", model_type)
     pegging_model_type = meta.get("pegging_model_type", model_type)
+    discard_only = bool(meta.get("discard_only", False))
+    pegging_only = bool(meta.get("pegging_only", False))
     mlp_hidden = meta.get("mlp_hidden", None)
     discard_model_file = meta.get("discard_model_file")
     pegging_model_file = meta.get("pegging_model_file")
-    if discard_model_file is None or pegging_model_file is None:
-        raise SystemExit("model_meta.json missing discard_model_file or pegging_model_file.")
+    if discard_only and pegging_only:
+        raise SystemExit("model_meta.json cannot set both discard_only and pegging_only.")
+    if not discard_only and not pegging_only:
+        if discard_model_file is None or pegging_model_file is None:
+            raise SystemExit("model_meta.json missing discard_model_file or pegging_model_file.")
+    if discard_only and discard_model_file is None:
+        raise SystemExit("model_meta.json missing discard_model_file for discard_only model.")
+    if pegging_only and pegging_model_file is None:
+        raise SystemExit("model_meta.json missing pegging_model_file for pegging_only model.")
     if model_type == "mlp":
         def _coerce_hidden(value):
             if value is None:
@@ -184,6 +193,8 @@ def _build_player_factory(args, fallback_override: str | None):
     fallback_player_name = fallback_override or args.fallback_player
 
     def _load_discard_model():
+        if discard_model_file is None:
+            raise SystemExit("discard model file missing for this models_dir.")
         if discard_model_file is not None:
             path = f"{args.models_dir}/{discard_model_file}"
             if discard_model_type == "mlp":
@@ -202,6 +213,8 @@ def _build_player_factory(args, fallback_override: str | None):
         return LinearValueModel.load_npz(f"{args.models_dir}/discard_linear.npz")
 
     def _load_pegging_model():
+        if pegging_model_file is None:
+            raise SystemExit("pegging model file missing for this models_dir.")
         if pegging_model_file is not None:
             path = f"{args.models_dir}/{pegging_model_file}"
             if pegging_model_type == "mlp":
@@ -345,7 +358,7 @@ def _benchmark_single(
     player_factory, model_tag, model_type, size_suffix = _build_player_factory(args, fallback_override)
 
     players_value = players_override or args.players
-    player_names = players_value.split(",")
+    player_names = [p.strip() for p in players_value.split(",") if p.strip()]
     if len(player_names) != 2:
         raise ValueError("Must specify exactly two players via --players")
 
@@ -402,6 +415,10 @@ def _benchmark_single(
         model_prefix = "GBT"
     elif model_type == "rf":
         model_prefix = "RF"
+    elif model_type == "gru":
+        model_prefix = "GRU"
+    elif model_type == "lstm":
+        model_prefix = "LSTM"
     else:
         model_prefix = "Linear"
     for name in player_names:
