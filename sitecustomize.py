@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 from pathlib import Path
 
 
@@ -21,16 +22,25 @@ def _configure_logging() -> None:
     root = logging.getLogger()
     root.setLevel(logging.INFO)
 
-    already = False
+    has_file = False
+    has_stream = False
     for handler in root.handlers:
         if isinstance(handler, logging.FileHandler) and Path(getattr(handler, "baseFilename", "")) == log_path:
-            already = True
-            break
-    if not already:
+            has_file = True
+        if isinstance(handler, logging.StreamHandler) and getattr(handler, "stream", None) in {sys.stdout, sys.stderr}:
+            has_stream = True
+    if not has_file:
         file_handler = logging.FileHandler(log_path, encoding="utf-8")
         formatter = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
         file_handler.setFormatter(formatter)
+        file_handler.setLevel(logging.INFO)
         root.addHandler(file_handler)
+    if not has_stream:
+        stream_handler = logging.StreamHandler(sys.stdout)
+        formatter = logging.Formatter("%(levelname)s %(name)s: %(message)s")
+        stream_handler.setFormatter(formatter)
+        stream_handler.setLevel(logging.INFO)
+        root.addHandler(stream_handler)
 
 
 _configure_logging()

@@ -163,12 +163,10 @@ Going to start generating V9 pegging data (includes scoring-response belief feat
 V9 pegging - add in beliefs about what cards the opponent has
 
 Questions
-  what the command is to run do_everything with what I requested? Generate pegging V9 data for 500 games. train GRU pegging model on it. then benchmark GRU pegging only model against beginner, stopping the do_everything2.py script once the "early stopping" trigger happens in train_models
-
-  what variables do I need to set for the GRP pegging model (i.e. size, hidden layers etc)
-
   in regards to generating V9 discard data. How do I pass in to the neural player/discard algorithm the exact hand/crib values?
     Meaning I don't need the model to try and predict these. I just want the model, given these values + potential pegging points + probablity of winning + your score + opponent score
     decide what to do
 
-  Please work on setting up the transformer model, so once I'm doing trying out the GRP pegging model, I can try out the transfer on itLinearVV9.001Player-PegOnly vs beginner avg point diff -27.00 (95% CI -27.00 - -27.00) wins=0/1 winrate=0.00% (95% CI 0.00% - 0.00%)
+  Please work on setting up the transformer model, so once I'm doing trying out the GRP pegging model, I can try out the transfer on it
+
+LinearVV9.001Player-PegOnly vs beginner avg point diff -30.00 (95% CI -30.00 - -30.00) wins=0/1 winrate=0.00% (95% CI 0.00% - 0.00%)

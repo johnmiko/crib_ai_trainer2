@@ -33,6 +33,7 @@ from crib_ai_trainer.players.neural_player import (
     NeuralPegOnlyPlayer,
     MLPValueModel,
     PeggingRNNValueModel,
+    PeggingTransformerValueModel,
     GBTValueModel,
     RandomForestValueModel,
 )
@@ -221,6 +222,8 @@ def _build_player_factory(args, fallback_override: str | None):
                 return MLPValueModel.load_pt(path)
             if pegging_model_type == "gru" or pegging_model_type == "lstm":
                 return PeggingRNNValueModel.load_pt(path)
+            if pegging_model_type == "transformer":
+                return PeggingTransformerValueModel.load_pt(path)
             if pegging_model_type == "gbt":
                 return GBTValueModel.load_joblib(path)
             if pegging_model_type == "rf":
@@ -232,6 +235,8 @@ def _build_player_factory(args, fallback_override: str | None):
             return PeggingRNNValueModel.load_pt(f"{args.models_dir}/pegging_gru.pt")
         if pegging_model_type == "lstm":
             return PeggingRNNValueModel.load_pt(f"{args.models_dir}/pegging_lstm.pt")
+        if pegging_model_type == "transformer":
+            return PeggingTransformerValueModel.load_pt(f"{args.models_dir}/pegging_transformer.pt")
         if pegging_model_type == "gbt":
             return GBTValueModel.load_joblib(f"{args.models_dir}/pegging_gbt.pkl")
         if pegging_model_type == "rf":
@@ -415,6 +420,8 @@ def _benchmark_single(
         model_prefix = "GBT"
     elif model_type == "rf":
         model_prefix = "RF"
+    elif model_type == "transformer":
+        model_prefix = "Transformer"
     elif model_type == "gru":
         model_prefix = "GRU"
     elif model_type == "lstm":

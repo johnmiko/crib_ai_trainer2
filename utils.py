@@ -324,7 +324,7 @@ def build_do_everything_parser() -> argparse.ArgumentParser:
         "--pegging_model_type",
         type=str,
         default=None,
-        choices=["linear", "mlp", "gbt", "rf", "gru", "lstm"],
+        choices=["linear", "mlp", "gbt", "rf", "gru", "lstm", "transformer"],
         help="Override model type for pegging head only.",
     )
     ap.add_argument(
@@ -333,6 +333,11 @@ def build_do_everything_parser() -> argparse.ArgumentParser:
         default=64,
         help="Hidden size for GRU/LSTM pegging model.",
     )
+    ap.add_argument("--pegging_transformer_d_model", type=int, default=128, help="Transformer d_model for pegging.")
+    ap.add_argument("--pegging_transformer_heads", type=int, default=4, help="Transformer num heads for pegging.")
+    ap.add_argument("--pegging_transformer_layers", type=int, default=2, help="Transformer layers for pegging.")
+    ap.add_argument("--pegging_transformer_ff_dim", type=int, default=256, help="Transformer FFN dim for pegging.")
+    ap.add_argument("--pegging_transformer_dropout", type=float, default=0.1, help="Transformer dropout for pegging.")
     ap.add_argument("--mlp_hidden", type=str, default=DEFAULT_MLP_HIDDEN)
     ap.add_argument("--discard_mlp_hidden", type=str, default=None, help="Override MLP sizes for discard head only.")
     ap.add_argument("--pegging_mlp_hidden", type=str, default=None, help="Override MLP sizes for pegging head only.")

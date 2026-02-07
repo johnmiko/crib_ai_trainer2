@@ -42,6 +42,7 @@ from crib_ai_trainer.players.neural_player import (
     get_pegging_feature_indices,
     MLPValueModel,
     PeggingRNNValueModel,
+    PeggingTransformerValueModel,
     PEGGING_FULL_FEATURE_DIM,
     GBTValueModel,
     RandomForestValueModel,
@@ -234,8 +235,8 @@ def train_models(args) -> int:
         raise SystemExit(
             "GBT/RF pegging requires --max_train_samples or --max_shards to limit memory use."
         )
-    if pegging_model_type in {"gru", "lstm"} and args.pegging_feature_set != "full_seq":
-        raise SystemExit("--pegging_model_type gru/lstm requires --pegging_feature_set full_seq.")
+    if pegging_model_type in {"gru", "lstm", "transformer"} and args.pegging_feature_set != "full_seq":
+        raise SystemExit("--pegging_model_type gru/lstm/transformer requires --pegging_feature_set full_seq.")
     if incremental:
         if discard_mode != "regression":
             raise SystemExit("--incremental requires discard_loss=regression.")
@@ -288,6 +289,17 @@ def train_models(args) -> int:
                     PEGGING_FULL_FEATURE_DIM,
                     rnn_type=pegging_model_type,
                     rnn_hidden=args.pegging_rnn_hidden,
+                    head_hidden=pegging_mlp_hidden,
+                    seed=args.seed or 0,
+                )
+            elif pegging_model_type == "transformer":
+                pegging_model = PeggingTransformerValueModel(
+                    PEGGING_FULL_FEATURE_DIM,
+                    d_model=args.pegging_transformer_d_model,
+                    nhead=args.pegging_transformer_heads,
+                    num_layers=args.pegging_transformer_layers,
+                    dim_feedforward=args.pegging_transformer_ff_dim,
+                    dropout=args.pegging_transformer_dropout,
                     head_hidden=pegging_mlp_hidden,
                     seed=args.seed or 0,
                 )
@@ -869,6 +881,11 @@ def train_models(args) -> int:
         "discard_mlp_hidden": list(discard_mlp_hidden),
         "pegging_mlp_hidden": list(pegging_mlp_hidden),
         "pegging_rnn_hidden": args.pegging_rnn_hidden if not discard_only else None,
+        "pegging_transformer_d_model": args.pegging_transformer_d_model if not discard_only else None,
+        "pegging_transformer_heads": args.pegging_transformer_heads if not discard_only else None,
+        "pegging_transformer_layers": args.pegging_transformer_layers if not discard_only else None,
+        "pegging_transformer_ff_dim": args.pegging_transformer_ff_dim if not discard_only else None,
+        "pegging_transformer_dropout": args.pegging_transformer_dropout if not discard_only else None,
         "epochs": args.epochs,
         "epochs_trained": epochs_trained,
         "lr": args.lr,
@@ -905,6 +922,8 @@ def train_models(args) -> int:
             model_meta["pegging_model_file"] = "pegging_gru.pt"
         elif pegging_model_type == "lstm":
             model_meta["pegging_model_file"] = "pegging_lstm.pt"
+        elif pegging_model_type == "transformer":
+            model_meta["pegging_model_file"] = "pegging_transformer.pt"
         elif pegging_model_type == "gbt":
             model_meta["pegging_model_file"] = "pegging_gbt.pkl"
         elif pegging_model_type == "rf":
@@ -1000,7 +1019,7 @@ if __name__ == "__main__":
         "--pegging_model_type",
         type=str,
         default=None,
-        choices=["linear", "mlp", "gbt", "rf", "gru", "lstm"],
+        choices=["linear", "mlp", "gbt", "rf", "gru", "lstm", "transformer"],
         help="Override model type for pegging head only.",
     )
     ap.add_argument(
@@ -1009,6 +1028,11 @@ if __name__ == "__main__":
         default=64,
         help="Hidden size for GRU/LSTM pegging model.",
     )
+    ap.add_argument("--pegging_transformer_d_model", type=int, default=128, help="Transformer d_model for pegging.")
+    ap.add_argument("--pegging_transformer_heads", type=int, default=4, help="Transformer num heads for pegging.")
+    ap.add_argument("--pegging_transformer_layers", type=int, default=2, help="Transformer layers for pegging.")
+    ap.add_argument("--pegging_transformer_ff_dim", type=int, default=256, help="Transformer FFN dim for pegging.")
+    ap.add_argument("--pegging_transformer_dropout", type=float, default=0.1, help="Transformer dropout for pegging.")
     ap.add_argument("--mlp_hidden", type=str, default=DEFAULT_MLP_HIDDEN, help="Comma-separated hidden sizes, e.g. 128,64")
     ap.add_argument("--discard_mlp_hidden", type=str, default=None, help="Override MLP sizes for discard head only.")
     ap.add_argument("--pegging_mlp_hidden", type=str, default=None, help="Override MLP sizes for pegging head only.")

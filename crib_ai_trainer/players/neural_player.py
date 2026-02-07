@@ -1330,6 +1330,200 @@ class PeggingRNNValueModel:
         return m
 
 
+class PeggingTransformerValueModel:
+    """Transformer encoder regressor over pegging sequences plus static features."""
+
+    def __init__(
+        self,
+        static_dim: int,
+        *,
+        d_model: int = 128,
+        nhead: int = 4,
+        num_layers: int = 2,
+        dim_feedforward: int = 256,
+        dropout: float = 0.1,
+        head_hidden: Tuple[int, ...] = (128, 64),
+        seq_len: int = PEGGING_SEQ_LEN,
+        step_dim: int = PEGGING_SEQ_STEP_DIM,
+        seed: int | None = 0,
+    ):
+        import torch
+        import torch.nn as nn
+
+        torch.manual_seed(0 if seed is None else int(seed))
+        self.static_dim = int(static_dim)
+        self.d_model = int(d_model)
+        self.nhead = int(nhead)
+        self.num_layers = int(num_layers)
+        self.dim_feedforward = int(dim_feedforward)
+        self.dropout = float(dropout)
+        self.seq_len = int(seq_len)
+        self.step_dim = int(step_dim)
+        self.head_hidden = tuple(int(h) for h in head_hidden)
+
+        self.seq_proj = nn.Linear(self.step_dim, self.d_model)
+        self.pos_embed = nn.Parameter(torch.zeros(self.seq_len, self.d_model))
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=self.d_model,
+            nhead=self.nhead,
+            dim_feedforward=self.dim_feedforward,
+            dropout=self.dropout,
+            batch_first=True,
+        )
+        self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=self.num_layers)
+
+        head_layers = []
+        prev = self.d_model + self.static_dim
+        for h in self.head_hidden:
+            head_layers.append(nn.Linear(prev, h))
+            head_layers.append(nn.ReLU())
+            prev = h
+        head_layers.append(nn.Linear(prev, 1))
+        self.head = nn.Sequential(*head_layers)
+
+    def _split(self, X: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        static = X[:, : self.static_dim]
+        seq_flat = X[:, self.static_dim :]
+        expected = self.seq_len * self.step_dim
+        if seq_flat.shape[1] != expected:
+            raise ValueError(f"Expected seq_flat dim {expected}, got {seq_flat.shape[1]}")
+        seq = seq_flat.reshape(-1, self.seq_len, self.step_dim)
+        return static, seq
+
+    def _encode(self, seq: "torch.Tensor") -> "torch.Tensor":
+        # seq: (B, T, step_dim)
+        x = self.seq_proj(seq)
+        x = x + self.pos_embed.unsqueeze(0)
+        x = self.encoder(x)
+        return x.mean(dim=1)
+
+    def predict(self, x: np.ndarray) -> float:
+        import torch
+
+        with torch.no_grad():
+            X = x.astype(np.float32, copy=False).reshape(1, -1)
+            static, seq = self._split(X)
+            t_static = torch.tensor(static, dtype=torch.float32)
+            t_seq = torch.tensor(seq, dtype=torch.float32)
+            pooled = self._encode(t_seq)
+            feats = torch.cat([t_static, pooled], dim=1)
+            y = self.head(feats).squeeze(1).item()
+        return float(y)
+
+    def predict_batch(self, X: np.ndarray) -> np.ndarray:
+        import torch
+
+        with torch.no_grad():
+            X = X.astype(np.float32, copy=False)
+            static, seq = self._split(X)
+            t_static = torch.tensor(static, dtype=torch.float32)
+            t_seq = torch.tensor(seq, dtype=torch.float32)
+            pooled = self._encode(t_seq)
+            feats = torch.cat([t_static, pooled], dim=1)
+            y = self.head(feats).squeeze(1).cpu().numpy()
+        return y.astype(np.float32, copy=False)
+
+    def fit_mse(
+        self,
+        X: np.ndarray,
+        y: np.ndarray,
+        *,
+        lr: float = 0.001,
+        epochs: int = 5,
+        batch_size: int = 1024,
+        l2: float = 0.0,
+        seed: int = 0,
+        shuffle: bool = True,
+    ) -> List[float]:
+        import torch
+        import torch.nn as nn
+        import torch.optim as optim
+
+        torch.manual_seed(0 if seed is None else int(seed))
+        X = X.astype(np.float32, copy=False)
+        y = y.astype(np.float32, copy=False)
+        N = X.shape[0]
+
+        optimizer = optim.Adam(
+            list(self.seq_proj.parameters()) + list(self.encoder.parameters()) + list(self.head.parameters()),
+            lr=lr,
+            weight_decay=l2,
+        )
+        loss_fn = nn.MSELoss()
+
+        losses: List[float] = []
+        for _ in range(epochs):
+            idx = np.arange(N)
+            if shuffle:
+                np.random.default_rng(seed).shuffle(idx)
+            epoch_loss = 0.0
+            n_seen = 0
+            for start in range(0, N, batch_size):
+                batch_idx = idx[start:start + batch_size]
+                Xb = X[batch_idx]
+                yb = y[batch_idx]
+                static, seq = self._split(Xb)
+                t_static = torch.tensor(static, dtype=torch.float32)
+                t_seq = torch.tensor(seq, dtype=torch.float32)
+                t_y = torch.tensor(yb, dtype=torch.float32)
+                optimizer.zero_grad()
+                pooled = self._encode(t_seq)
+                feats = torch.cat([t_static, pooled], dim=1)
+                pred = self.head(feats).squeeze(1)
+                loss = loss_fn(pred, t_y)
+                loss.backward()
+                optimizer.step()
+                epoch_loss += float(loss.item()) * len(batch_idx)
+                n_seen += len(batch_idx)
+            losses.append(epoch_loss / max(1, n_seen))
+        return losses
+
+    def save_pt(self, path: str) -> None:
+        import torch
+
+        torch.save(
+            {
+                "seq_proj": self.seq_proj.state_dict(),
+                "encoder": self.encoder.state_dict(),
+                "head": self.head.state_dict(),
+                "static_dim": self.static_dim,
+                "d_model": self.d_model,
+                "nhead": self.nhead,
+                "num_layers": self.num_layers,
+                "dim_feedforward": self.dim_feedforward,
+                "dropout": self.dropout,
+                "head_hidden": self.head_hidden,
+                "seq_len": self.seq_len,
+                "step_dim": self.step_dim,
+            },
+            path,
+        )
+
+    @classmethod
+    def load_pt(cls, path: str) -> "PeggingTransformerValueModel":
+        import torch
+
+        data = torch.load(path, map_location="cpu")
+        m = cls(
+            int(data["static_dim"]),
+            d_model=int(data["d_model"]),
+            nhead=int(data["nhead"]),
+            num_layers=int(data["num_layers"]),
+            dim_feedforward=int(data["dim_feedforward"]),
+            dropout=float(data["dropout"]),
+            head_hidden=tuple(int(h) for h in data["head_hidden"]),
+            seq_len=int(data["seq_len"]),
+            step_dim=int(data["step_dim"]),
+        )
+        m.seq_proj.load_state_dict(data["seq_proj"])
+        m.encoder.load_state_dict(data["encoder"])
+        m.head.load_state_dict(data["head"])
+        m.seq_proj.eval()
+        m.encoder.eval()
+        m.head.eval()
+        return m
+
+
 class GBTValueModel:
     """Gradient-boosted tree regressor using scikit-learn."""
 

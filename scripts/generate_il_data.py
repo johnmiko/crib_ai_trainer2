@@ -923,6 +923,78 @@ class LoggingMediumPlayer(MediumPlayer):
         self._current_pegging_feature_set = self._pegging_feature_set
         return self.play_pegging(playable_cards, round_state.count, round_state.table_cards)
 
+    def play_pegging(self, playable: List[Card], count: int, history_since_reset: List[Card]) -> Optional[Card]:
+        """Override to log training data."""
+        if not playable:
+            return None
+
+        if not self._log_pegging:
+            return medium_pegging_strategy(playable, count, history_since_reset)
+
+        have_playable_cards = False
+        for c in playable:
+            new_count = count + c.get_value()
+            if new_count <= 31:
+                have_playable_cards = True
+                break
+        if not have_playable_cards:
+            return None
+
+        scores = medium_pegging_strategy_scores(playable, count, history_since_reset)
+
+        known_cards = getattr(self, "_current_known_cards", [])
+        full_hand = getattr(self, "_current_hand", playable)
+        opp_known = getattr(self, "_current_opponent_known_hand", [])
+        all_played = getattr(self, "_current_all_played_cards", [])
+        player_score = getattr(self, "_current_player_score", 0)
+        opponent_score = getattr(self, "_current_opponent_score", 0)
+        feature_set = getattr(self, "_current_pegging_feature_set", "full")
+
+        for card, score in scores.items():
+            if self._pegging_label_mode == "rollout2":
+                y = estimate_pegging_rollout_value_2ply(
+                    full_hand,
+                    history_since_reset,
+                    count,
+                    card,
+                    known_cards=known_cards,
+                    all_played_cards=all_played,
+                    rng=self._rng,
+                    n_rollouts=self._pegging_rollouts,
+                )
+            elif self._pegging_label_mode == "rollout1":
+                y = estimate_pegging_rollout_value(
+                    full_hand,
+                    history_since_reset,
+                    count,
+                    card,
+                    known_cards=known_cards,
+                    all_played_cards=all_played,
+                    rng=self._rng,
+                    n_rollouts=self._pegging_rollouts,
+                )
+            else:
+                y = score
+            x = featurize_pegging(
+                full_hand,
+                history_since_reset,
+                count,
+                card,
+                known_cards=known_cards,
+                opponent_known_hand=opp_known,
+                all_played_cards=all_played,
+                player_score=player_score,
+                opponent_score=opponent_score,
+                feature_set=feature_set,
+            )
+            self._log.X_pegging.append(x)  # type: ignore
+            self._log.y_pegging.append(float(y))  # type: ignore
+
+        max_v = max(scores.values())
+        highest_scoring_cards_list = [k for k, v in scores.items() if v == max_v]
+        highest_scoring_card = get_highest_rank_card(highest_scoring_cards_list)
+        return highest_scoring_card
+
 
 class LoggingHardPlayer(HardPlayer):
     """Wrap HardPlayer so we can collect training data while it plays."""
@@ -1000,7 +1072,7 @@ class LoggingHardPlayer(HardPlayer):
         self._current_player_score = int(player_state.score)
         self._current_opponent_score = int(player_state.opponent_score)
         self._current_pegging_feature_set = self._pegging_feature_set
-        return LoggingMediumPlayer.play_pegging(self, playable_cards, round_state.count, round_state.table_cards)
+        return self.play_pegging(playable_cards, round_state.count, round_state.table_cards)
 
     def play_pegging(self, playable: List[Card], count: int, history_since_reset: List[Card]) -> Optional[Card]:
         """Override to log training data."""
