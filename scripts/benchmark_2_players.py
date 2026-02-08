@@ -14,6 +14,7 @@ import multiprocessing as mp
 from types import SimpleNamespace
 from datetime import datetime, timezone
 from pathlib import Path
+import time
 
 sys.path.insert(0, ".")
 from cribbage.utils import play_multiple_games
@@ -42,6 +43,26 @@ import logging
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def _format_elapsed(seconds: float) -> str:
+    total = int(round(seconds))
+    minutes = total // 60
+    secs = total % 60
+    return f"{minutes}m {secs}s"
+
+
+def _log_timing_start(step: str) -> float:
+    start_ts = datetime.now()
+    t0 = time.perf_counter()
+    logger.info("%s start: %s", step, start_ts.isoformat(timespec="seconds"))
+    return t0
+
+
+def _log_timing_end(step: str, t0: float) -> None:
+    end_ts = datetime.now()
+    logger.info("%s end:   %s", step, end_ts.isoformat(timespec="seconds"))
+    logger.info("%s elapsed: %s", step, _format_elapsed(time.perf_counter() - t0))
 
 
 def get_scores(game) -> tuple[int, int]:
@@ -516,6 +537,7 @@ def benchmark_2_players(
     players_override: str | None = None,
     fallback_override: str | None = None,
 ) -> int:
+    _t0 = _log_timing_start("benchmark_2_players")
     if args.seed is None:
         args.seed = 67
     if args.benchmark_workers < 1:
@@ -662,6 +684,7 @@ def benchmark_2_players(
             with open(experiments_path, "a", encoding="utf-8") as f:
                 f.write(json.dumps(experiment) + "\n")
             logger.info(f"Appended experiment -> {experiments_path}")
+        _log_timing_end("benchmark_2_players", _t0)
         return 0
 
     if total_games < args.benchmark_workers:
@@ -733,6 +756,7 @@ def benchmark_2_players(
         with open(experiments_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(experiment) + "\n")
         logger.info(f"Appended experiment -> {experiments_path}")
+    _log_timing_end("benchmark_2_players", _t0)
     return 0
 
 

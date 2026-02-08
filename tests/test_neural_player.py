@@ -20,7 +20,7 @@ def test_featurize_discard():
     cur.execute("PRAGMA table_info(hand1)")
     cols = {row[1] for row in cur.fetchall()}
     conn.close()
-    required = {"min_hand_score", "max_hand_score", "avg_hand_score"}
+    required = {"min_score", "max_score", "avg_score"}
     if not required.issubset(cols):
         pytest.skip("hand1 table missing min/max/avg columns.")
 

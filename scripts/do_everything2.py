@@ -29,10 +29,14 @@ if __name__ == "__main__":
         args.benchmark_workers = 1
         args.no_benchmark_write = True
 
+    if args.discard_only and args.pegging_only:
+        raise SystemExit("--discard_only cannot be combined with --pegging_only.")
     if args.skip_discard_data and not args.pegging_only:
         raise SystemExit("--skip_discard_data requires --pegging_only.")
     if args.pegging_only and args.skip_pegging_data:
         raise SystemExit("--pegging_only cannot be combined with --skip_pegging_data.")
+    if args.discard_only and args.skip_discard_data:
+        raise SystemExit("--discard_only cannot be combined with --skip_discard_data.")
     if args.pegging_model_type in {"gru", "lstm"}:
         if args.pegging_feature_set != "full_seq":
             raise SystemExit("--pegging_model_type gru/lstm requires --pegging_feature_set full_seq.")
@@ -61,13 +65,6 @@ if __name__ == "__main__":
         secs = total % 60
         return f"{minutes}m {secs}s"
 
-    def _log_step_start(step_name: str, start_ts: datetime) -> None:
-        print(f"{step_name} start: {start_ts.isoformat(timespec='seconds')}", flush=True)
-
-    def _log_step_end(step_name: str, end_ts: datetime, elapsed_s: float) -> None:
-        print(f"{step_name} end:   {end_ts.isoformat(timespec='seconds')}", flush=True)
-        print(f"{step_name} elapsed: {_format_elapsed(elapsed_s)}", flush=True)
-
     i = 0
     while True:
         i += 1
@@ -79,9 +76,6 @@ if __name__ == "__main__":
         print(f"dataset_dir: {dataset_dir}", flush=True)
         print(f"next_model_version: {args.model_version}", flush=True)
         print("step: generate_il_data", flush=True)
-        _t0 = time.perf_counter()
-        _start = datetime.now()
-        _log_step_start("generate_il_data", _start)
         try:
             generate_il_data(
                 args.il_games,
@@ -107,8 +101,6 @@ if __name__ == "__main__":
         except OSError as exc:
             print("OSError during generate_il_data. This likely ran out of system resources.", flush=True)
             raise
-        _end = datetime.now()
-        _log_step_end("generate_il_data", _end, time.perf_counter() - _t0)
 
         print("step: train_models", flush=True)
         args.pegging_feature_set = args.pegging_model_feature_set
@@ -116,16 +108,11 @@ if __name__ == "__main__":
         args.models_dir = _resolve_models_dir(base_models_dir, args.model_version, args.model_run_id)
         args.pegging_data_dir = args.pegging_data_dir or dataset_dir
         print(f"models_dir: {args.models_dir}", flush=True)
-        _t0 = time.perf_counter()
-        _start = datetime.now()
-        _log_step_start("train_models", _start)
         try:
             train_models(args)
         except OSError as exc:
             print("OSError during train_models. This likely ran out of system resources.", flush=True)
             raise
-        _end = datetime.now()
-        _log_step_end("train_models", _end, time.perf_counter() - _t0)
         _loop_early_stop = bool(getattr(args, "early_stopped", False))
 
         print("step: benchmark", flush=True)
@@ -136,15 +123,15 @@ if __name__ == "__main__":
         _orig_seed = args.seed
         if _orig_seed is None:
             args.seed = 67
-        _t0 = time.perf_counter()
-        _start = datetime.now()
-        _log_step_start("benchmark", _start)
         try:
             bench_args = argparse.Namespace(**vars(args))
             if hasattr(bench_args, "data_dir"):
                 delattr(bench_args, "data_dir")
             if args.pegging_only:
                 bench_args.players = "NeuralPegOnlyPlayer,beginner"
+                benchmark_2_players(bench_args)
+            elif args.discard_only:
+                bench_args.players = "NeuralDiscardOnlyPlayer,beginner"
                 benchmark_2_players(bench_args)
             else:
                 benchmark_2_players(bench_args)
@@ -160,8 +147,6 @@ if __name__ == "__main__":
             raise
         args.pegging_feature_set = data_pegging_feature_set
         args.seed = _orig_seed
-        _end = datetime.now()
-        _log_step_end("benchmark", _end, time.perf_counter() - _t0)
 
         _loop_end = datetime.now()
         _loop_elapsed = time.perf_counter() - _loop_t0

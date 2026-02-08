@@ -7,6 +7,9 @@ import numpy as np
 import logging
 
 from scripts.generate_il_data import generate_il_data
+from scripts.generate_il_data import _load_db_stats_full
+from cribbage.constants import HAND_CRIB_DB_PATH
+import sqlite3
 
 logger = logging.getLogger(__name__)
 
@@ -65,3 +68,43 @@ def test_specific_hand_discard_is_correct():
     discards = ["ks","7s"]
     kept = ["jc","8d","10s","kh"]
     # score_hand(kept)
+
+
+def test_load_db_stats_full_schema_and_values() -> None:
+    if not HAND_CRIB_DB_PATH or not Path(HAND_CRIB_DB_PATH).exists():
+        import pytest
+
+        pytest.skip("HAND_CRIB_DB_PATH not set or DB missing.")
+
+    conn = sqlite3.connect(HAND_CRIB_DB_PATH)
+    cur = conn.cursor()
+
+    cur.execute("PRAGMA table_info(hand1)")
+    hand_cols = {row[1] for row in cur.fetchall()}
+    required_hand_cols = {"min_score", "max_score", "avg_score"}
+    assert required_hand_cols.issubset(hand_cols), (
+        "hand1 table missing required columns: "
+        f"{sorted(required_hand_cols - hand_cols)}"
+    )
+
+    cur.execute("PRAGMA table_info(crib1)")
+    crib_cols = {row[1] for row in cur.fetchall()}
+    required_crib_cols = {"min_score", "avg_score"}
+    assert required_crib_cols.issubset(crib_cols), (
+        "crib1 table missing required columns: "
+        f"{sorted(required_crib_cols - crib_cols)}"
+    )
+
+    conn.close()
+
+    hand_stats, crib_stats = _load_db_stats_full()
+    assert hand_stats, "hand_stats should not be empty"
+    assert crib_stats, "crib_stats should not be empty"
+
+    hand_vals = next(iter(hand_stats.values()))
+    assert len(hand_vals) == 3
+    assert all(isinstance(v, float) for v in hand_vals)
+
+    crib_vals = next(iter(crib_stats.values()))
+    assert len(crib_vals) == 2
+    assert all(isinstance(v, float) for v in crib_vals)

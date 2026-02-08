@@ -73,7 +73,13 @@ class VariantConfig:
     transformer: tuple[int, int, int, int, float] | None = None
 
 
-def _train_variant(args, dataset_dir: str, variant: VariantConfig, models_dir: str) -> str:
+def _train_variant(
+    args,
+    dataset_dir: str,
+    pegging_dataset_dir: str,
+    variant: VariantConfig,
+    models_dir: str,
+) -> str:
     if variant.model_type in {"gru", "lstm", "transformer"} and args.pegging_feature_set != "full_seq":
         raise SystemExit("pegging_feature_set must be full_seq for GRU/LSTM/transformer models.")
     if variant.model_type == "mlp" and not variant.mlp_hidden:
@@ -83,18 +89,18 @@ def _train_variant(args, dataset_dir: str, variant: VariantConfig, models_dir: s
         data_dir=dataset_dir,
         extra_data_dir=None,
         extra_ratio=0.0,
-        pegging_data_dir=args.pegging_data_dir,
+        pegging_data_dir=pegging_dataset_dir,
         models_dir=models_dir,
         model_version=args.model_version,
         run_id=None,
         discard_loss=args.discard_loss,
         discard_feature_set=args.discard_feature_set,
         pegging_feature_set=args.pegging_feature_set,
-        model_type=variant.model_type,
+        model_type=args.model_type,
         mlp_hidden=mlp_hidden,
         discard_mlp_hidden=mlp_hidden,
         pegging_mlp_hidden=mlp_hidden,
-        discard_model_type=args.discard_model_type,
+        discard_model_type=args.discard_model_type or args.model_type,
         pegging_model_type=variant.model_type,
         pegging_rnn_hidden=variant.rnn_hidden or args.pegging_rnn_hidden,
         pegging_transformer_d_model=(variant.transformer[0] if variant.transformer else args.pegging_transformer_d_model),
@@ -114,6 +120,8 @@ def _train_variant(args, dataset_dir: str, variant: VariantConfig, models_dir: s
         eval_samples=args.eval_samples,
         max_shards=args.max_shards,
         rank_pairs_per_hand=args.rank_pairs_per_hand,
+        early_stop_patience=args.early_stop_patience,
+        early_stop_min_delta=args.early_stop_min_delta,
     )
     train_models(train_args)
     return models_dir
@@ -122,10 +130,6 @@ def _train_variant(args, dataset_dir: str, variant: VariantConfig, models_dir: s
 def _benchmark_model(args, models_dir: str, label: str, data_dir: str) -> None:
     model_tag = f"{args.model_version}-{Path(models_dir).name}"
     players = args.players
-    if args.pegging_only:
-        players = "NeuralPegOnlyPlayer,beginner"
-    elif args.discard_only:
-        players = "NeuralDiscardOnlyPlayer,beginner"
     bench_args = argparse.Namespace(
         players=players,
         benchmark_games=args.benchmark_games,
@@ -145,13 +149,35 @@ def _benchmark_model(args, models_dir: str, label: str, data_dir: str) -> None:
         auto_mixed_benchmarks=False,
         games=args.benchmark_games,
     )
-    benchmark_2_players(bench_args)
+    if args.benchmark_parts == "combined":
+        benchmark_2_players(bench_args)
+        return
+    parts = [p.strip() for p in args.players.split(",") if p.strip()]
+    opponent = parts[1] if len(parts) >= 2 else "beginner"
+    if args.benchmark_parts in {"discard", "both"}:
+        bench_args.players = f"NeuralDiscardOnlyPlayer,{opponent}"
+        benchmark_2_players(bench_args)
+    if args.benchmark_parts in {"pegging", "both"}:
+        bench_args.players = f"NeuralPegOnlyPlayer,{opponent}"
+        benchmark_2_players(bench_args)
 
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--data_dir", type=str, default=TRAINING_DATA_DIR)
     ap.add_argument("--dataset_version", type=str, default=DEFAULT_DATASET_VERSION)
+    ap.add_argument(
+        "--pegging_data_dir",
+        type=str,
+        default=DEFAULT_PEGGING_DATA_DIR,
+        help="Base dir for pegging shards (can be a dataset dir or root datasets dir).",
+    )
+    ap.add_argument(
+        "--pegging_dataset_version",
+        type=str,
+        default=None,
+        help="Optional dataset version for pegging data (defaults to --dataset_version).",
+    )
     ap.add_argument("--models_dir", type=str, default=MODELS_DIR)
     ap.add_argument("--model_version", type=str, default=DEFAULT_MODEL_VERSION)
     ap.add_argument("--discard_loss", type=str, default=DEFAULT_DISCARD_LOSS, choices=["classification", "regression", "ranking"])
@@ -165,11 +191,30 @@ if __name__ == "__main__":
     ap.add_argument("--eval_samples", type=int, default=DEFAULT_EVAL_SAMPLES)
     ap.add_argument("--max_shards", type=int, default=(DEFAULT_MAX_SHARDS or None))
     ap.add_argument("--rank_pairs_per_hand", type=int, default=DEFAULT_RANK_PAIRS_PER_HAND)
+    ap.add_argument(
+        "--early_stop_patience",
+        type=int,
+        default=5,
+        help="Stop after N shards without loss improvement.",
+    )
+    ap.add_argument(
+        "--early_stop_min_delta",
+        type=float,
+        default=1e-4,
+        help="Minimum loss improvement to reset early stopping.",
+    )
+    ap.add_argument(
+        "--benchmark_parts",
+        type=str,
+        default="combined",
+        choices=["combined", "discard", "pegging", "both"],
+        help="Which parts to benchmark (combined/discard-only/pegging-only/both).",
+    )
     ap.add_argument("--benchmark_games", type=int, default=3000)
     ap.add_argument("--benchmark_workers", type=int, default=DEFAULT_BENCHMARK_WORKERS)
     ap.add_argument("--players", type=str, default="AIPlayer,beginner")
-    ap.add_argument("--pegging_data_dir", type=str, default=DEFAULT_PEGGING_DATA_DIR)
     ap.add_argument("--mlp_hidden", type=str, default=DEFAULT_MLP_HIDDEN, help="Default MLP sizes for non-MLP variants.")
+    ap.add_argument("--model_type", type=str, default="mlp", choices=["linear", "mlp", "gbt", "rf"])
     ap.add_argument("--discard_model_type", type=str, default=None, choices=["linear", "mlp", "gbt", "rf"])
     ap.add_argument("--pegging_rnn_hidden", type=int, default=64, help="Default GRU/LSTM hidden size.")
     ap.add_argument("--pegging_transformer_d_model", type=int, default=128, help="Transformer d_model for pegging.")
@@ -205,7 +250,7 @@ if __name__ == "__main__":
     ap.add_argument(
         "--mlp_variants",
         type=str,
-        default="small=128,64;medium=256,128;large=512,256;xl=1024,512;small3=128,64,32;mini3=64,32,16",
+        default="",
         help="Semicolon-separated label=hidden_sizes pairs.",
     )
     ap.add_argument(
@@ -244,7 +289,10 @@ if __name__ == "__main__":
         raise SystemExit("--pegging_only and --discard_only are mutually exclusive.")
 
     dataset_dir = _resolve_dataset_dir(args.data_dir, args.dataset_version)
+    pegging_version = args.pegging_dataset_version or args.dataset_version
+    pegging_dataset_dir = _resolve_dataset_dir(args.pegging_data_dir, pegging_version)
     print(f"Dataset dir: {dataset_dir}")
+    print(f"Pegging dataset dir: {pegging_dataset_dir}")
 
     variants: list[VariantConfig] = []
 
@@ -312,10 +360,10 @@ if __name__ == "__main__":
 
     if not variants:
         raise SystemExit("No model variants specified.")
-    if any(v.model_type in {"gru", "lstm", "transformer"} for v in variants) and not args.pegging_only:
-        raise SystemExit("GRU/LSTM/transformer variants require --pegging_only.")
     if args.discard_only and any(v.model_type in {"gru", "lstm", "transformer"} for v in variants):
         raise SystemExit("Discard-only training does not support GRU/LSTM/transformer variants.")
+    if any(v.model_type in {"gru", "lstm", "transformer"} for v in variants) and args.pegging_feature_set != "full_seq":
+        raise SystemExit("GRU/LSTM/transformer variants require --pegging_feature_set full_seq.")
 
     benchmark_dirs: dict[str, str] = {}
     if args.benchmark_dirs.strip():
@@ -350,7 +398,7 @@ if __name__ == "__main__":
         if train_workers <= 1 or len(variant_jobs) <= 1:
             for variant, model_dir in variant_jobs:
                 print(f"Training {variant.label} ({variant.model_type})...")
-                _train_variant(args, dataset_dir, variant, model_dir)
+                _train_variant(args, dataset_dir, pegging_dataset_dir, variant, model_dir)
                 print(f"{variant.label} model dir: {model_dir}")
                 trained_dirs[variant.label] = model_dir
         else:
@@ -361,6 +409,7 @@ if __name__ == "__main__":
                         _train_variant,
                         args,
                         dataset_dir,
+                        pegging_dataset_dir,
                         variant,
                         model_dir,
                     ): (variant.label, model_dir)

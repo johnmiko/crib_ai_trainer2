@@ -391,6 +391,12 @@ def build_do_everything_parser() -> argparse.ArgumentParser:
         help="Train/benchmark only the pegging model (skip discard training).",
     )
     ap.add_argument(
+        "--discard_only",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Train/benchmark only the discard model (skip pegging training).",
+    )
+    ap.add_argument(
         "--skip_pegging_data",
         action="store_true",
         default=False,

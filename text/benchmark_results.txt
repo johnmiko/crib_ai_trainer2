@@ -169,7 +169,7 @@ Questions
 
 benchmark elapsed: 13m 8s
 LinearVV9.001[gru-128]Player-PegOnly vs beginner avg point diff 0.86 (95% CI 0.36 - 1.37) wins=5098/10000 winrate=50.98% (95% CI 50.00% - 51.96%)
-LinearVV9.004Player-PegOnly vs beginner avg point diff 0.75 (95% CI -0.84 - 2.35) wins=505/1000 winrate=50.50% (95% CI 47.40% - 53.60%)
+LinearVV9.004[gru-128]Player-PegOnly vs beginner avg point diff 0.75 (95% CI -0.84 - 2.35) wins=505/1000 winrate=50.50% (95% CI 47.40% - 53.60%)
 
 .\.venv\Scripts\python.exe .\scripts\mlp_size_sweep.py `
   --data_dir "datasets" `
@@ -186,3 +186,18 @@ gru128V9.004128Player-PegOnly vs beginner avg point diff 0.31 (95% CI -0.20 - 0.
 gru256V9.004256Player-PegOnly vs beginner avg point diff 0.51 (95% CI -0.00 - 1.03) wins=5074/10000 winrate=50.74% (95% CI 49.76% - 51.72%)
 tx64V9.00464Player-PegOnly vs beginner avg point diff 0.58 (95% CI 0.07 - 1.09) wins=5067/10000 winrate=50.67% (95% CI 49.69% - 51.65%)
 tx128V9.004128Player-PegOnly vs beginner avg point diff 0.64 (95% CI 0.13 - 1.15) wins=5102/10000 winrate=51.02% (95% CI 50.04% - 52.00%)
+
+LinearVV9.004160Player-PegOnly vs beginner avg point diff 0.26 (95% CI -0.25 - 0.77) wins=5012/10000 winrate=50.12% (95% CI 49.14% - 51.10%)
+
+.\.venv\Scripts\python.exe .\scripts\benchmark_2_players.py `
+   --players "NeuralPegOnlyPlayer,beginner" `
+   --benchmark_games 10000 `
+   --benchmark_workers 20 `
+   --queue_models "models\regression\discard_v9\004_tx160,models\regression\discard_v9\004_tx128ff,models\regression\discard_v9\004_tx128l3,models\regression\discard_v9\004_tx128h8,models\regression\discard_v9\004_tx128d05" `
+   --no_auto_mixed_benchmarks
+LinearVV9.004160Player-PegOnly vs beginner avg point diff 0.26 (95% CI -0.25 - 0.77) wins=5012/10000 winrate=50.12% (95% CI 49.14% - 51.10%)
+LinearVV9.004128Player-PegOnly vs beginner avg point diff -0.05 (95% CI -0.56 - 0.46) wins=4916/10000 winrate=49.16% (95% CI 48.18% - 50.14%)
+LinearVV9.0041283Player-PegOnly vs beginner avg point diff 0.47 (95% CI -0.05 - 0.98) wins=5005/10000 winrate=50.05% (95% CI 49.07% - 51.03%)
+LinearVV9.0041288Player-PegOnly vs beginner avg point diff 0.52 (95% CI 0.00 - 1.03) wins=5043/10000 winrate=50.43% (95% CI 49.45% - 51.41%)
+V9[004_tx128d05]PegOnly vs beginner avg point diff 0.49 (95% CI -0.02 - 1.00) wins=5019/10000 winrate=50.19% (95% CI 49.21% - 51.17%)
+V9[MLP512,256]DiscardOnly vs beginner avg point diff -41.00 (95% CI -41.00 - -41.00) wins=0/1 winrate=0.00% (95% CI 0.00% - 0.00%)

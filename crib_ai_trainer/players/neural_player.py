@@ -42,11 +42,11 @@ def _load_exact_hand_crib_stats() -> tuple[dict[str, tuple[float, float, float]]
     hand_stats: dict[str, tuple[float, float, float]] = {}
     crib_stats: dict[str, tuple[float, float]] = {}
 
-    cur.execute("SELECT hand_key, min_hand_score, max_hand_score, avg_hand_score FROM hand1")
+    cur.execute("SELECT hand_key, min_score, max_score, avg_score FROM hand1")
     for hand_key, min_score, max_score, avg_score in cur.fetchall():
         hand_stats[str(hand_key)] = (float(min_score), float(max_score), float(avg_score))
 
-    cur.execute("SELECT hand_key, min_crib_score, avg_crib_score FROM crib1")
+    cur.execute("SELECT hand_key, min_score, avg_score FROM crib1")
     for crib_key, min_score, avg_score in cur.fetchall():
         crib_stats[str(crib_key)] = (float(min_score), float(avg_score))
 
@@ -65,12 +65,12 @@ BASE_DISCARD_FEATURE_DIM = 105
 # 3 run counts (3/4/5) + 1 run max +
 # 2 flush flags (kept/discard) + 1 nobs + 2 fifteen counts +
 # 3 pegging EV features (self/opp/diff) +
-# 5 exact discard stats (hand_avg, crib_avg, hand_min, hand_max, crib_min) +
+# 7 exact discard stats (hand_avg, crib_avg, hand_min, hand_max, crib_min, min_total, avg_total) +
 # 2 scores + 1 score margin + 3 endgame flags
 ENGINEERED_DISCARD_NO_SCORE_BASE_DIM = 52
 ENGINEERED_DISCARD_PEGGING_EV_DIM = 3
 ENGINEERED_DISCARD_NO_SCORE_DIM = ENGINEERED_DISCARD_NO_SCORE_BASE_DIM + ENGINEERED_DISCARD_PEGGING_EV_DIM
-ENGINEERED_DISCARD_SCORE_DIM = 6
+ENGINEERED_DISCARD_SCORE_DIM = 8
 ENGINEERED_DISCARD_FEATURE_DIM = ENGINEERED_DISCARD_NO_SCORE_DIM + ENGINEERED_DISCARD_SCORE_DIM
 
 DISCARD_FEATURE_DIM = BASE_DISCARD_FEATURE_DIM + ENGINEERED_DISCARD_FEATURE_DIM
@@ -399,6 +399,8 @@ def featurize_discard(
         raise KeyError(f"Missing exact hand/crib stats for hand={hand_key} crib={crib_key}")
     hand_min, hand_max, hand_avg = hand_vals
     crib_min, crib_avg = crib_vals
+    min_total = hand_min + (crib_min if dealer_is_self else -crib_min)
+    avg_total = hand_avg + (crib_avg if dealer_is_self else -crib_avg)
 
     engineered = np.concatenate([
         _rank_counts(kept),                       # 13
@@ -425,6 +427,8 @@ def featurize_discard(
         np.array([hand_min], dtype=np.float32),
         np.array([hand_max], dtype=np.float32),
         np.array([crib_min], dtype=np.float32),
+        np.array([min_total], dtype=np.float32),
+        np.array([avg_total], dtype=np.float32),
         score_context,
     ])
 

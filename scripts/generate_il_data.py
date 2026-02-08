@@ -15,8 +15,10 @@ upgrade the targets (Monte Carlo / rollout / self-play RL).
 from __future__ import annotations
 import os
 from pathlib import Path
+import sqlite3
 import multiprocessing as mp
 import sys
+import time
 
 from cribbage.cribbagegame import score_hand, score_play as score_play
 from cribbage.players.rule_based_player import get_full_deck
@@ -59,6 +61,7 @@ from cribbage.strategies.pegging_strategies import (
 from cribbage.strategies.hand_strategies import process_dealt_hand_only_exact, exact_hand_and_min_crib
 from cribbage.strategies.crib_strategies import calc_crib_min_only_given_6_cards
 from cribbage.database import normalize_hand_to_str
+from cribbage.constants import HAND_CRIB_DB_PATH
 
 from cribbage.players.beginner_player import BeginnerPlayer
 from cribbage.players.medium_player import MediumPlayer
@@ -78,6 +81,26 @@ import logging
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def _format_elapsed(seconds: float) -> str:
+    total = int(round(seconds))
+    minutes = total // 60
+    secs = total % 60
+    return f"{minutes}m {secs}s"
+
+
+def _log_timing_start(step: str) -> tuple[float, datetime]:
+    start_ts = datetime.now()
+    t0 = time.perf_counter()
+    logger.info("%s start: %s", step, start_ts.isoformat(timespec="seconds"))
+    return t0, start_ts
+
+
+def _log_timing_end(step: str, t0: float) -> None:
+    end_ts = datetime.now()
+    logger.info("%s end:   %s", step, end_ts.isoformat(timespec="seconds"))
+    logger.info("%s elapsed: %s", step, _format_elapsed(time.perf_counter() - t0))
 
 import random
 import secrets
@@ -996,6 +1019,47 @@ class LoggingMediumPlayer(MediumPlayer):
         return highest_scoring_card
 
 
+_HAND_STATS_FULL: dict[str, tuple[float, float, float]] | None = None
+_CRIB_STATS_FULL: dict[str, tuple[float, float]] | None = None
+
+
+def _load_db_stats_full() -> tuple[dict[str, tuple[float, float, float]], dict[str, tuple[float, float]]]:
+    global _HAND_STATS_FULL, _CRIB_STATS_FULL
+    if _HAND_STATS_FULL is not None and _CRIB_STATS_FULL is not None:
+        return _HAND_STATS_FULL, _CRIB_STATS_FULL
+
+    if not HAND_CRIB_DB_PATH or not Path(HAND_CRIB_DB_PATH).exists():
+        raise FileNotFoundError(
+            f"Missing hand/crib stats DB at {HAND_CRIB_DB_PATH}. "
+            "Run scripts/generate_all_possible_crib_hand_scores.py to create it."
+        )
+
+    hand_stats: dict[str, tuple[float, float, float]] = {}
+    crib_stats: dict[str, tuple[float, float]] = {}
+
+    conn = sqlite3.connect(HAND_CRIB_DB_PATH)
+    cur = conn.cursor()
+    cur.execute("SELECT hand_key, min_score, max_score, avg_score FROM hand1")
+    for hand_key, min_score, max_score, avg_score in cur.fetchall():
+        hand_stats[str(hand_key)] = (
+            float(min_score),
+            float(max_score),
+            float(avg_score),
+        )
+
+    cur.execute("SELECT hand_key, min_score, avg_score FROM crib1")
+    for crib_key, min_score, avg_score in cur.fetchall():
+        crib_stats[str(crib_key)] = (
+            float(min_score),
+            float(avg_score),
+        )
+
+    conn.close()
+    _HAND_STATS_FULL = hand_stats
+    _CRIB_STATS_FULL = crib_stats
+    return hand_stats, crib_stats
+
+
 class LoggingHardPlayer(HardPlayer):
     """Wrap HardPlayer so we can collect training data while it plays."""
 
@@ -1046,6 +1110,7 @@ class LoggingHardPlayer(HardPlayer):
         self._pegging_ev_rollouts = pegging_ev_rollouts
         self._rng_np = np.random.default_rng(seed)
         self._log_discard = log_discard
+        self._hand_stats_full, self._crib_stats_full = _load_db_stats_full()
 
     def select_crib_cards(self, player_state, round_state) -> Tuple[Card, Card]:
         hand = player_state.hand
@@ -1158,13 +1223,39 @@ class LoggingHardPlayer(HardPlayer):
             discards_list = [c for c in hand if c not in kept_list]
             hand_key = normalize_hand_to_str(kept_list)
             crib_key = normalize_hand_to_str(discards_list)
-            hand_avg = self._hand_stats.get(hand_key)
-            crib_avg = self._crib_stats.get(crib_key)
-            if hand_avg is None or crib_avg is None:
+            hand_vals = self._hand_stats_full.get(hand_key)
+            crib_vals = self._crib_stats_full.get(crib_key)
+            if hand_vals is None or crib_vals is None:
                 raise KeyError(f"Missing DB stats for hand={hand_key} crib={crib_key}")
+            hand_min, hand_max, hand_avg = hand_vals
+            crib_min, crib_avg = crib_vals
             avg_total = hand_avg + (crib_avg if dealer_is_self else -crib_avg)
-            rows.append([hand_key, crib_key, float(avg_total)])
-        return pd.DataFrame(rows, columns=["hand_key", "crib_key", "avg_total_score"])
+            min_total = hand_min + (crib_min if dealer_is_self else -crib_min)
+            rows.append([
+                hand_key,
+                crib_key,
+                float(hand_min),
+                float(hand_max),
+                float(hand_avg),
+                float(crib_min),
+                float(crib_avg),
+                float(avg_total),
+                float(min_total),
+            ])
+        return pd.DataFrame(
+            rows,
+            columns=[
+                "hand_key",
+                "crib_key",
+                "hand_min_score",
+                "hand_max_score",
+                "hand_avg_score",
+                "crib_min_score",
+                "crib_avg_score",
+                "avg_total_score",
+                "min_total_score",
+            ],
+        )
 
     def select_crib_cards_classifier(self, hand, dealer_is_self, your_score=None, opponent_score=None) -> Tuple[Card, Card]:                
         df3 = self._build_db_scores_df(hand, dealer_is_self)
@@ -1829,6 +1920,7 @@ def generate_il_data(
     max_buffer_games: int | None = 500,
     teacher_player: str = "hard",
 ) -> int:
+    _t0, _start_ts = _log_timing_start("generate_il_data")
     if not save_discard and not save_pegging:
         raise ValueError("At least one of save_discard or save_pegging must be True.")
     if seed is None:
@@ -1853,6 +1945,7 @@ def generate_il_data(
 
     if games == 0:
         logger.info("No IL games requested (games=0). Skipping generation.")
+        _log_timing_end("generate_il_data", _t0)
         return 0
 
     if workers > 1 and games >= 0:
@@ -1910,6 +2003,7 @@ def generate_il_data(
                     idx,
                     len(worker_args),
                 )
+        _log_timing_end("generate_il_data", _t0)
         return 0
 
     rng = np.random.default_rng(seed)
@@ -2013,7 +2107,7 @@ def generate_il_data(
             save_pegging,
             save_discard,
         )
-    
+    _log_timing_end("generate_il_data", _t0)
     return 0
 
 
