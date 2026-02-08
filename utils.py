@@ -317,7 +317,7 @@ def build_do_everything_parser() -> argparse.ArgumentParser:
         "--discard_model_type",
         type=str,
         default=None,
-        choices=["linear", "mlp", "gbt", "rf"],
+        choices=["linear", "mlp", "gbt", "rf", "gru", "lstm", "transformer"],
         help="Override model type for discard head only.",
     )
     ap.add_argument(
@@ -327,6 +327,17 @@ def build_do_everything_parser() -> argparse.ArgumentParser:
         choices=["linear", "mlp", "gbt", "rf", "gru", "lstm", "transformer"],
         help="Override model type for pegging head only.",
     )
+    ap.add_argument(
+        "--discard_rnn_hidden",
+        type=int,
+        default=64,
+        help="Hidden size for GRU/LSTM discard model.",
+    )
+    ap.add_argument("--discard_transformer_d_model", type=int, default=128, help="Transformer d_model for discard.")
+    ap.add_argument("--discard_transformer_heads", type=int, default=4, help="Transformer num heads for discard.")
+    ap.add_argument("--discard_transformer_layers", type=int, default=2, help="Transformer layers for discard.")
+    ap.add_argument("--discard_transformer_ff_dim", type=int, default=256, help="Transformer FFN dim for discard.")
+    ap.add_argument("--discard_transformer_dropout", type=float, default=0.1, help="Transformer dropout for discard.")
     ap.add_argument(
         "--pegging_rnn_hidden",
         type=int,

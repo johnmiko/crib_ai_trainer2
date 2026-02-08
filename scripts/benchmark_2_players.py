@@ -221,6 +221,10 @@ def _build_player_factory(args, fallback_override: str | None):
             path = f"{args.models_dir}/{discard_model_file}"
             if discard_model_type == "mlp":
                 return MLPValueModel.load_pt(path)
+            if discard_model_type == "gru" or discard_model_type == "lstm":
+                return PeggingRNNValueModel.load_pt(path)
+            if discard_model_type == "transformer":
+                return PeggingTransformerValueModel.load_pt(path)
             if discard_model_type == "gbt":
                 return GBTValueModel.load_joblib(path)
             if discard_model_type == "rf":
@@ -228,6 +232,12 @@ def _build_player_factory(args, fallback_override: str | None):
             return LinearValueModel.load_npz(path)
         if discard_model_type == "mlp":
             return MLPValueModel.load_pt(f"{args.models_dir}/discard_mlp.pt")
+        if discard_model_type == "gru":
+            return PeggingRNNValueModel.load_pt(f"{args.models_dir}/discard_gru.pt")
+        if discard_model_type == "lstm":
+            return PeggingRNNValueModel.load_pt(f"{args.models_dir}/discard_lstm.pt")
+        if discard_model_type == "transformer":
+            return PeggingTransformerValueModel.load_pt(f"{args.models_dir}/discard_transformer.pt")
         if discard_model_type == "gbt":
             return GBTValueModel.load_joblib(f"{args.models_dir}/discard_gbt.pkl")
         if discard_model_type == "rf":
@@ -375,6 +385,91 @@ def _compute_win_ci(winrate: float, total_games: int) -> tuple[float, float]:
     return lo, hi
 
 
+def _extract_version_and_run_label(tag: str | None) -> tuple[str | None, str | None]:
+    if not tag:
+        return None, None
+    version_label = None
+    run_label = None
+    if "discard_v" in tag:
+        v_part = tag.split("discard_v", 1)[1]
+        version_part, sep, rest = v_part.partition("-")
+        v_num = "".join(c for c in version_part if c.isdigit())
+        if v_num:
+            version_label = f"V{v_num}"
+        if sep and rest:
+            run_label = rest
+    if version_label is None:
+        digits = "".join(c for c in tag if c.isdigit())
+        if digits:
+            version_label = f"V{digits}"
+    if run_label is None and "-" in tag:
+        _, rest = tag.split("-", 1)
+        if rest:
+            run_label = rest
+    return version_label, run_label
+
+
+def _read_mlp_hidden_label(models_dir: str) -> str | None:
+    meta_path = Path(models_dir) / "model_meta.json"
+    if not meta_path.exists():
+        return None
+    try:
+        with open(meta_path, "r", encoding="utf-8") as f:
+            meta = json.load(f)
+    except Exception:
+        return None
+
+    def _coerce_hidden(value) -> str | None:
+        if value is None:
+            return None
+        if isinstance(value, (list, tuple)):
+            return ",".join(str(int(v)) for v in value)
+        if isinstance(value, str):
+            parts = [p.strip() for p in value.split(",") if p.strip()]
+            if parts:
+                return ",".join(parts)
+        return None
+
+    for key in ("discard_mlp_hidden", "pegging_mlp_hidden", "mlp_hidden"):
+        hidden = _coerce_hidden(meta.get(key))
+        if hidden:
+            return hidden
+    return None
+
+
+def _format_model_display_name(
+    player_name: str,
+    model_tag: str | None,
+    model_type: str,
+    models_dir: str,
+    size_suffix: str,
+) -> str:
+    version_label, run_label = _extract_version_and_run_label(model_tag)
+    if model_type == "mlp":
+        hidden = _read_mlp_hidden_label(models_dir)
+        if hidden:
+            run_label = f"MLP{hidden}"
+        elif size_suffix:
+            run_label = f"MLP{size_suffix.strip('[]')}"
+        else:
+            run_label = "MLP"
+
+    if version_label and run_label:
+        label = f"{version_label}[{run_label}]"
+    elif version_label:
+        label = version_label
+    elif run_label:
+        label = run_label
+    else:
+        label = model_tag or model_type.upper()
+
+    if player_name == "NeuralDiscardOnlyPlayer":
+        label = f"{label}DiscardOnly"
+    elif player_name == "NeuralPegOnlyPlayer":
+        label = f"{label}PegOnly"
+    return label
+
+
 def _benchmark_single(
     args,
     players_override: str | None = None,
@@ -435,20 +530,6 @@ def _benchmark_single(
             diff_ci_lo = avg_diff
             diff_ci_hi = avg_diff
     display_names = []
-    if model_type == "mlp":
-        model_prefix = "MLP"
-    elif model_type == "gbt":
-        model_prefix = "GBT"
-    elif model_type == "rf":
-        model_prefix = "RF"
-    elif model_type == "transformer":
-        model_prefix = "Transformer"
-    elif model_type == "gru":
-        model_prefix = "GRU"
-    elif model_type == "lstm":
-        model_prefix = "LSTM"
-    else:
-        model_prefix = "Linear"
     for name in player_names:
         if name in {
             "AIPlayer",
@@ -458,44 +539,9 @@ def _benchmark_single(
             "NeuralDiscardOnlyPlayer",
             "NeuralPegOnlyPlayer",
         }:
-            tag = model_tag
-            # Prefer version like "discard_v6-008" -> V6.008 (for linear) or V6 (for mlp)
-            version_digits = []
-            if "discard_v" in tag:
-                try:
-                    v_part = tag.split("discard_v", 1)[1]
-                    v_num = "".join(c for c in v_part.split("-", 1)[0] if c.isdigit())
-                    run_num = ""
-                    if "-" in tag:
-                        run_num = "".join(c for c in tag.split("-", 1)[1] if c.isdigit())
-                    if v_num:
-                        version_digits.append(f"V{v_num}")
-                    if run_num and model_type != "mlp":
-                        version_digits.append(run_num)
-                except Exception:
-                    version_digits = []
-            if version_digits:
-                if model_type == "mlp":
-                    label = f"{model_prefix}{''.join(version_digits)}{size_suffix}"
-                else:
-                    label = f"{model_prefix}V{'.'.join(version_digits[0:])}Player"
-            else:
-                version_label = "".join(c for c in tag if c.isdigit())
-                if version_label:
-                    if model_type == "mlp":
-                        label = f"{model_prefix}V{version_label}{size_suffix}"
-                    else:
-                        label = f"{model_prefix}V{version_label}Player"
-                else:
-                    if model_type == "mlp":
-                        label = f"{model_prefix}{tag.capitalize()}{size_suffix}"
-                    else:
-                        label = f"{model_prefix}{tag.capitalize()}Player"
-            if name == "NeuralDiscardOnlyPlayer":
-                label = f"{label}-DiscardOnly"
-            elif name == "NeuralPegOnlyPlayer":
-                label = f"{label}-PegOnly"
-            display_names.append(label)
+            display_names.append(
+                _format_model_display_name(name, model_tag, model_type, args.models_dir, size_suffix)
+            )
         else:
             display_names.append(name)
     return {

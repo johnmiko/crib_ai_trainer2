@@ -71,6 +71,10 @@ class VariantConfig:
     mlp_hidden: str | None = None
     rnn_hidden: int | None = None
     transformer: tuple[int, int, int, int, float] | None = None
+    discard_model_type: str | None = None
+    discard_mlp_hidden: str | None = None
+    discard_rnn_hidden: int | None = None
+    discard_transformer: tuple[int, int, int, int, float] | None = None
 
 
 def _train_variant(
@@ -82,9 +86,11 @@ def _train_variant(
 ) -> str:
     if variant.model_type in {"gru", "lstm", "transformer"} and args.pegging_feature_set != "full_seq":
         raise SystemExit("pegging_feature_set must be full_seq for GRU/LSTM/transformer models.")
-    if variant.model_type == "mlp" and not variant.mlp_hidden:
+    if variant.model_type == "mlp" and not variant.mlp_hidden and not args.discard_only:
         raise SystemExit(f"MLP variant {variant.label} is missing hidden sizes.")
     mlp_hidden = variant.mlp_hidden or args.mlp_hidden
+    discard_model_type = variant.discard_model_type or args.discard_model_type or args.model_type
+    discard_mlp_hidden = variant.discard_mlp_hidden or mlp_hidden
     train_args = argparse.Namespace(
         data_dir=dataset_dir,
         extra_data_dir=None,
@@ -98,9 +104,9 @@ def _train_variant(
         pegging_feature_set=args.pegging_feature_set,
         model_type=args.model_type,
         mlp_hidden=mlp_hidden,
-        discard_mlp_hidden=mlp_hidden,
+        discard_mlp_hidden=discard_mlp_hidden,
         pegging_mlp_hidden=mlp_hidden,
-        discard_model_type=args.discard_model_type or args.model_type,
+        discard_model_type=discard_model_type,
         pegging_model_type=variant.model_type,
         pegging_rnn_hidden=variant.rnn_hidden or args.pegging_rnn_hidden,
         pegging_transformer_d_model=(variant.transformer[0] if variant.transformer else args.pegging_transformer_d_model),
@@ -108,6 +114,22 @@ def _train_variant(
         pegging_transformer_layers=(variant.transformer[2] if variant.transformer else args.pegging_transformer_layers),
         pegging_transformer_ff_dim=(variant.transformer[3] if variant.transformer else args.pegging_transformer_ff_dim),
         pegging_transformer_dropout=(variant.transformer[4] if variant.transformer else args.pegging_transformer_dropout),
+        discard_rnn_hidden=variant.discard_rnn_hidden or args.discard_rnn_hidden,
+        discard_transformer_d_model=(
+            variant.discard_transformer[0] if variant.discard_transformer else args.discard_transformer_d_model
+        ),
+        discard_transformer_heads=(
+            variant.discard_transformer[1] if variant.discard_transformer else args.discard_transformer_heads
+        ),
+        discard_transformer_layers=(
+            variant.discard_transformer[2] if variant.discard_transformer else args.discard_transformer_layers
+        ),
+        discard_transformer_ff_dim=(
+            variant.discard_transformer[3] if variant.discard_transformer else args.discard_transformer_ff_dim
+        ),
+        discard_transformer_dropout=(
+            variant.discard_transformer[4] if variant.discard_transformer else args.discard_transformer_dropout
+        ),
         discard_only=args.discard_only,
         pegging_only=args.pegging_only,
         lr=args.lr,
@@ -215,13 +237,19 @@ if __name__ == "__main__":
     ap.add_argument("--players", type=str, default="AIPlayer,beginner")
     ap.add_argument("--mlp_hidden", type=str, default=DEFAULT_MLP_HIDDEN, help="Default MLP sizes for non-MLP variants.")
     ap.add_argument("--model_type", type=str, default="mlp", choices=["linear", "mlp", "gbt", "rf"])
-    ap.add_argument("--discard_model_type", type=str, default=None, choices=["linear", "mlp", "gbt", "rf"])
+    ap.add_argument("--discard_model_type", type=str, default=None, choices=["linear", "mlp", "gbt", "rf", "gru", "lstm", "transformer"])
     ap.add_argument("--pegging_rnn_hidden", type=int, default=64, help="Default GRU/LSTM hidden size.")
+    ap.add_argument("--discard_rnn_hidden", type=int, default=64, help="Hidden size for GRU/LSTM discard model.")
     ap.add_argument("--pegging_transformer_d_model", type=int, default=128, help="Transformer d_model for pegging.")
     ap.add_argument("--pegging_transformer_heads", type=int, default=4, help="Transformer num heads for pegging.")
     ap.add_argument("--pegging_transformer_layers", type=int, default=2, help="Transformer layers for pegging.")
     ap.add_argument("--pegging_transformer_ff_dim", type=int, default=256, help="Transformer FFN dim for pegging.")
     ap.add_argument("--pegging_transformer_dropout", type=float, default=0.1, help="Transformer dropout for pegging.")
+    ap.add_argument("--discard_transformer_d_model", type=int, default=128, help="Transformer d_model for discard.")
+    ap.add_argument("--discard_transformer_heads", type=int, default=4, help="Transformer num heads for discard.")
+    ap.add_argument("--discard_transformer_layers", type=int, default=2, help="Transformer layers for discard.")
+    ap.add_argument("--discard_transformer_ff_dim", type=int, default=256, help="Transformer FFN dim for discard.")
+    ap.add_argument("--discard_transformer_dropout", type=float, default=0.1, help="Transformer dropout for discard.")
     ap.add_argument("--torch_threads", type=int, default=8, help="Torch CPU thread count (intra/inter-op).")
     ap.add_argument(
         "--parallel_heads",
@@ -254,6 +282,12 @@ if __name__ == "__main__":
         help="Semicolon-separated label=hidden_sizes pairs.",
     )
     ap.add_argument(
+        "--discard_mlp_variants",
+        type=str,
+        default="",
+        help="Semicolon-separated discard label=hidden_sizes pairs.",
+    )
+    ap.add_argument(
         "--rnn_variants",
         type=str,
         default="",
@@ -264,6 +298,18 @@ if __name__ == "__main__":
         type=str,
         default="",
         help="Semicolon-separated label=d_model,heads,layers,ff_dim,dropout entries.",
+    )
+    ap.add_argument(
+        "--discard_rnn_variants",
+        type=str,
+        default="",
+        help="Semicolon-separated discard label=gru:128 or label=lstm:256 entries.",
+    )
+    ap.add_argument(
+        "--discard_transformer_variants",
+        type=str,
+        default="",
+        help="Semicolon-separated discard label=d_model,heads,layers,ff_dim,dropout entries.",
     )
     ap.add_argument(
         "--custom_sizes",
@@ -310,6 +356,22 @@ if __name__ == "__main__":
             hidden = part
             label = part.replace(",", "x").replace(" ", "")
         _add_variant(VariantConfig(label=label, model_type="mlp", mlp_hidden=hidden))
+    for part in [p.strip() for p in args.discard_mlp_variants.split(";") if p.strip()]:
+        if "=" in part:
+            label, hidden = part.split("=", 1)
+            label = label.strip()
+            hidden = hidden.strip()
+        else:
+            hidden = part
+            label = part.replace(",", "x").replace(" ", "")
+        _add_variant(
+            VariantConfig(
+                label=label,
+                model_type=args.model_type,
+                discard_model_type="mlp",
+                discard_mlp_hidden=hidden,
+            )
+        )
     if args.custom_sizes.strip():
         for part in [p.strip() for p in args.custom_sizes.split(";") if p.strip()]:
             if "=" in part:
@@ -337,6 +399,23 @@ if __name__ == "__main__":
                     rnn_hidden=int(hidden.strip()),
                 )
             )
+    if args.discard_rnn_variants.strip():
+        for part in [p.strip() for p in args.discard_rnn_variants.split(";") if p.strip()]:
+            if "=" not in part or ":" not in part:
+                raise SystemExit(f"Invalid --discard_rnn_variants entry: {part!r}")
+            label, spec = part.split("=", 1)
+            model_type, hidden = spec.split(":", 1)
+            model_type = model_type.strip()
+            if model_type not in {"gru", "lstm"}:
+                raise SystemExit(f"Invalid discard RNN model type {model_type!r} in {part!r}")
+            _add_variant(
+                VariantConfig(
+                    label=label.strip(),
+                    model_type=args.model_type,
+                    discard_model_type=model_type,
+                    discard_rnn_hidden=int(hidden.strip()),
+                )
+            )
 
     if args.transformer_variants.strip():
         for part in [p.strip() for p in args.transformer_variants.split(";") if p.strip()]:
@@ -357,11 +436,29 @@ if __name__ == "__main__":
                     transformer=(d_model, heads, layers, ff_dim, dropout),
                 )
             )
+    if args.discard_transformer_variants.strip():
+        for part in [p.strip() for p in args.discard_transformer_variants.split(";") if p.strip()]:
+            if "=" not in part:
+                raise SystemExit(f"Invalid --discard_transformer_variants entry: {part!r}")
+            label, spec = part.split("=", 1)
+            parts = [p.strip() for p in spec.split(",") if p.strip()]
+            if len(parts) != 5:
+                raise SystemExit(
+                    f"Discard transformer variants must be d_model,heads,layers,ff_dim,dropout (got {spec!r})"
+                )
+            d_model, heads, layers, ff_dim = (int(parts[0]), int(parts[1]), int(parts[2]), int(parts[3]))
+            dropout = float(parts[4])
+            _add_variant(
+                VariantConfig(
+                    label=label.strip(),
+                    model_type=args.model_type,
+                    discard_model_type="transformer",
+                    discard_transformer=(d_model, heads, layers, ff_dim, dropout),
+                )
+            )
 
     if not variants:
         raise SystemExit("No model variants specified.")
-    if args.discard_only and any(v.model_type in {"gru", "lstm", "transformer"} for v in variants):
-        raise SystemExit("Discard-only training does not support GRU/LSTM/transformer variants.")
     if any(v.model_type in {"gru", "lstm", "transformer"} for v in variants) and args.pegging_feature_set != "full_seq":
         raise SystemExit("GRU/LSTM/transformer variants require --pegging_feature_set full_seq.")
 

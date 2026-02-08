@@ -259,6 +259,8 @@ def train_models(args) -> int:
         )
     if pegging_model_type in {"gru", "lstm", "transformer"} and args.pegging_feature_set != "full_seq":
         raise SystemExit("--pegging_model_type gru/lstm/transformer requires --pegging_feature_set full_seq.")
+    if discard_model_type in {"gru", "lstm", "transformer"} and discard_mode != "regression":
+        raise SystemExit("Discard GRU/LSTM/transformer models are only supported for regression.")
     if incremental:
         if discard_mode != "regression":
             raise SystemExit("--incremental requires discard_loss=regression.")
@@ -292,6 +294,29 @@ def train_models(args) -> int:
             with np.load(discard_shards[0]) as d0:
                 if discard_model_type == "mlp":
                     discard_model = MLPValueModel(int(len(discard_feature_indices)), discard_mlp_hidden, seed=args.seed or 0)
+                elif discard_model_type in {"gru", "lstm"}:
+                    discard_model = PeggingRNNValueModel(
+                        0,
+                        rnn_type=discard_model_type,
+                        rnn_hidden=getattr(args, "discard_rnn_hidden", args.pegging_rnn_hidden),
+                        head_hidden=discard_mlp_hidden,
+                        seq_len=1,
+                        step_dim=int(len(discard_feature_indices)),
+                        seed=args.seed or 0,
+                    )
+                elif discard_model_type == "transformer":
+                    discard_model = PeggingTransformerValueModel(
+                        0,
+                        d_model=getattr(args, "discard_transformer_d_model", args.pegging_transformer_d_model),
+                        nhead=getattr(args, "discard_transformer_heads", args.pegging_transformer_heads),
+                        num_layers=getattr(args, "discard_transformer_layers", args.pegging_transformer_layers),
+                        dim_feedforward=getattr(args, "discard_transformer_ff_dim", args.pegging_transformer_ff_dim),
+                        dropout=getattr(args, "discard_transformer_dropout", args.pegging_transformer_dropout),
+                        head_hidden=discard_mlp_hidden,
+                        seq_len=1,
+                        step_dim=int(len(discard_feature_indices)),
+                        seed=args.seed or 0,
+                    )
                 elif discard_model_type == "gbt":
                     discard_model = GBTValueModel(seed=args.seed or 0, max_iter=int(args.epochs))
                 elif discard_model_type == "rf":
@@ -803,6 +828,15 @@ def train_models(args) -> int:
         if discard_model_type == "mlp":
             discard_path = models_dir / "discard_mlp.pt"
             discard_model.save_pt(str(discard_path))
+        elif discard_model_type == "gru":
+            discard_path = models_dir / "discard_gru.pt"
+            discard_model.save_pt(str(discard_path))
+        elif discard_model_type == "lstm":
+            discard_path = models_dir / "discard_lstm.pt"
+            discard_model.save_pt(str(discard_path))
+        elif discard_model_type == "transformer":
+            discard_path = models_dir / "discard_transformer.pt"
+            discard_model.save_pt(str(discard_path))
         elif discard_model_type == "gbt":
             discard_path = models_dir / "discard_gbt.pkl"
             discard_model.save_joblib(str(discard_path))  # type: ignore[attr-defined]
@@ -935,6 +969,12 @@ def train_models(args) -> int:
         "mlp_hidden": list(mlp_hidden),
         "discard_mlp_hidden": list(discard_mlp_hidden),
         "pegging_mlp_hidden": list(pegging_mlp_hidden),
+        "discard_rnn_hidden": getattr(args, "discard_rnn_hidden", args.pegging_rnn_hidden) if not pegging_only else None,
+        "discard_transformer_d_model": getattr(args, "discard_transformer_d_model", args.pegging_transformer_d_model) if not pegging_only else None,
+        "discard_transformer_heads": getattr(args, "discard_transformer_heads", args.pegging_transformer_heads) if not pegging_only else None,
+        "discard_transformer_layers": getattr(args, "discard_transformer_layers", args.pegging_transformer_layers) if not pegging_only else None,
+        "discard_transformer_ff_dim": getattr(args, "discard_transformer_ff_dim", args.pegging_transformer_ff_dim) if not pegging_only else None,
+        "discard_transformer_dropout": getattr(args, "discard_transformer_dropout", args.pegging_transformer_dropout) if not pegging_only else None,
         "pegging_rnn_hidden": args.pegging_rnn_hidden if not discard_only else None,
         "pegging_transformer_d_model": args.pegging_transformer_d_model if not discard_only else None,
         "pegging_transformer_heads": args.pegging_transformer_heads if not discard_only else None,
@@ -963,6 +1003,12 @@ def train_models(args) -> int:
     if not pegging_only:
         if discard_model_type == "mlp":
             model_meta["discard_model_file"] = "discard_mlp.pt"
+        elif discard_model_type == "gru":
+            model_meta["discard_model_file"] = "discard_gru.pt"
+        elif discard_model_type == "lstm":
+            model_meta["discard_model_file"] = "discard_lstm.pt"
+        elif discard_model_type == "transformer":
+            model_meta["discard_model_file"] = "discard_transformer.pt"
         elif discard_model_type == "gbt":
             model_meta["discard_model_file"] = "discard_gbt.pkl"
         elif discard_model_type == "rf":
@@ -1015,6 +1061,12 @@ def train_models(args) -> int:
         f"mlp_hidden: {model_meta['mlp_hidden']}",
         f"discard_mlp_hidden: {model_meta['discard_mlp_hidden']}",
         f"pegging_mlp_hidden: {model_meta['pegging_mlp_hidden']}",
+        f"discard_rnn_hidden: {model_meta['discard_rnn_hidden']}",
+        f"discard_transformer_d_model: {model_meta['discard_transformer_d_model']}",
+        f"discard_transformer_heads: {model_meta['discard_transformer_heads']}",
+        f"discard_transformer_layers: {model_meta['discard_transformer_layers']}",
+        f"discard_transformer_ff_dim: {model_meta['discard_transformer_ff_dim']}",
+        f"discard_transformer_dropout: {model_meta['discard_transformer_dropout']}",
         f"epochs: {model_meta['epochs']}",
         f"lr: {model_meta['lr']}",
         f"batch_size: {model_meta['batch_size']}",
@@ -1068,7 +1120,7 @@ if __name__ == "__main__":
         "--discard_model_type",
         type=str,
         default=None,
-        choices=["linear", "mlp", "gbt", "rf"],
+        choices=["linear", "mlp", "gbt", "rf", "gru", "lstm", "transformer"],
         help="Override model type for discard head only.",
     )
     ap.add_argument(
@@ -1084,6 +1136,17 @@ if __name__ == "__main__":
         default=64,
         help="Hidden size for GRU/LSTM pegging model.",
     )
+    ap.add_argument(
+        "--discard_rnn_hidden",
+        type=int,
+        default=64,
+        help="Hidden size for GRU/LSTM discard model.",
+    )
+    ap.add_argument("--discard_transformer_d_model", type=int, default=128, help="Transformer d_model for discard.")
+    ap.add_argument("--discard_transformer_heads", type=int, default=4, help="Transformer num heads for discard.")
+    ap.add_argument("--discard_transformer_layers", type=int, default=2, help="Transformer layers for discard.")
+    ap.add_argument("--discard_transformer_ff_dim", type=int, default=256, help="Transformer FFN dim for discard.")
+    ap.add_argument("--discard_transformer_dropout", type=float, default=0.1, help="Transformer dropout for discard.")
     ap.add_argument("--pegging_transformer_d_model", type=int, default=128, help="Transformer d_model for pegging.")
     ap.add_argument("--pegging_transformer_heads", type=int, default=4, help="Transformer num heads for pegging.")
     ap.add_argument("--pegging_transformer_layers", type=int, default=2, help="Transformer layers for pegging.")

@@ -162,23 +162,11 @@ MLPV5-PegOnly vs beginner avg point diff -0.11 (95% CI -0.53 - 0.31) wins=7356/1
 Going to start generating V9 pegging data (includes scoring-response belief features)
 V9 pegging - add in beliefs about what cards the opponent has
 
-Questions
-  in regards to generating V9 discard data. How do I pass in to the neural player/discard algorithm the exact hand/crib values?
-    Meaning I don't need the model to try and predict these. I just want the model, given these values + potential pegging points + probablity of winning + your score + opponent score
-    decide what to do
-
 benchmark elapsed: 13m 8s
 LinearVV9.001[gru-128]Player-PegOnly vs beginner avg point diff 0.86 (95% CI 0.36 - 1.37) wins=5098/10000 winrate=50.98% (95% CI 50.00% - 51.96%)
 LinearVV9.004[gru-128]Player-PegOnly vs beginner avg point diff 0.75 (95% CI -0.84 - 2.35) wins=505/1000 winrate=50.50% (95% CI 47.40% - 53.60%)
 
-.\.venv\Scripts\python.exe .\scripts\mlp_size_sweep.py `
-  --data_dir "datasets" `
-  --dataset_version "discard_v9" `
-  --model_version "discard_v9" ` 
-  --pegging_only `
-  --pegging_feature_set full_seq `
-  --mlp_variants "small=128,64;medium=256,128" `
-  --benchmark_games 10000
+
 smallV9.004Player-PegOnly vs beginner avg point diff 0.34 (95% CI -0.17 - 0.85) wins=4976/10000 winrate=49.76% (95% CI 48.78% - 50.74%)
 mediumV9.004Player-PegOnly vs beginner avg point diff 0.10 (95% CI -0.41 - 0.61) wins=4915/10000 winrate=49.15% (95% CI 48.17% - 50.13%)
 medium3V9.0043Player-PegOnly vs beginner avg point diff 0.33 (95% CI -0.19 - 0.84) wins=5009/10000 winrate=50.09% (95% CI 49.11% - 51.07%)
@@ -195,9 +183,23 @@ LinearVV9.004160Player-PegOnly vs beginner avg point diff 0.26 (95% CI -0.25 - 0
    --benchmark_workers 20 `
    --queue_models "models\regression\discard_v9\004_tx160,models\regression\discard_v9\004_tx128ff,models\regression\discard_v9\004_tx128l3,models\regression\discard_v9\004_tx128h8,models\regression\discard_v9\004_tx128d05" `
    --no_auto_mixed_benchmarks
-LinearVV9.004160Player-PegOnly vs beginner avg point diff 0.26 (95% CI -0.25 - 0.77) wins=5012/10000 winrate=50.12% (95% CI 49.14% - 51.10%)
-LinearVV9.004128Player-PegOnly vs beginner avg point diff -0.05 (95% CI -0.56 - 0.46) wins=4916/10000 winrate=49.16% (95% CI 48.18% - 50.14%)
-LinearVV9.0041283Player-PegOnly vs beginner avg point diff 0.47 (95% CI -0.05 - 0.98) wins=5005/10000 winrate=50.05% (95% CI 49.07% - 51.03%)
-LinearVV9.0041288Player-PegOnly vs beginner avg point diff 0.52 (95% CI 0.00 - 1.03) wins=5043/10000 winrate=50.43% (95% CI 49.45% - 51.41%)
+V9[004_tx160]Player-PegOnly vs beginner avg point diff 0.26 (95% CI -0.25 - 0.77) wins=5012/10000 winrate=50.12% (95% CI 49.14% - 51.10%)
+V9[004_tx128h8]Player-PegOnly vs beginner avg point diff -0.05 (95% CI -0.56 - 0.46) wins=4916/10000 winrate=49.16% (95% CI 48.18% - 50.14%)
+V9[004_tx128l3]Player-PegOnly vs beginner avg point diff 0.47 (95% CI -0.05 - 0.98) wins=5005/10000 winrate=50.05% (95% CI 49.07% - 51.03%)
+V9[004_tx128ff]Player-PegOnly vs beginner avg point diff 0.52 (95% CI 0.00 - 1.03) wins=5043/10000 winrate=50.43% (95% CI 49.45% - 51.41%)
 V9[004_tx128d05]PegOnly vs beginner avg point diff 0.49 (95% CI -0.02 - 1.00) wins=5019/10000 winrate=50.19% (95% CI 49.21% - 51.17%)
-V9[MLP512,256]DiscardOnly vs beginner avg point diff -41.00 (95% CI -41.00 - -41.00) wins=0/1 winrate=0.00% (95% CI 0.00% - 0.00%)
+
+V9 Discard - Add in min crib, min hand+crib, avg hand+crib
+V9[MLP512,256]DiscardOnly vs beginner avg point diff 2.64 (95% CI 2.14 - 3.14) wins=5395/10000 winrate=53.95% (95% CI 52.97% - 54.93%)
+V9[MLP512,256,128]DiscardOnly vs beginner avg point diff 2.52 (95% CI 1.60 - 3.45) wins=1638/3000 winrate=54.60% (95% CI 52.82% - 56.38%)
+V9[MLP1024,512]DiscardOnly vs beginner avg point diff 2.53 (95% CI 1.61 - 3.46) wins=1623/3000 winrate=54.10% (95% CI 52.32% - 55.88%)
+V9[MLP512,256]DiscardOnly vs beginner avg point diff 2.66 (95% CI 1.73 - 3.58) wins=1641/3000 winrate=54.70% (95% CI 52.92% - 56.48%)
+V9[MLP256,128]DiscardOnly vs beginner avg point diff 2.67 (95% CI 1.75 - 3.60) wins=1631/3000 winrate=54.37% (95% CI 52.58% - 56.15%)
+V9[MLP128,64]DiscardOnly vs beginner avg point diff 2.70 (95% CI 1.78 - 3.63) wins=1641/3000 winrate=54.70% (95% CI 52.92% - 56.48%)
+V9[MLP64,32,16]DiscardOnly vs beginner avg point diff 2.63 (95% CI 1.71 - 3.56) wins=1632/3000 winrate=54.40% (95% CI 52.62% - 56.18%)
+V9[MLP256,128,64]DiscardOnly vs beginner avg point diff 2.69 (95% CI 1.76 - 3.61) wins=1644/3000 winrate=54.80% (95% CI 53.02% - 56.58%)
+V9[MLP128,64,32]DiscardOnly vs beginner avg point diff 2.62 (95% CI 1.69 - 3.55) wins=1632/3000 winrate=54.40% (95% CI 52.62% - 56.18%)
+V9[005_gru256]DiscardOnly vs beginner avg point diff 2.65 (95% CI 1.72 - 3.59) wins=1620/3000 winrate=54.00% (95% CI 52.22% - 55.78%)
+V9[005_gru128]DiscardOnly vs beginner avg point diff 2.68 (95% CI 1.75 - 3.61) wins=1635/3000 winrate=54.50% (95% CI 52.72% - 56.28%)
+V9[005_tx128d05]DiscardOnly vs beginner avg point diff 2.64 (95% CI 1.72 - 3.56) wins=1635/3000 winrate=54.50% (95% CI 52.72% - 56.28%)
+V9[005_tx128h8]DiscardOnly vs beginner avg point diff 2.72 (95% CI 1.80 - 3.64) wins=1641/3000 winrate=54.70% (95% CI 52.92% - 56.48%)

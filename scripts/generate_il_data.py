@@ -1405,7 +1405,8 @@ class LoggingHardPlayer(HardPlayer):
 def save_data(
     log,
     out_dir,
-    cumulative_games,
+    discard_cumulative_games: int | None,
+    pegging_cumulative_games: int | None,
     strategy,
     seed,
     pegging_feature_set: str,
@@ -1426,6 +1427,10 @@ def save_data(
     
     if not save_discard and not save_pegging:
         raise ValueError("At least one of save_discard or save_pegging must be True.")
+    if save_discard and discard_cumulative_games is None:
+        raise ValueError("discard_cumulative_games must be provided when save_discard is True.")
+    if save_pegging and pegging_cumulative_games is None:
+        raise ValueError("pegging_cumulative_games must be provided when save_pegging is True.")
 
     # check that we did not use the wrong logging structure
     if save_discard and getattr(log, "X_discard", None):
@@ -1491,8 +1496,16 @@ def save_data(
     Xp = np.stack(log.X_pegging).astype(np.float32) if log.X_pegging else np.zeros((0, pegging_dim), np.float32)
     yp = np.array(log.y_pegging, dtype=np.float32)
 
-    out_path_discard = os.path.join(out_dir, f"discard_{cumulative_games}.npz")
-    out_path_pegging = os.path.join(out_dir, f"pegging_{cumulative_games}.npz")
+    out_path_discard = (
+        os.path.join(out_dir, f"discard_{discard_cumulative_games}.npz")
+        if save_discard
+        else ""
+    )
+    out_path_pegging = (
+        os.path.join(out_dir, f"pegging_{pegging_cumulative_games}.npz")
+        if save_pegging
+        else ""
+    )
     if save_discard and save_pegging:
         logger.debug(f"Saving to {out_path_discard} and {out_path_pegging}")
     elif save_discard:
@@ -1513,6 +1526,14 @@ def save_data(
     # This overwrites each time with the latest shard info.
     out_path = Path(out_dir)
     dataset_version = out_path.name
+    max_cumulative_games = max(
+        [
+            val
+            for val in (discard_cumulative_games, pegging_cumulative_games)
+            if val is not None
+        ]
+        or [0]
+    )
     dataset_meta = {
         "updated_at_utc": datetime.now(timezone.utc).isoformat(),
         "dataset_version": dataset_version,
@@ -1527,7 +1548,9 @@ def save_data(
         "pegging_ev_mode": pegging_ev_mode,
         "pegging_ev_rollouts": pegging_ev_rollouts,
         "has_discard_win_prob": y_discard_win is not None and (y_discard_win.shape[0] == yd.shape[0]),
-        "cumulative_games": cumulative_games,
+        "cumulative_games": max_cumulative_games,
+        "discard_cumulative_games": discard_cumulative_games if save_discard else None,
+        "pegging_cumulative_games": pegging_cumulative_games if save_pegging else None,
         "seed": seed,
         "discard": {
             "file": os.path.basename(out_path_discard) if save_discard else None,
@@ -1596,6 +1619,8 @@ def save_data(
         f"pegging_ev_rollouts: {dataset_meta['pegging_ev_rollouts']}",
         f"has_discard_win_prob: {dataset_meta['has_discard_win_prob']}",
         f"cumulative_games: {dataset_meta['cumulative_games']}",
+        f"discard_cumulative_games: {dataset_meta['discard_cumulative_games']}",
+        f"pegging_cumulative_games: {dataset_meta['pegging_cumulative_games']}",
         f"seed: {dataset_meta['seed']}",
         "",
         f"discard_file: {dataset_meta['discard']['file']}",
@@ -1640,23 +1665,23 @@ def _resolve_output_dir(
     return str(version_dir)
 
 
-def get_cumulative_game_count(out_dir):
-    """Get the cumulative game count from existing files."""
+def get_cumulative_game_counts(out_dir) -> tuple[int, int]:
+    """Get the cumulative game counts from existing files (discard, pegging)."""
     out_dir_path = Path(out_dir)
     existing_discard = sorted(out_dir_path.glob("discard_*.npz"))
     existing_pegging = sorted(out_dir_path.glob("pegging_*.npz"))
 
-    candidates = existing_discard or existing_pegging
-    cumulative_games = 0
-    if candidates:
-        # Extract numbers from filenames and find max
-        for f in candidates:
+    def _max_from(files):
+        max_val = 0
+        for f in files:
             try:
                 num = int(f.stem.split('_')[1])
-                cumulative_games = max(cumulative_games, num)
+                max_val = max(max_val, num)
             except (ValueError, IndexError):
                 pass
-    return cumulative_games
+        return max_val
+
+    return _max_from(existing_discard), _max_from(existing_pegging)
 
 def play_one_game(players) -> None:
     game = cribbagegame.CribbageGame(players=players, copy_players=False)
@@ -1811,7 +1836,8 @@ def _init_logging_players(
 def _collect_il_data_worker(
     games: int,
     out_dir: str,
-    cumulative_games: int,
+    discard_cumulative_games: int,
+    pegging_cumulative_games: int,
     strategy: str,
     pegging_feature_set: str,
     crib_ev_mode: str,
@@ -1867,7 +1893,8 @@ def _collect_il_data_worker(
         save_data(
             log,
             out_dir,
-            cumulative_games,
+            discard_cumulative_games if log_discard else None,
+            pegging_cumulative_games if log_pegging else None,
             strategy,
             seed,
             pegging_feature_set,
@@ -1886,7 +1913,8 @@ def _collect_il_data_worker(
         result = {
             "worker_id": worker_id,
             "games": games,
-            "cumulative_games": cumulative_games,
+            "discard_cumulative_games": discard_cumulative_games if log_discard else None,
+            "pegging_cumulative_games": pegging_cumulative_games if log_pegging else None,
         }
         return result
     except OSError as exc:
@@ -1934,7 +1962,7 @@ def generate_il_data(
         raise ValueError("workers must be >= 1.")
 
     # Get starting cumulative count
-    cumulative_games = get_cumulative_game_count(out_dir)
+    discard_cumulative_games, pegging_cumulative_games = get_cumulative_game_counts(out_dir)
     save_interval = 2000
     if max_buffer_games is None or max_buffer_games <= 0:
         raise ValueError("max_buffer_games must be > 0.")
@@ -1963,15 +1991,20 @@ def generate_il_data(
             f"in chunks of {chunk_size} into {out_dir}"
         )
         worker_args = []
-        worker_cumulative = cumulative_games
+        worker_discard_cumulative = discard_cumulative_games
+        worker_pegging_cumulative = pegging_cumulative_games
         for worker_id, worker_games in enumerate(tasks):
             worker_seed = seed + worker_id if seed is not None else secrets.randbits(32)
-            worker_cumulative += worker_games
+            if save_discard:
+                worker_discard_cumulative += worker_games
+            if save_pegging:
+                worker_pegging_cumulative += worker_games
             worker_args.append(
                 (
                     worker_games,
                     out_dir,
-                    worker_cumulative,
+                    worker_discard_cumulative,
+                    worker_pegging_cumulative,
                     strategy,
                     pegging_feature_set,
                     crib_ev_mode,
@@ -2047,12 +2080,34 @@ def generate_il_data(
         
         # Save every save_interval games if total games > save_interval
         if games_since_save >= save_interval:
-            cumulative_games += games_since_save
-            logger.info(f"Reached {save_interval} games, saving checkpoint at {cumulative_games} total games")
+            if save_discard:
+                discard_cumulative_games += games_since_save
+            if save_pegging:
+                pegging_cumulative_games += games_since_save
+            if save_discard and save_pegging:
+                logger.info(
+                    "Reached %d games, saving discard at %d and pegging at %d total games",
+                    save_interval,
+                    discard_cumulative_games,
+                    pegging_cumulative_games,
+                )
+            elif save_discard:
+                logger.info(
+                    "Reached %d games, saving discard at %d total games",
+                    save_interval,
+                    discard_cumulative_games,
+                )
+            else:
+                logger.info(
+                    "Reached %d games, saving pegging at %d total games",
+                    save_interval,
+                    pegging_cumulative_games,
+                )
             save_data(
                 log,
                 out_dir,
-                cumulative_games,
+                discard_cumulative_games if save_discard else None,
+                pegging_cumulative_games if save_pegging else None,
                 strategy,
                 seed,
                 pegging_feature_set,
@@ -2086,12 +2141,25 @@ def generate_il_data(
 
     # Save any remaining data
     if games_since_save > 0:
-        cumulative_games += games_since_save
-        logger.info(f"Saving final data at {cumulative_games} total games")
+        if save_discard:
+            discard_cumulative_games += games_since_save
+        if save_pegging:
+            pegging_cumulative_games += games_since_save
+        if save_discard and save_pegging:
+            logger.info(
+                "Saving final data: discard at %d and pegging at %d total games",
+                discard_cumulative_games,
+                pegging_cumulative_games,
+            )
+        elif save_discard:
+            logger.info("Saving final data: discard at %d total games", discard_cumulative_games)
+        else:
+            logger.info("Saving final data: pegging at %d total games", pegging_cumulative_games)
         save_data(
             log,
             out_dir,
-            cumulative_games,
+            discard_cumulative_games if save_discard else None,
+            pegging_cumulative_games if save_pegging else None,
             strategy,
             seed,
             pegging_feature_set,
