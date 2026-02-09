@@ -70,6 +70,7 @@ from scripts.generate_il_data import (
 )
 
 from cribbage import cribbagegame
+from cribbage.training_game import TrainingGame
 
 import logging
 
@@ -317,8 +318,11 @@ class LoggingNeuralPlayer:
         )
 
 
-def play_one_game(players) -> None:
-    game = cribbagegame.CribbageGame(players=players, copy_players=False)
+def play_one_game(players, training_mode: str = "full") -> None:
+    if training_mode == "full":
+        game = cribbagegame.CribbageGame(players=players, copy_players=False)
+    else:
+        game = TrainingGame(players=players, copy_players=False, training_mode=training_mode)
     game.start()
 
 
@@ -339,6 +343,7 @@ def _run_self_play_batch_worker(args_tuple) -> tuple[LoggedRegPegRegDiscardData,
         win_prob_mode,
         win_prob_rollouts,
         win_prob_min_score,
+        training_mode,
     ) = args_tuple
 
     discard_model, pegging_model, discard_feature_set, pegging_feature_set_model = _load_models(models_dir)
@@ -379,7 +384,7 @@ def _run_self_play_batch_worker(args_tuple) -> tuple[LoggedRegPegRegDiscardData,
         if i % 100 == 0:
             logger.debug("Playing games %d - %d/%d", i, min(i + 100, batch_games), batch_games)
         players = [p1, p2] if (i % 2 == 0) else [p2, p1]
-        play_one_game(players)
+        play_one_game(players, training_mode=training_mode)
     return log, batch_games
 
 
@@ -401,6 +406,7 @@ def generate_self_play_data(
     win_prob_rollouts: int = DEFAULT_WIN_PROB_ROLLOUTS,
     win_prob_min_score: int = DEFAULT_WIN_PROB_MIN_SCORE,
     workers: int = 1,
+    training_mode: str = "full",
 ) -> int:
     if workers < 1:
         raise ValueError("--workers must be >= 1")
@@ -428,6 +434,7 @@ def generate_self_play_data(
                 win_prob_mode,
                 win_prob_rollouts,
                 win_prob_min_score,
+                training_mode,
             )
         )
         cumulative_games += games_played
@@ -480,6 +487,7 @@ def generate_self_play_data(
                         win_prob_mode,
                         win_prob_rollouts,
                         win_prob_min_score,
+                        training_mode,
                     )
                     for i in range(workers)
                 ],
@@ -541,6 +549,7 @@ if __name__ == "__main__":
         args.win_prob_rollouts,
         args.win_prob_min_score,
         args.workers,
+        args.training_mode,
     )
 
 # Script summary: generate self-play datasets by pitting models against each other and logging results.

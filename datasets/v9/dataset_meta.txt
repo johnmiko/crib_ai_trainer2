@@ -1,4 +1,4 @@
-updated_at_utc: 2026-02-08T18:42:13.375557+00:00
+updated_at_utc: 2026-02-08T20:07:37.697936+00:00
 dataset_version: discard_v9
 strategy: regression
 crib_ev_mode: mc
@@ -11,14 +11,14 @@ win_prob_min_score: rollout
 pegging_ev_mode: 16
 pegging_ev_rollouts: 90
 has_discard_win_prob: False
-cumulative_games: 1000
-discard_cumulative_games: 1000
+cumulative_games: 8500
+discard_cumulative_games: 8500
 pegging_cumulative_games: None
-seed: 1649560340
+seed: 2814127720
 
-discard_file: discard_1000.npz
-discard_X_shape: [131490, 168]
-discard_y_shape: [131490]
+discard_file: discard_8500.npz
+discard_X_shape: [130800, 168]
+discard_y_shape: [130800]
 discard_features:
   - 52 multi-hot discards
   - 52 multi-hot kept

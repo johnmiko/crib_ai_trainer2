@@ -1,0 +1,291 @@
+{
+  "created_at_utc": "2026-02-09T18:23:15.008783+00:00",
+  "models": [
+    {
+      "label": "005_small",
+      "model_dir": "models\\regression\\v9\\discard\\005_small",
+      "discard_only": true,
+      "pegging_only": false,
+      "discard_loss": "regression",
+      "discard_model_type": "mlp",
+      "pegging_model_type": "mlp",
+      "discard_metric": {
+        "discard_regressor_mse": 0.004303998779505491
+      },
+      "pegging_metric": {},
+      "loss_score": 0.004303998779505491,
+      "winrate": null,
+      "avg_diff": null,
+      "benchmark_games": null,
+      "loss_rank": 1,
+      "combined_rank": 1
+    },
+    {
+      "label": "005_small3",
+      "model_dir": "models\\regression\\v9\\discard\\005_small3",
+      "discard_only": true,
+      "pegging_only": false,
+      "discard_loss": "regression",
+      "discard_model_type": "mlp",
+      "pegging_model_type": "mlp",
+      "discard_metric": {
+        "discard_regressor_mse": 0.004922566469758749
+      },
+      "pegging_metric": {},
+      "loss_score": 0.004922566469758749,
+      "winrate": null,
+      "avg_diff": null,
+      "benchmark_games": null,
+      "loss_rank": 2,
+      "combined_rank": 2
+    },
+    {
+      "label": "005_medium3",
+      "model_dir": "models\\regression\\v9\\discard\\005_medium3",
+      "discard_only": true,
+      "pegging_only": false,
+      "discard_loss": "regression",
+      "discard_model_type": "mlp",
+      "pegging_model_type": "mlp",
+      "discard_metric": {
+        "discard_regressor_mse": 0.007346979808062315
+      },
+      "pegging_metric": {},
+      "loss_score": 0.007346979808062315,
+      "winrate": null,
+      "avg_diff": null,
+      "benchmark_games": null,
+      "loss_rank": 3,
+      "combined_rank": 3
+    },
+    {
+      "label": "005_medium",
+      "model_dir": "models\\regression\\v9\\discard\\005_medium",
+      "discard_only": true,
+      "pegging_only": false,
+      "discard_loss": "regression",
+      "discard_model_type": "mlp",
+      "pegging_model_type": "mlp",
+      "discard_metric": {
+        "discard_regressor_mse": 0.007577176205813885
+      },
+      "pegging_metric": {},
+      "loss_score": 0.007577176205813885,
+      "winrate": null,
+      "avg_diff": null,
+      "benchmark_games": null,
+      "loss_rank": 4,
+      "combined_rank": 4
+    },
+    {
+      "label": "005_xl",
+      "model_dir": "models\\regression\\v9\\discard\\005_xl",
+      "discard_only": true,
+      "pegging_only": false,
+      "discard_loss": "regression",
+      "discard_model_type": "mlp",
+      "pegging_model_type": "mlp",
+      "discard_metric": {
+        "discard_regressor_mse": 0.008329572156071663
+      },
+      "pegging_metric": {},
+      "loss_score": 0.008329572156071663,
+      "winrate": null,
+      "avg_diff": null,
+      "benchmark_games": null,
+      "loss_rank": 5,
+      "combined_rank": 5
+    },
+    {
+      "label": "005_gru256",
+      "model_dir": "models\\regression\\v9\\discard\\005_gru256",
+      "discard_only": true,
+      "pegging_only": false,
+      "discard_loss": "regression",
+      "discard_model_type": "gru",
+      "pegging_model_type": "gru",
+      "discard_metric": {
+        "discard_regressor_mse": 0.008958052843809128
+      },
+      "pegging_metric": {},
+      "loss_score": 0.008958052843809128,
+      "winrate": null,
+      "avg_diff": null,
+      "benchmark_games": null,
+      "loss_rank": 6,
+      "combined_rank": 6
+    },
+    {
+      "label": "005_large",
+      "model_dir": "models\\regression\\v9\\discard\\005_large",
+      "discard_only": true,
+      "pegging_only": false,
+      "discard_loss": "regression",
+      "discard_model_type": "mlp",
+      "pegging_model_type": "mlp",
+      "discard_metric": {
+        "discard_regressor_mse": 0.009676814079284668
+      },
+      "pegging_metric": {},
+      "loss_score": 0.009676814079284668,
+      "winrate": null,
+      "avg_diff": null,
+      "benchmark_games": null,
+      "loss_rank": 7,
+      "combined_rank": 7
+    },
+    {
+      "label": "005_mini3",
+      "model_dir": "models\\regression\\v9\\discard\\005_mini3",
+      "discard_only": true,
+      "pegging_only": false,
+      "discard_loss": "regression",
+      "discard_model_type": "mlp",
+      "pegging_model_type": "mlp",
+      "discard_metric": {
+        "discard_regressor_mse": 0.011289521120488644
+      },
+      "pegging_metric": {},
+      "loss_score": 0.011289521120488644,
+      "winrate": null,
+      "avg_diff": null,
+      "benchmark_games": null,
+      "loss_rank": 8,
+      "combined_rank": 8
+    },
+    {
+      "label": "005_gru128",
+      "model_dir": "models\\regression\\v9\\discard\\005_gru128",
+      "discard_only": true,
+      "pegging_only": false,
+      "discard_loss": "regression",
+      "discard_model_type": "gru",
+      "pegging_model_type": "gru",
+      "discard_metric": {
+        "discard_regressor_mse": 0.016455937176942825
+      },
+      "pegging_metric": {},
+      "loss_score": 0.016455937176942825,
+      "winrate": null,
+      "avg_diff": null,
+      "benchmark_games": null,
+      "loss_rank": 9,
+      "combined_rank": 9
+    },
+    {
+      "label": "005_tx128l3",
+      "model_dir": "models\\regression\\v9\\discard\\005_tx128l3",
+      "discard_only": true,
+      "pegging_only": false,
+      "discard_loss": "regression",
+      "discard_model_type": "transformer",
+      "pegging_model_type": "transformer",
+      "discard_metric": {
+        "discard_regressor_mse": 0.017119502648711205
+      },
+      "pegging_metric": {},
+      "loss_score": 0.017119502648711205,
+      "winrate": null,
+      "avg_diff": null,
+      "benchmark_games": null,
+      "loss_rank": 10,
+      "combined_rank": 10
+    },
+    {
+      "label": "005_tx128h8",
+      "model_dir": "models\\regression\\v9\\discard\\005_tx128h8",
+      "discard_only": true,
+      "pegging_only": false,
+      "discard_loss": "regression",
+      "discard_model_type": "transformer",
+      "pegging_model_type": "transformer",
+      "discard_metric": {
+        "discard_regressor_mse": 0.019645176827907562
+      },
+      "pegging_metric": {},
+      "loss_score": 0.019645176827907562,
+      "winrate": null,
+      "avg_diff": null,
+      "benchmark_games": null,
+      "loss_rank": 11,
+      "combined_rank": 11
+    },
+    {
+      "label": "005_large3",
+      "model_dir": "models\\regression\\v9\\discard\\005_large3",
+      "discard_only": true,
+      "pegging_only": false,
+      "discard_loss": "regression",
+      "discard_model_type": "mlp",
+      "pegging_model_type": "mlp",
+      "discard_metric": {
+        "discard_regressor_mse": 0.020349925383925438
+      },
+      "pegging_metric": {},
+      "loss_score": 0.020349925383925438,
+      "winrate": null,
+      "avg_diff": null,
+      "benchmark_games": null,
+      "loss_rank": 12,
+      "combined_rank": 12
+    },
+    {
+      "label": "005_tx128d05",
+      "model_dir": "models\\regression\\v9\\discard\\005_tx128d05",
+      "discard_only": true,
+      "pegging_only": false,
+      "discard_loss": "regression",
+      "discard_model_type": "transformer",
+      "pegging_model_type": "transformer",
+      "discard_metric": {
+        "discard_regressor_mse": 0.021353675052523613
+      },
+      "pegging_metric": {},
+      "loss_score": 0.021353675052523613,
+      "winrate": null,
+      "avg_diff": null,
+      "benchmark_games": null,
+      "loss_rank": 13,
+      "combined_rank": 13
+    },
+    {
+      "label": "005_tx128ff",
+      "model_dir": "models\\regression\\v9\\discard\\005_tx128ff",
+      "discard_only": true,
+      "pegging_only": false,
+      "discard_loss": "regression",
+      "discard_model_type": "transformer",
+      "pegging_model_type": "transformer",
+      "discard_metric": {
+        "discard_regressor_mse": 0.024450231343507767
+      },
+      "pegging_metric": {},
+      "loss_score": 0.024450231343507767,
+      "winrate": null,
+      "avg_diff": null,
+      "benchmark_games": null,
+      "loss_rank": 14,
+      "combined_rank": 14
+    },
+    {
+      "label": "005_tx160",
+      "model_dir": "models\\regression\\v9\\discard\\005_tx160",
+      "discard_only": true,
+      "pegging_only": false,
+      "discard_loss": "regression",
+      "discard_model_type": "transformer",
+      "pegging_model_type": "transformer",
+      "discard_metric": {
+        "discard_regressor_mse": 0.03215080872178078
+      },
+      "pegging_metric": {},
+      "loss_score": 0.03215080872178078,
+      "winrate": null,
+      "avg_diff": null,
+      "benchmark_games": null,
+      "loss_rank": 15,
+      "combined_rank": 15
+    }
+  ],
+  "skipped": []
+}

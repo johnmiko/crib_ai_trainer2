@@ -1,5 +1,5 @@
 {
-  "updated_at_utc": "2026-02-08T18:42:13.375557+00:00",
+  "updated_at_utc": "2026-02-08T20:07:37.697936+00:00",
   "dataset_version": "discard_v9",
   "strategy": "regression",
   "crib_ev_mode": "mc",
@@ -12,18 +12,18 @@
   "pegging_ev_mode": 16,
   "pegging_ev_rollouts": 90,
   "has_discard_win_prob": false,
-  "cumulative_games": 1000,
-  "discard_cumulative_games": 1000,
+  "cumulative_games": 8500,
+  "discard_cumulative_games": 8500,
   "pegging_cumulative_games": null,
-  "seed": 1649560340,
+  "seed": 2814127720,
   "discard": {
-    "file": "discard_1000.npz",
+    "file": "discard_8500.npz",
     "X_shape": [
-      131490,
+      130800,
       168
     ],
     "y_shape": [
-      131490
+      130800
     ],
     "features": {
       "discard_features": "52 multi-hot discards",

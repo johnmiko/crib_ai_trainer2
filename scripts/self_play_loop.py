@@ -97,19 +97,19 @@ def _build_player_from_spec(spec: dict):
     raise SystemExit(f"Unknown player spec: {spec}")
 
 
-def _benchmark_worker(args: tuple[dict, dict, int, int | None, int]) -> dict:
-    p0_spec, p1_spec, games, seed, start_index = args
+def _benchmark_worker(args: tuple[dict, dict, int, int | None, int, str]) -> dict:
+    p0_spec, p1_spec, games, seed, start_index, training_mode = args
     worker_seed = None if seed is None else int(seed) + int(start_index)
     p0 = _build_player_from_spec(p0_spec)
     p1 = _build_player_from_spec(p1_spec)
-    result = play_multiple_games(games, p0=p0, p1=p1, seed=worker_seed)
+    result = play_multiple_games(games, p0=p0, p1=p1, seed=worker_seed, training_mode=training_mode)
     return result
 
 
-def _evaluate_multi(p0_spec: dict, p1_spec: dict, games: int, seed: int | None, workers: int) -> dict:
+def _evaluate_multi(p0_spec: dict, p1_spec: dict, games: int, seed: int | None, workers: int, training_mode: str) -> dict:
     tasks = _split_games(games, workers)
     if len(tasks) == 1:
-        return _benchmark_worker((p0_spec, p1_spec, tasks[0], seed, 0))
+        return _benchmark_worker((p0_spec, p1_spec, tasks[0], seed, 0, training_mode))
 
     start_indices = []
     acc = 0
@@ -118,7 +118,7 @@ def _evaluate_multi(p0_spec: dict, p1_spec: dict, games: int, seed: int | None, 
         acc += t
 
     args_list = [
-        (p0_spec, p1_spec, tasks[i], seed, start_indices[i]) for i in range(len(tasks))
+        (p0_spec, p1_spec, tasks[i], seed, start_indices[i], training_mode) for i in range(len(tasks))
     ]
 
     ctx = mp.get_context("spawn")
@@ -268,6 +268,7 @@ if __name__ == "__main__":
             args.win_prob_rollouts,
             args.win_prob_min_score,
             args.selfplay_workers,
+            args.training_mode,
         )
 
         # 2) Train new model mixing teacher + self-play data
@@ -360,6 +361,7 @@ if __name__ == "__main__":
             args.benchmark_games,
             args.benchmark_seed,
             args.benchmark_workers,
+            args.training_mode,
         )
         print(
             f"  -> wins={new_vs_best['wins']}/{args.benchmark_games} "
@@ -390,6 +392,7 @@ if __name__ == "__main__":
                         args.benchmark_games,
                         args.benchmark_seed,
                         args.benchmark_workers,
+                        args.training_mode,
                     )
                 elif args.benchmark_opponent == "medium":
                     print("Benchmark: BEST vs MEDIUM")
@@ -399,6 +402,7 @@ if __name__ == "__main__":
                         args.benchmark_games,
                         args.benchmark_seed,
                         args.benchmark_workers,
+                        args.training_mode,
                     )
                 else:
                     print("Benchmark: BEST vs HARD")
@@ -408,6 +412,7 @@ if __name__ == "__main__":
                         args.benchmark_games,
                         args.benchmark_seed,
                         args.benchmark_workers,
+                        args.training_mode,
                     )
                 print(
                     f"  -> wins={best_vs_medium['wins']}/{args.benchmark_games} "
@@ -427,6 +432,7 @@ if __name__ == "__main__":
                     args.benchmark_games,
                     args.benchmark_seed,
                     args.benchmark_workers,
+                    args.training_mode,
                 )
             elif args.benchmark_opponent == "medium":
                 print("Benchmark: NEW vs MEDIUM")
@@ -436,6 +442,7 @@ if __name__ == "__main__":
                     args.benchmark_games,
                     args.benchmark_seed,
                     args.benchmark_workers,
+                    args.training_mode,
                 )
             else:
                 print("Benchmark: NEW vs HARD")
@@ -445,6 +452,7 @@ if __name__ == "__main__":
                     args.benchmark_games,
                     args.benchmark_seed,
                     args.benchmark_workers,
+                    args.training_mode,
                 )
             print(
                 f"  -> wins={new_vs_medium['wins']}/{args.benchmark_games} "

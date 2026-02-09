@@ -73,6 +73,19 @@ def _log_timing_end(step: str, t0: float) -> None:
     logger.info("%s end:   %s", step, end_ts.isoformat(timespec="seconds"))
     logger.info("%s elapsed: %s", step, _format_elapsed(time.perf_counter() - t0))
 
+
+def _read_pegging_feature_set(data_dir: Path) -> str | None:
+    meta_path = data_dir / "dataset_meta.json"
+    if not meta_path.exists():
+        return None
+    try:
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    pegging = meta.get("pegging", {})
+    features = pegging.get("features", {})
+    return features.get("feature_set")
+
 def _next_run_id(base_dir: str) -> str:
     base = Path(base_dir)
     base.mkdir(parents=True, exist_ok=True)
@@ -259,6 +272,13 @@ def train_models(args) -> int:
         )
     if pegging_model_type in {"gru", "lstm", "transformer"} and args.pegging_feature_set != "full_seq":
         raise SystemExit("--pegging_model_type gru/lstm/transformer requires --pegging_feature_set full_seq.")
+    if pegging_model_type in {"gru", "lstm", "transformer"}:
+        meta_feature_set = _read_pegging_feature_set(pegging_data_dir)
+        if meta_feature_set is not None and meta_feature_set != "full_seq":
+            raise SystemExit(
+                f"pegging_data_dir feature_set={meta_feature_set!r} but seq model requires full_seq. "
+                f"Regenerate data with --pegging_feature_set full_seq."
+            )
     if discard_model_type in {"gru", "lstm", "transformer"} and discard_mode != "regression":
         raise SystemExit("Discard GRU/LSTM/transformer models are only supported for regression.")
     if incremental:
@@ -822,6 +842,19 @@ def train_models(args) -> int:
                 if stop_training:
                     break
                 epochs_trained += 1
+
+    training_games_used = (
+        pegging_games_used
+        if pegging_only
+        else (discard_games_used if discard_only else min(discard_games_used, pegging_games_used))
+    )
+    if training_games_used <= 1:
+        print(
+            f"Skipping model save/metadata for {training_games_used} training game(s) "
+            "(smoke test mode)."
+        )
+        _log_timing_end("train_models", _t0)
+        return 0
 
     discard_path = None
     if not pegging_only:

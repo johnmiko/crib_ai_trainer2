@@ -203,3 +203,42 @@ V9[005_gru256]DiscardOnly vs beginner avg point diff 2.65 (95% CI 1.72 - 3.59) w
 V9[005_gru128]DiscardOnly vs beginner avg point diff 2.68 (95% CI 1.75 - 3.61) wins=1635/3000 winrate=54.50% (95% CI 52.72% - 56.28%)
 V9[005_tx128d05]DiscardOnly vs beginner avg point diff 2.64 (95% CI 1.72 - 3.56) wins=1635/3000 winrate=54.50% (95% CI 52.72% - 56.28%)
 V9[005_tx128h8]DiscardOnly vs beginner avg point diff 2.72 (95% CI 1.80 - 3.64) wins=1641/3000 winrate=54.70% (95% CI 52.92% - 56.48%)
+V9[MLP512,256]DiscardOnly vs beginner avg point diff 2.52 (95% CI 2.03 - 3.02) wins=5345/10000 winrate=53.45% (95% CI 52.47% - 54.43%)
+
+Pretty much all of the above is useless
+
+Model Selection Report pegging full_seq trained models V9
+created_at_utc: 2026-02-09T18:17:00.984237+00:00
+
+rank | label | loss_score | discard_metric | pegging_metric | winrate
+------------------------------------------------------------------------------------------------------------------------
+1 | 004_small | 0.013565 | {} | {"pegging_regressor_mse": 0.013564768247306347} | n/a
+2 | 004_medium | 0.014278 | {} | {"pegging_regressor_mse": 0.014277538284659386} | n/a
+3 | 004_gru256 | 0.015019 | {} | {"pegging_regressor_mse": 0.015018600039184093} | n/a
+4 | 004_medium3 | 0.015150 | {} | {"pegging_regressor_mse": 0.015149643644690514} | n/a
+5 | 004_gru128 | 0.015377 | {} | {"pegging_regressor_mse": 0.015377171337604523} | n/a
+
+Model Selection Report discard v9
+created_at_utc: 2026-02-09T18:23:15.009046+00:00
+
+rank | label | loss_score | discard_metric | pegging_metric | winrate
+------------------------------------------------------------------------------------------------------------------------
+1 | 005_small | 0.004304 | {"discard_regressor_mse": 0.004303998779505491} | {} | n/a
+2 | 005_small3 | 0.004923 | {"discard_regressor_mse": 0.004922566469758749} | {} | n/a
+3 | 005_medium3 | 0.007347 | {"discard_regressor_mse": 0.007346979808062315} | {} | n/a
+4 | 005_medium | 0.007577 | {"discard_regressor_mse": 0.007577176205813885} | {} | n/a
+5 | 005_xl | 0.008330 | {"discard_regressor_mse": 0.008329572156071663} | {} | n/a
+6 | 005_gru256 | 0.008958 | {"discard_regressor_mse": 0.008958052843809128} | {} | n/a
+7 | 005_large | 0.009677 | {"discard_regressor_mse": 0.009676814079284668} | {} | n/a
+8 | 005_mini3 | 0.011290 | {"discard_regressor_mse": 0.011289521120488644} | {} | n/a
+9 | 005_gru128 | 0.016456 | {"discard_regressor_mse": 0.016455937176942825} | {} | n/a
+10 | 005_tx128l3 | 0.017120 | {"discard_regressor_mse": 0.017119502648711205} | {} | n/a
+11 | 005_tx128h8 | 0.019645 | {"discard_regressor_mse": 0.019645176827907562} | {} | n/a
+12 | 005_large3 | 0.020350 | {"discard_regressor_mse": 0.020349925383925438} | {} | n/a
+13 | 005_tx128d05 | 0.021354 | {"discard_regressor_mse": 0.021353675052523613} | {} | n/a
+14 | 005_tx128ff | 0.024450 | {"discard_regressor_mse": 0.024450231343507767} | {} | n/a
+15 | 005_tx160 | 0.032151 | {"discard_regressor_mse": 0.03215080872178078} | {} | n/a
+
+Potential best pegging model "models\regression\v9\pegging\004_small\rl\004"
+Benchamkring against hard
+V9[004_small]PegOnly vs hard avg point diff 0.37 (95% CI -0.13 - 0.88) wins=5125/10000 winrate=51.25% (95% CI 50.27% - 52.23%)

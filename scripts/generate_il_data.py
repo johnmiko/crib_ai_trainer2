@@ -18,6 +18,7 @@ from pathlib import Path
 import sqlite3
 import multiprocessing as mp
 import sys
+import math
 import time
 
 from cribbage.cribbagegame import score_hand, score_play as score_play
@@ -1683,6 +1684,12 @@ def get_cumulative_game_counts(out_dir) -> tuple[int, int]:
 
     return _max_from(existing_discard), _max_from(existing_pegging)
 
+
+def get_cumulative_game_count(out_dir) -> int:
+    """Backward-compatible helper: return the max of discard/pegging counts."""
+    discard_count, pegging_count = get_cumulative_game_counts(out_dir)
+    return max(discard_count, pegging_count)
+
 def play_one_game(players) -> None:
     game = cribbagegame.CribbageGame(players=players, copy_players=False)
     # Some engines have game.play(), some run rounds internally.
@@ -1890,26 +1897,32 @@ def _collect_il_data_worker(
                 players = [p1, p2]
             play_one_game(players)
             i += 1
-        save_data(
-            log,
-            out_dir,
-            discard_cumulative_games if log_discard else None,
-            pegging_cumulative_games if log_pegging else None,
-            strategy,
-            seed,
-            pegging_feature_set,
-            crib_ev_mode,
-            crib_mc_samples,
-            pegging_label_mode,
-            pegging_rollouts,
-            pegging_ev_mode,
-            pegging_ev_rollouts,
-            win_prob_mode,
-            win_prob_rollouts,
-            win_prob_min_score,
-            log_pegging,
-            log_discard,
-        )
+        if games <= 1:
+            logger.info(
+                "Skipping shard save for %d game(s) (smoke test mode).",
+                games,
+            )
+        else:
+            save_data(
+                log,
+                out_dir,
+                discard_cumulative_games if log_discard else None,
+                pegging_cumulative_games if log_pegging else None,
+                strategy,
+                seed,
+                pegging_feature_set,
+                crib_ev_mode,
+                crib_mc_samples,
+                pegging_label_mode,
+                pegging_rollouts,
+                pegging_ev_mode,
+                pegging_ev_rollouts,
+                win_prob_mode,
+                win_prob_rollouts,
+                win_prob_min_score,
+                log_pegging,
+                log_discard,
+            )
         result = {
             "worker_id": worker_id,
             "games": games,
@@ -1979,7 +1992,9 @@ def generate_il_data(
     if workers > 1 and games >= 0:
         if games < workers:
             workers = max(1, games)
-        chunk_size = min(max_buffer_games, games)
+        # Aim to use all available workers by reducing chunk size if needed.
+        target_chunk = int(math.ceil(float(games) / float(workers))) if workers > 0 else games
+        chunk_size = min(max_buffer_games, max(1, target_chunk))
         tasks = []
         remaining = games
         while remaining > 0:
@@ -2141,6 +2156,10 @@ def generate_il_data(
 
     # Save any remaining data
     if games_since_save > 0:
+        if games <= 1:
+            logger.info("Skipping final save for %d game(s) (smoke test mode).", games)
+            _log_timing_end("generate_il_data", _t0)
+            return 0
         if save_discard:
             discard_cumulative_games += games_since_save
         if save_pegging:

@@ -483,6 +483,25 @@ def _benchmark_single(
     if len(player_names) != 2:
         raise ValueError("Must specify exactly two players via --players")
 
+    if fallback_override is None:
+        peg_only = "NeuralPegOnlyPlayer" in player_names
+        disc_only = "NeuralDiscardOnlyPlayer" in player_names
+        if peg_only and disc_only:
+            raise ValueError("Cannot benchmark both NeuralPegOnlyPlayer and NeuralDiscardOnlyPlayer together.")
+        if peg_only:
+            idx = player_names.index("NeuralPegOnlyPlayer")
+            other = player_names[1 - idx]
+            if other in {"beginner", "medium", "hard", "random"}:
+                fallback_override = other
+        if disc_only:
+            idx = player_names.index("NeuralDiscardOnlyPlayer")
+            other = player_names[1 - idx]
+            if other in {"beginner", "medium", "hard", "random"}:
+                fallback_override = other
+
+    if fallback_override is not None:
+        player_factory, model_tag, model_type, size_suffix = _build_player_factory(args, fallback_override)
+
     p0 = player_factory(player_names[0])
     p1 = player_factory(player_names[1])
     games_to_play = games_override or args.benchmark_games
@@ -494,6 +513,7 @@ def _benchmark_single(
         seed=args.seed,
         fast_mode=True,
         copy_players=False,
+        training_mode=getattr(args, "training_mode", "full"),
     )
     wins = results["wins"]
     diffs = results["diffs"]
@@ -693,7 +713,8 @@ def benchmark_2_players(
                 f"(95% CI {win_ci_lo*100:.2f}% - {win_ci_hi*100:.2f}%)\n"
             )
         output_path = getattr(args, "benchmark_output_path", None) or "text/benchmark_results.txt"
-        if getattr(args, "no_benchmark_write", False):
+        no_write = getattr(args, "no_benchmark_write", False) or total_games <= 1
+        if no_write:
             logger.info("Skipping text/benchmark_results.txt write (no_benchmark_write=True).")
         else:
             Path(output_path).parent.mkdir(parents=True, exist_ok=True)
@@ -723,7 +744,7 @@ def benchmark_2_players(
             "seed": args.seed,
         }
         experiments_path = getattr(args, "experiments_output_path", None) or "text/experiments.jsonl"
-        if getattr(args, "no_benchmark_write", False):
+        if no_write:
             logger.info("Skipping text/experiments.jsonl write (no_benchmark_write=True).")
         else:
             Path(experiments_path).parent.mkdir(parents=True, exist_ok=True)
@@ -765,7 +786,8 @@ def benchmark_2_players(
             f"(95% CI {single['win_ci_lo']*100:.2f}% - {single['win_ci_hi']*100:.2f}%)\n"
         )
     output_path = getattr(args, "benchmark_output_path", None) or "text/benchmark_results.txt"
-    if getattr(args, "no_benchmark_write", False):
+    no_write = getattr(args, "no_benchmark_write", False) or single["games_to_play"] <= 1
+    if no_write:
         logger.info("Skipping text/benchmark_results.txt write (no_benchmark_write=True).")
     else:
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
@@ -795,7 +817,7 @@ def benchmark_2_players(
         "seed": single["seed"],
     }
     experiments_path = getattr(args, "experiments_output_path", None) or "text/experiments.jsonl"
-    if getattr(args, "no_benchmark_write", False):
+    if no_write:
         logger.info("Skipping text/experiments.jsonl write (no_benchmark_write=True).")
     else:
         Path(experiments_path).parent.mkdir(parents=True, exist_ok=True)

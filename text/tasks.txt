@@ -1,0 +1,18 @@
+Can you please modify generate_il_data, train_models, benchmark_2_players to not write to file/save any data if the number of games/training data, whatever, is equal to 1
+    such that if I want to smoke test them, I don't have to go delete the data afterwards
+
+When doing the mlp size sweep, please include a warning to print out if any of the models being created do not have early stopping
+    The purpose is that we want to know if the model needs more data so we don't accidentally benchmark a model that is not done learning
+
+We need to start separating more cleanly the pegging and the disacrd stuff such that when we do self play and rl loop, that we adjust only the discard or only the pegging
+    What I was thinking is that we modify in crib_engine cribbagegame/round such that we can play games where we artificially end/score the discard and the pegging phases
+    So when we run ppo_loop/rl loop/self play loop we have the option to play games where we only do discard
+    So both players discard cards, and crib is done, and pegging is completely skipped. We play the games this way so we only train the discard
+    Then the other variant is we still do discarding and crib, then do the pegging phase, and artificially either skip the discard + crib point counting or forcefully set the values to 0 so they only thing affecting the results of the game is pegging
+    What do you think? Sholud we just modify cribbagegame directly? Or maybe we make a AICribbageGame class/object in crib_ai_trainer_2 and inherit cribbagegame, then modify it as needed. I don't know what is better
+
+When queuing up models to run in benchmark_2_players. I want to have the option to have a variable number of benchmark games if possible
+    where when we queue up multiple models it implies that we want to compare these models against each other. So we should, depending upon what is more practical
+    and/or time efficient/computation efficient, either after every game that is benchmarked, or every 1000 games that is benchmarked
+    calculate the average point diff, wins, winrate all with CI. And for the winrate, if the confidence intervals are not overlapping, then
+    we can stop the benchmarking. If the confidence interval is overlapping we want to benchmark more games up to a max of 20K games

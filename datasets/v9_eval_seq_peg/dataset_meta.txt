@@ -1,34 +1,35 @@
-updated_at_utc: 2026-02-06T01:27:29.289889+00:00
-dataset_version: discard_v8
-run_id: 001
+updated_at_utc: 2026-02-09T18:15:51.354014+00:00
+dataset_version: v9_eval_seq_peg
 strategy: regression
 crib_ev_mode: mc
 crib_mc_samples: 32
 pegging_label_mode: rollout2
 pegging_rollouts: 32
-win_prob_mode: off
+win_prob_mode: rollout
 win_prob_rollouts: 16
 win_prob_min_score: 90
 pegging_ev_mode: off
-pegging_ev_rollouts: 16
+pegging_ev_rollouts: 8
 has_discard_win_prob: False
-cumulative_games: 70000
-seed: 0
+cumulative_games: 1600
+discard_cumulative_games: None
+pegging_cumulative_games: 1600
+seed: 3884418943
 
-discard_file: discard_70000.npz
-discard_X_shape: [132060, 161]
-discard_y_shape: [132060]
+discard_file: None
+discard_X_shape: [0, 168]
+discard_y_shape: [0]
 discard_features:
   - 52 multi-hot discards
   - 52 multi-hot kept
   - 1 float (1.0 if dealer_is_self else 0.0)
   - player_score, opponent_score, score_margin, endgame_self, endgame_opp, endgame_any
-  - total_dim: 161
+  - total_dim: 168
 discard_label: avg_total_score (crib_ev_mode=mc)
 
-pegging_file: pegging_70000.npz
-pegging_X_shape: [0, 369]
-pegging_y_shape: [0]
+pegging_file: pegging_1600.npz
+pegging_X_shape: [17295, 1054]
+pegging_y_shape: [17295]
 pegging_features:
   - 52 multi-hot
   - 52 multi-hot
@@ -37,7 +38,8 @@ pegging_features:
   - 52 multi-hot
   - 52 multi-hot
   - 52 multi-hot
-  - 25 scalar pegging features (15/31 flags, runs, setups, hand sizes, go-prob, scores, endgame)
-  - feature_set: full
-  - total_dim: 369
+  - 37 scalar pegging features (15/31 flags, runs, setups, hand sizes, go-prob, score context, opponent response belief)
+  - feature_set: full_seq
+  - 8-step sequence (card+count) padded to length
+  - total_dim: 1054
 pegging_label: pegging_label_mode=rollout2

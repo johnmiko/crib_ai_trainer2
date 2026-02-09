@@ -1,5 +1,11 @@
 {
   "selfplayv8": {
-    "path": "C:\\Users\\johnm\\ccode\\crib_ai_trainer2\\models\\regression\\selfplayv8\\006"
+    "path": "models\\regression\\v9\\discard\\005_small\\rl\\009"
+  },
+  "004_small": {
+    "path": "models\\regression\\v9\\pegging\\004_small\\rl\\004"
+  },
+  "005_small": {
+    "path": "models\\regression\\v9\\discard\\005_small\\rl\\003"
   }
 }

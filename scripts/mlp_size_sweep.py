@@ -185,9 +185,9 @@ def _benchmark_model(args, models_dir: str, label: str, data_dir: str) -> None:
 
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--data_dir", type=str, default=TRAINING_DATA_DIR)
-    ap.add_argument("--dataset_version", type=str, default=DEFAULT_DATASET_VERSION)
+    ap = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    ap.add_argument("--data_dir", type=str, default=TRAINING_DATA_DIR, help="Base dataset directory.")
+    ap.add_argument("--dataset_version", type=str, default=DEFAULT_DATASET_VERSION, help="Dataset version label.")
     ap.add_argument(
         "--pegging_data_dir",
         type=str,
@@ -200,19 +200,19 @@ if __name__ == "__main__":
         default=None,
         help="Optional dataset version for pegging data (defaults to --dataset_version).",
     )
-    ap.add_argument("--models_dir", type=str, default=MODELS_DIR)
-    ap.add_argument("--model_version", type=str, default=DEFAULT_MODEL_VERSION)
-    ap.add_argument("--discard_loss", type=str, default=DEFAULT_DISCARD_LOSS, choices=["classification", "regression", "ranking"])
-    ap.add_argument("--discard_feature_set", type=str, default=DEFAULT_DISCARD_FEATURE_SET, choices=["base", "engineered_no_scores", "full", "full_pev"])
-    ap.add_argument("--pegging_feature_set", type=str, default=DEFAULT_PEGGING_MODEL_FEATURE_SET, choices=["base", "full_no_scores", "full", "full_seq"])
-    ap.add_argument("--epochs", type=int, default=DEFAULT_EPOCHS)
-    ap.add_argument("--lr", type=float, default=DEFAULT_LR)
-    ap.add_argument("--batch_size", type=int, default=DEFAULT_BATCH_SIZE)
-    ap.add_argument("--l2", type=float, default=DEFAULT_L2)
-    ap.add_argument("--seed", type=int, default=DEFAULT_SEED)
-    ap.add_argument("--eval_samples", type=int, default=DEFAULT_EVAL_SAMPLES)
-    ap.add_argument("--max_shards", type=int, default=(DEFAULT_MAX_SHARDS or None))
-    ap.add_argument("--rank_pairs_per_hand", type=int, default=DEFAULT_RANK_PAIRS_PER_HAND)
+    ap.add_argument("--models_dir", type=str, default=MODELS_DIR, help="Base models directory.")
+    ap.add_argument("--model_version", type=str, default=DEFAULT_MODEL_VERSION, help="Model version label.")
+    ap.add_argument("--discard_loss", type=str, default=DEFAULT_DISCARD_LOSS, choices=["classification", "regression", "ranking"], help="Discard training loss.")
+    ap.add_argument("--discard_feature_set", type=str, default=DEFAULT_DISCARD_FEATURE_SET, choices=["base", "engineered_no_scores", "full", "full_pev"], help="Discard feature set.")
+    ap.add_argument("--pegging_feature_set", type=str, default=DEFAULT_PEGGING_MODEL_FEATURE_SET, choices=["base", "full_no_scores", "full", "full_seq"], help="Pegging feature set.")
+    ap.add_argument("--epochs", type=int, default=DEFAULT_EPOCHS, help="Training epochs.")
+    ap.add_argument("--lr", type=float, default=DEFAULT_LR, help="Learning rate.")
+    ap.add_argument("--batch_size", type=int, default=DEFAULT_BATCH_SIZE, help="Batch size.")
+    ap.add_argument("--l2", type=float, default=DEFAULT_L2, help="L2 regularization.")
+    ap.add_argument("--seed", type=int, default=DEFAULT_SEED, help="Random seed.")
+    ap.add_argument("--eval_samples", type=int, default=DEFAULT_EVAL_SAMPLES, help="Eval samples per model.")
+    ap.add_argument("--max_shards", type=int, default=(DEFAULT_MAX_SHARDS or None), help="Max shards to use.")
+    ap.add_argument("--rank_pairs_per_hand", type=int, default=DEFAULT_RANK_PAIRS_PER_HAND, help="Ranking pairs per hand.")
     ap.add_argument(
         "--early_stop_patience",
         type=int,
@@ -232,12 +232,12 @@ if __name__ == "__main__":
         choices=["combined", "discard", "pegging", "both"],
         help="Which parts to benchmark (combined/discard-only/pegging-only/both).",
     )
-    ap.add_argument("--benchmark_games", type=int, default=3000)
-    ap.add_argument("--benchmark_workers", type=int, default=DEFAULT_BENCHMARK_WORKERS)
-    ap.add_argument("--players", type=str, default="AIPlayer,beginner")
+    ap.add_argument("--benchmark_games", type=int, default=3000, help="Benchmark games per variant.")
+    ap.add_argument("--benchmark_workers", type=int, default=DEFAULT_BENCHMARK_WORKERS, help="Benchmark worker processes.")
+    ap.add_argument("--players", type=str, default="AIPlayer,beginner", help="Benchmark player list.")
     ap.add_argument("--mlp_hidden", type=str, default=DEFAULT_MLP_HIDDEN, help="Default MLP sizes for non-MLP variants.")
-    ap.add_argument("--model_type", type=str, default="mlp", choices=["linear", "mlp", "gbt", "rf"])
-    ap.add_argument("--discard_model_type", type=str, default=None, choices=["linear", "mlp", "gbt", "rf", "gru", "lstm", "transformer"])
+    ap.add_argument("--model_type", type=str, default="mlp", choices=["linear", "mlp", "gbt", "rf"], help="Default model type.")
+    ap.add_argument("--discard_model_type", type=str, default=None, choices=["linear", "mlp", "gbt", "rf", "gru", "lstm", "transformer"], help="Override discard model type.")
     ap.add_argument("--pegging_rnn_hidden", type=int, default=64, help="Default GRU/LSTM hidden size.")
     ap.add_argument("--discard_rnn_hidden", type=int, default=64, help="Hidden size for GRU/LSTM discard model.")
     ap.add_argument("--pegging_transformer_d_model", type=int, default=128, help="Transformer d_model for pegging.")
@@ -461,6 +461,18 @@ if __name__ == "__main__":
         raise SystemExit("No model variants specified.")
     if any(v.model_type in {"gru", "lstm", "transformer"} for v in variants) and args.pegging_feature_set != "full_seq":
         raise SystemExit("GRU/LSTM/transformer variants require --pegging_feature_set full_seq.")
+
+    warn_labels: list[str] = []
+    early_stop_disabled = args.early_stop_patience is None or int(args.early_stop_patience) <= 0
+    for v in variants:
+        discard_type = v.discard_model_type or args.discard_model_type or args.model_type
+        if early_stop_disabled or v.model_type in {"gbt", "rf"} or discard_type in {"gbt", "rf"}:
+            warn_labels.append(v.label)
+    if warn_labels:
+        print(
+            "WARNING: Early stopping disabled or unsupported for some variants: "
+            + ", ".join(sorted(set(warn_labels)))
+        )
 
     benchmark_dirs: dict[str, str] = {}
     if args.benchmark_dirs.strip():
