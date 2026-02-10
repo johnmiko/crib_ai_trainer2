@@ -1,4 +1,5 @@
 import json
+import pytest
 import time
 from pathlib import Path
 
@@ -23,6 +24,7 @@ def _run_benchmark_timing() -> float:
     return time.perf_counter() - start
 
 
+@pytest.mark.timing
 def test_benchmark_2_players_timing():
     elapsed = _run_benchmark_timing()
 

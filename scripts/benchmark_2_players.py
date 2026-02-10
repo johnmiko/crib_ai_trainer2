@@ -541,12 +541,30 @@ def _benchmark_single(
     fallback_override: str | None = None,
     games_override: int | None = None,
 ) -> dict:
-    player_factory, model_tag, model_type, size_suffix = _build_player_factory(args, fallback_override)
-
     players_value = players_override or args.players
     player_names = [p.strip() for p in players_value.split(",") if p.strip()]
     if len(player_names) != 2:
         raise ValueError("Must specify exactly two players via --players")
+
+    base_only = all(name in {"beginner", "medium", "hard", "random"} for name in player_names)
+    if base_only:
+        def base_player_factory(name: str):
+            if name == "beginner":
+                return BeginnerPlayer(name=name)
+            if name == "random":
+                return RandomPlayer(name=name, seed=args.seed)
+            if name == "medium":
+                return MediumPlayer(name=name)
+            if name == "hard":
+                return HardPlayer(name=name)
+            raise ValueError(f"Unknown fallback player type: {name}")
+
+        player_factory = base_player_factory
+        model_tag = None
+        model_type = "baseline"
+        size_suffix = ""
+    else:
+        player_factory, model_tag, model_type, size_suffix = _build_player_factory(args, fallback_override)
 
     if fallback_override is None:
         if args.fallback_player:
@@ -567,7 +585,7 @@ def _benchmark_single(
                 if other in {"beginner", "medium", "hard", "random"}:
                     fallback_override = other
 
-    if fallback_override is not None:
+    if fallback_override is not None and not base_only:
         player_factory, model_tag, model_type, size_suffix = _build_player_factory(args, fallback_override)
 
     p0 = player_factory(player_names[0])

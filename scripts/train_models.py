@@ -181,7 +181,12 @@ def train_models(args) -> int:
     early_stop_min_delta = getattr(args, "early_stop_min_delta", 0.0)
     args.early_stopped = False
     args.early_stop_shard = None
-    data_dir = Path(args.data_dir)
+    data_dir_value = getattr(args, "data_dir", None)
+    if data_dir_value is None:
+        data_dir_value = getattr(args, "training_dir", None)
+    if data_dir_value is None:
+        raise AttributeError("args must include data_dir or training_dir")
+    data_dir = Path(data_dir_value)
     pegging_data_dir = Path(args.pegging_data_dir) if getattr(args, "pegging_data_dir", None) else data_dir
     extra_data_dir = Path(args.extra_data_dir) if args.extra_data_dir else None
     models_dir = Path(args.models_dir)

@@ -30,10 +30,12 @@ def test_generate_il_data_creates_npz_files(tmp_path: Path) -> None:
     # small + deterministic
     generate_il_data(50, str(out_dir), 0, "regression", "full", "mc", 32, "immediate", 32, "off", 16, 90, "off", 16, 1, True, True, 500, "hard")
 
-    discard = out_dir / "discard_00001.npz"
-    pegging = out_dir / "pegging_00001.npz"
-    assert discard.exists()
-    assert pegging.exists()
+    discard_files = sorted(out_dir.glob("discard_*.npz"))
+    pegging_files = sorted(out_dir.glob("pegging_*.npz"))
+    assert discard_files, "No discard_*.npz files created"
+    assert pegging_files, "No pegging_*.npz files created"
+    discard = discard_files[0]
+    pegging = pegging_files[0]
 
     with np.load(discard) as d:
         assert "X" in d and "y" in d

@@ -1,4 +1,5 @@
 import json
+import pytest
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -15,7 +16,7 @@ def _run_do_everything_smoke(training_dir: str, models_dir: str) -> None:
     args = build_do_everything_parser().parse_args([])
     args.smoke = True
     args.loops = 1
-    args.il_games = 1
+    args.il_games = 2
     args.benchmark_games = 1
     args.il_workers = 1
     args.benchmark_workers = 1
@@ -24,6 +25,7 @@ def _run_do_everything_smoke(training_dir: str, models_dir: str) -> None:
     args.models_dir = models_dir
     args.dataset_version = "discard_smoke"
     args.model_version = "discard_smoke"
+    args.players = "AIPlayer,beginner"
 
     base_models_dir = args.models_dir
     training_path = Path(args.training_dir)
@@ -56,6 +58,7 @@ def _run_do_everything_smoke(training_dir: str, models_dir: str) -> None:
 
     args.pegging_feature_set = args.pegging_model_feature_set
     args.models_dir = _resolve_models_dir(base_models_dir, args.model_version, args.model_run_id)
+    args.data_dir = dataset_dir
     train_models(args)
 
     args.games = args.benchmark_games
@@ -118,16 +121,19 @@ def _run_timing(games: int, label: str) -> float:
     return float(elapsed)
 
 
+@pytest.mark.timing
 def test_generate_il_data_timing_smoke():
     elapsed = _run_timing(1, "1")
     assert elapsed > 0.0
 
 
+@pytest.mark.timing
 def test_generate_il_data_timing_10_games():
     elapsed = _run_timing(10, "10")
     assert elapsed > 0.0
 
 
+@pytest.mark.timing
 def test_generate_il_data_timing_expensive_v6():
     with tempfile.TemporaryDirectory() as tmpdir:
         start = time.perf_counter()
