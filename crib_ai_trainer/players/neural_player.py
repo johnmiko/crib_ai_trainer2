@@ -6,6 +6,10 @@ import numpy as np
 from typing import List, Tuple
 
 from cribbage.playingcards import Card
+from cribbage.players.ai_player import (
+    featurize_pegging as engine_featurize_pegging,
+    get_pegging_feature_indices as engine_get_pegging_feature_indices,
+)
 from cribbage.players.beginner_player import BeginnerPlayer
 from cribbage.cribbagegame import score_play
 from cribbage.scoring import HasPairTripleQuad, HasStraight_DuringPlay
@@ -115,17 +119,7 @@ def get_discard_feature_indices(feature_set: str) -> np.ndarray:
     raise ValueError(f"Unknown discard feature_set: {feature_set}")
 
 
-def get_pegging_feature_indices(feature_set: str) -> np.ndarray:
-    if feature_set == "base":
-        return np.arange(PEGGING_BASE_FEATURE_DIM, dtype=np.int64)
-    if feature_set == "full_no_scores":
-        end = PEGGING_BASE_FEATURE_DIM + 52 + 52 + PEGGING_ENGINEERED_NO_SCORE_DIM
-        return np.arange(end, dtype=np.int64)
-    if feature_set == "full_seq":
-        return np.arange(PEGGING_FULL_SEQ_FEATURE_DIM, dtype=np.int64)
-    if feature_set == "full":
-        return np.arange(PEGGING_FULL_FEATURE_DIM, dtype=np.int64)
-    raise ValueError(f"Unknown pegging feature_set: {feature_set}")
+get_pegging_feature_indices = engine_get_pegging_feature_indices
 
 
 def _rank_counts_key(cards: List[Card]) -> tuple[int, ...]:
@@ -441,12 +435,6 @@ def featurize_discard(
     assert out.shape[0] == DISCARD_FEATURE_DIM, f"discard features dim {out.shape[0]} != {DISCARD_FEATURE_DIM}"
     return out
 
-def one_hot_count(count: int) -> np.ndarray:
-    v = np.zeros(32, dtype=np.float32)
-    v[count] = 1.0
-    return v
-
-
 def featurize_pegging(
     hand: List[Card],
     table: List[Card],
@@ -461,336 +449,20 @@ def featurize_pegging(
     unseen_value_counts: np.ndarray | None = None,
     unseen_count: int | None = None,
 ) -> np.ndarray:
-    if known_cards is None:
-        known_cards = []
-    if opponent_known_hand is None:
-        opponent_known_hand = []
-    if all_played_cards is None:
-        all_played_cards = []
-    if player_score is None:
-        player_score = 0
-    if opponent_score is None:
-        opponent_score = 0
-    
-    def _pegging_sequence_features(table_cards: List[Card]) -> np.ndarray:
-        seq_cards = table_cards[-PEGGING_SEQ_LEN:]
-        steps: List[np.ndarray] = []
-        count_so_far = 0
-        for c in seq_cards:
-            card_vec = np.zeros(52, dtype=np.float32)
-            card_vec[c.to_index()] = 1.0
-            count_vec = one_hot_count(count_so_far)
-            steps.append(np.concatenate([card_vec, count_vec]))
-            count_so_far += c.get_value()
-        if len(steps) < PEGGING_SEQ_LEN:
-            pad = PEGGING_SEQ_LEN - len(steps)
-            steps.extend([np.zeros(PEGGING_SEQ_STEP_DIM, dtype=np.float32) for _ in range(pad)])
-        return np.concatenate(steps).astype(np.float32, copy=False)
-
-    hand_vec = multi_hot_cards(hand)           # (52,)
-    table_vec = multi_hot_cards(table)         # (52,)
-    count_vec = one_hot_count(count)           # (32,)
-    known_vec = multi_hot_cards(known_cards)  # (52,)
-    opp_played_vec = multi_hot_cards(opponent_known_hand)  # (52,)
-    all_played_vec = multi_hot_cards(all_played_cards)     # (52,)
-
-    cand_vec = np.zeros(52, dtype=np.float32)
-    cand_vec[candidate.to_index()] = 1.0
-
-    # Engineered pegging features (scalars)
-    new_count = count + candidate.get_value()
-    remaining_to_31 = 31 - new_count
-    makes_15 = 1.0 if new_count == 15 else 0.0
-    makes_31 = 1.0 if new_count == 31 else 0.0
-
-    seq_after = table + [candidate]
-    immediate_points = float(score_play(seq_after)[0])
-    pair_points = float(HasPairTripleQuad().check(seq_after)[0])
-    run_length = float(HasStraight_DuringPlay().check(seq_after)[0])
-
-    # Run setup features based on last two cards after our play
-    run_setup_gap1 = 0.0
-    run_setup_gap2 = 0.0
-    run_setup_any = 0.0
-    opponent_pair_setup = 0.0
-
-    if len(seq_after) >= 1:
-        last_rank = seq_after[-1].get_rank().lower()
-        # Opponent can score a pair if they play same rank and stay <=31
-        same_rank_card = Card(f"{last_rank}h")
-        if new_count + same_rank_card.get_value() <= 31:
-            opponent_pair_setup = 1.0
-
-    if len(seq_after) >= 2:
-        r1 = RANK_TO_I[seq_after[-1].get_rank().lower()] + 1
-        r2 = RANK_TO_I[seq_after[-2].get_rank().lower()] + 1
-        gap = abs(r1 - r2)
-        if gap == 1:
-            # Opponent can play r1-1 or r2+1
-            candidates = []
-            low = min(r1, r2) - 1
-            high = max(r1, r2) + 1
-            if 1 <= low <= 13:
-                candidates.append(low)
-            if 1 <= high <= 13:
-                candidates.append(high)
-            for rv in candidates:
-                rank_str = RANKS[rv - 1]
-                c = Card(f"{rank_str}h")
-                if new_count + c.get_value() <= 31:
-                    run_setup_gap1 += 1.0
-        elif gap == 2:
-            # Opponent can play the middle rank
-            mid = min(r1, r2) + 1
-            rank_str = RANKS[mid - 1]
-            c = Card(f"{rank_str}h")
-            if new_count + c.get_value() <= 31:
-                run_setup_gap2 = 1.0
-
-    # Count how many ranks could create a run of 3+ for opponent next
-    for rv in range(1, 14):
-        rank_str = RANKS[rv - 1]
-        c = Card(f"{rank_str}h")
-        if new_count + c.get_value() > 31:
-            continue
-        run_len = HasStraight_DuringPlay().check(seq_after + [c])[0]
-        if run_len >= 3:
-            run_setup_any += 1.0
-
-    our_hand_count = float(len(hand))
-    opp_hand_count_est = float(max(0, 4 - len(opponent_known_hand)))
-    table_len = float(len(table))
-    opp_played_count = float(len(opponent_known_hand))
-    known_cards_count = float(len(known_cards))
-
-    # Opponent "go" danger: estimate if opponent has any playable card.
-    unseen_suit_counts = None
-    if unseen_value_counts is None or unseen_count is None:
-        known_set = set(known_cards) | set(all_played_cards) | set(hand)
-        unseen = [c for c in _FULL_DECK if c not in known_set]
-        unseen_count = len(unseen)
-        unseen_value_counts = np.zeros(11, dtype=np.int32)
-        for c in unseen:
-            unseen_value_counts[c.get_value()] += 1
-        unseen_rank_counts = np.zeros(13, dtype=np.int32)
-        unseen_suit_counts = np.zeros(4, dtype=np.int32)
-        for c in unseen:
-            unseen_rank_counts[RANK_TO_I[c.get_rank().lower()]] += 1
-            unseen_suit_counts[SUIT_TO_I[c.get_suit()]] += 1
-    else:
-        unseen_rank_counts = None
-
-    max_val = 10 if remaining_to_31 >= 10 else remaining_to_31
-    if max_val < 1:
-        playable_unseen_count = 0
-    else:
-        playable_unseen_count = int(unseen_value_counts[1 : max_val + 1].sum())
-    opp_can_play_prob = float(playable_unseen_count / max(1, unseen_count))
-    opp_playable_count = float(playable_unseen_count)
-    unseen_count = float(unseen_count)
-
-    if unseen_rank_counts is None or unseen_suit_counts is None:
-        known_set = set(known_cards) | set(all_played_cards) | set(hand)
-        unseen = [c for c in _FULL_DECK if c not in known_set]
-        unseen_rank_counts = np.zeros(13, dtype=np.int32)
-        unseen_suit_counts = np.zeros(4, dtype=np.int32)
-        for c in unseen:
-            unseen_rank_counts[RANK_TO_I[c.get_rank().lower()]] += 1
-            unseen_suit_counts[SUIT_TO_I[c.get_suit()]] += 1
-
-    def _response_counts(table_state: List[Card], count_state: int) -> dict[str, float]:
-        resp_any = 0.0
-        resp_15 = 0.0
-        resp_31 = 0.0
-        resp_pair = 0.0
-        resp_run = 0.0
-        for rv in range(1, 14):
-            count_cards = float(unseen_rank_counts[rv - 1])
-            if count_cards <= 0.0:
-                continue
-            rank_str = RANKS[rv - 1]
-            c = Card(f"{rank_str}h")
-            new_count = count_state + c.get_value()
-            if new_count > 31:
-                continue
-            seq = table_state + [c]
-            immediate_points = float(score_play(seq)[0])
-            pair_points = float(HasPairTripleQuad().check(seq)[0])
-            run_len = float(HasStraight_DuringPlay().check(seq)[0])
-            if immediate_points > 0.0:
-                resp_any += count_cards
-            if new_count == 15:
-                resp_15 += count_cards
-            if new_count == 31:
-                resp_31 += count_cards
-            if pair_points > 0.0:
-                resp_pair += count_cards
-            if run_len >= 3.0:
-                resp_run += count_cards
-        return {
-            "any": resp_any,
-            "r15": resp_15,
-            "r31": resp_31,
-            "pair": resp_pair,
-            "run": resp_run,
-        }
-
-    seq_after = table + [candidate]
-    new_count = count + candidate.get_value()
-    resp_counts = _response_counts(seq_after, new_count)
-    denom = max(1.0, unseen_count)
-    opp_resp_any_prob = resp_counts["any"] / denom
-    opp_resp_15_prob = resp_counts["r15"] / denom
-    opp_resp_31_prob = resp_counts["r31"] / denom
-    opp_resp_pair_prob = resp_counts["pair"] / denom
-    opp_resp_run_prob = resp_counts["run"] / denom
-
-    opp_skipped_15 = 0.0
-    opp_skipped_31 = 0.0
-    opp_skipped_pair = 0.0
-    opp_skipped_run = 0.0
-    if len(table) >= 1:
-        last_card = table[-1]
-        prev_table = table[:-1]
-        prev_count = count - last_card.get_value()
-        if prev_count >= 0:
-            last_points = float(score_play(prev_table + [last_card])[0])
-            if last_points <= 0.0:
-                prev_resp = _response_counts(prev_table, prev_count)
-                if prev_resp["r15"] > 0.0:
-                    opp_skipped_15 = 1.0
-                if prev_resp["r31"] > 0.0:
-                    opp_skipped_31 = 1.0
-                if prev_resp["pair"] > 0.0:
-                    opp_skipped_pair = 1.0
-                if prev_resp["run"] > 0.0:
-                    opp_skipped_run = 1.0
-
-    def _prob_at_least_k(total: int, success: int, draws: int, k: int) -> float:
-        if total <= 0 or success <= 0 or draws <= 0:
-            return 0.0
-        if draws > total or k > draws or k > success:
-            return 0.0
-        denom = math.comb(total, draws)
-        if denom <= 0:
-            return 0.0
-        prob = 0.0
-        max_t = min(success, draws)
-        for t in range(k, max_t + 1):
-            prob += math.comb(success, t) * math.comb(total - success, draws - t)
-        return float(prob / denom)
-
-    def _max_group_prob(counts: np.ndarray, draws: int, k: int, total: int) -> float:
-        if draws <= 0 or total <= 0:
-            return 0.0
-        best = 0.0
-        for c in counts:
-            prob = _prob_at_least_k(total, int(c), draws, k)
-            if prob > best:
-                best = prob
-        return best
-
-    opp_unknown_cards = int(max(0, int(opp_hand_count_est)))
-    unseen_total = int(unseen_count)
-    opp_flush_belief = _max_group_prob(unseen_suit_counts, opp_unknown_cards, 4, unseen_total)
-    opp_trip_belief = _max_group_prob(unseen_rank_counts, opp_unknown_cards, 3, unseen_total)
-    opp_quad_belief = _max_group_prob(unseen_rank_counts, opp_unknown_cards, 4, unseen_total)
-    tens_count = int(
-        unseen_rank_counts[RANK_TO_I["10"]]
-        + unseen_rank_counts[RANK_TO_I["j"]]
-        + unseen_rank_counts[RANK_TO_I["q"]]
-        + unseen_rank_counts[RANK_TO_I["k"]]
+    return engine_featurize_pegging(
+        hand=hand,
+        table=table,
+        count=count,
+        candidate=candidate,
+        known_cards=known_cards,
+        opponent_known_hand=opponent_known_hand,
+        all_played_cards=all_played_cards,
+        player_score=player_score,
+        opponent_score=opponent_score,
+        feature_set=feature_set,
+        unseen_value_counts=unseen_value_counts,
+        unseen_count=unseen_count,
     )
-    if opp_unknown_cards <= 0 or unseen_total <= 0 or tens_count < opp_unknown_cards:
-        opp_only_tens_belief = 0.0
-    else:
-        opp_only_tens_belief = float(
-            math.comb(tens_count, opp_unknown_cards) / math.comb(unseen_total, opp_unknown_cards)
-        )
-
-    score_context = _score_context_features(player_score, opponent_score)
-
-    engineered = np.array(
-        [
-            float(new_count),
-            float(remaining_to_31),
-            makes_15,
-            makes_31,
-            immediate_points,
-            pair_points,
-            run_length,
-            run_setup_gap1,
-            run_setup_gap2,
-            run_setup_any,
-            opponent_pair_setup,
-            our_hand_count,
-            opp_hand_count_est,
-            table_len,
-            opp_played_count,
-            known_cards_count,
-            opp_can_play_prob,
-            opp_playable_count,
-            unseen_count,
-            opp_resp_any_prob,
-            opp_resp_15_prob,
-            opp_resp_31_prob,
-            opp_resp_pair_prob,
-            opp_resp_run_prob,
-            opp_skipped_15,
-            opp_skipped_31,
-            opp_skipped_pair,
-            opp_skipped_run,
-            opp_flush_belief,
-            opp_trip_belief,
-            opp_quad_belief,
-            opp_only_tens_belief,
-        ],
-        dtype=np.float32,
-    )
-    engineered = np.concatenate([engineered, score_context])
-
-    base = np.concatenate([
-        hand_vec,
-        table_vec,
-        count_vec,
-        cand_vec,
-        known_vec,
-    ])
-    if feature_set == "basic":
-        assert base.shape[0] == PEGGING_BASE_FEATURE_DIM, f"pegging features dim {base.shape[0]} != {PEGGING_BASE_FEATURE_DIM}"
-        return base
-    if feature_set == "full_no_scores":
-        engineered_no_scores = engineered[:PEGGING_ENGINEERED_NO_SCORE_DIM]
-        out = np.concatenate([
-            base,
-            opp_played_vec,
-            all_played_vec,
-            engineered_no_scores,
-        ])
-        expected = PEGGING_BASE_FEATURE_DIM + 52 + 52 + PEGGING_ENGINEERED_NO_SCORE_DIM
-        assert out.shape[0] == expected, f"pegging features dim {out.shape[0]} != {expected}"
-        return out
-    if feature_set == "full":
-        out = np.concatenate([
-            base,
-            opp_played_vec,
-            all_played_vec,
-            engineered,
-        ])
-        assert out.shape[0] == PEGGING_FULL_FEATURE_DIM, f"pegging features dim {out.shape[0]} != {PEGGING_FULL_FEATURE_DIM}"
-        return out
-    if feature_set == "full_seq":
-        out = np.concatenate([
-            base,
-            opp_played_vec,
-            all_played_vec,
-            engineered,
-        ])
-        seq = _pegging_sequence_features(table)
-        out = np.concatenate([out, seq])
-        assert out.shape[0] == PEGGING_FULL_SEQ_FEATURE_DIM, f"pegging features dim {out.shape[0]} != {PEGGING_FULL_SEQ_FEATURE_DIM}"
-        return out
-    raise ValueError(f"Unknown pegging feature_set: {feature_set}")
 
 
 class LinearDiscardClassifier:
