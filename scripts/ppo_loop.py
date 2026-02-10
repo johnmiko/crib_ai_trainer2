@@ -233,6 +233,33 @@ def _build_opponent(name: str):
     raise SystemExit(f"Unsupported opponent: {name}")
 
 
+def _parse_opponent_mix(spec: str | None, default_opponent: str) -> list[tuple[str, float]]:
+    if not spec:
+        return [("best", 1.0)]
+    parts = [p.strip() for p in spec.split(",") if p.strip()]
+    mix: list[tuple[str, float]] = []
+    total = 0.0
+    for part in parts:
+        if ":" in part:
+            name, weight = part.split(":", 1)
+            name = name.strip().lower()
+            w = float(weight.strip())
+        else:
+            name = part.strip().lower()
+            w = 1.0
+        if name == "opponent":
+            name = default_opponent
+        if name not in {"best", "hard", "medium", "beginner"}:
+            raise SystemExit(f"Invalid opponent_mix entry: {name}")
+        if w < 0:
+            raise SystemExit("opponent_mix weights must be >= 0.")
+        mix.append((name, w))
+        total += w
+    if total <= 0:
+        raise SystemExit("opponent_mix must have positive total weight.")
+    return [(n, w / total) for n, w in mix]
+
+
 class _NullDiscardFallback:
     def select_crib_cards(self, player_state, round_state):
         raise SystemExit("Discard fallback was called unexpectedly.")
@@ -322,7 +349,13 @@ def _write_best_dir(best_file: Path, model_version: str, run_dir: Path) -> None:
     best_file.write_text(json.dumps(best_map, indent=2), encoding="utf-8")
 
 
-def _load_value_models(best_dir: Path, training_mode: str) -> tuple[MLPValueModel | None, MLPValueModel | None, dict]:
+def _load_value_models(
+    best_dir: Path,
+    training_mode: str,
+    *,
+    require_discard: bool | None = None,
+    require_pegging: bool | None = None,
+) -> tuple[MLPValueModel | None, MLPValueModel | None, dict]:
     meta_path = best_dir / "model_meta.json"
     if not meta_path.exists():
         raise SystemExit(f"Expected model_meta.json at {meta_path} but it does not exist.")
@@ -354,9 +387,14 @@ def _load_value_models(best_dir: Path, training_mode: str) -> tuple[MLPValueMode
         else:
             raise SystemExit(f"Unsupported pegging_model_type={pegging_model_type} in {best_dir}.")
 
-    if training_mode != "pegging_only" and discard_model is None:
+    if require_discard is None:
+        require_discard = training_mode != "pegging_only"
+    if require_pegging is None:
+        require_pegging = training_mode != "discard_only"
+
+    if require_discard and discard_model is None:
         raise SystemExit(f"Expected discard model in {best_dir} for training_mode={training_mode}.")
-    if training_mode != "discard_only" and pegging_model is None:
+    if require_pegging and pegging_model is None:
         raise SystemExit(f"Expected pegging model in {best_dir} for training_mode={training_mode}.")
     return discard_model, pegging_model, meta
 
@@ -367,8 +405,16 @@ def _build_policies(
     seed: int,
     training_mode: str,
 ) -> tuple[PolicyMLP | None, PolicyMLP | None, dict, dict | None]:
-    discard_model, _, discard_meta = _load_value_models(discard_dir, training_mode)
-    _, pegging_model, pegging_meta = _load_value_models(pegging_dir, training_mode)
+    discard_model, _, discard_meta = _load_value_models(
+        discard_dir,
+        training_mode,
+        require_pegging=False if training_mode == "pegging_only" else None,
+    )
+    _, pegging_model, pegging_meta = _load_value_models(
+        pegging_dir,
+        training_mode,
+        require_discard=False if training_mode == "discard_only" else None,
+    )
     meta = dict(discard_meta)
     if pegging_meta:
         for key in (
@@ -393,13 +439,24 @@ def _build_policies(
         ):
             if key in pegging_meta:
                 meta[key] = pegging_meta[key]
-    hidden = tuple(int(h) for h in meta.get("mlp_hidden", []))
-    if not hidden:
-        alt = meta.get("pegging_mlp_hidden")
-        if isinstance(alt, (list, tuple)):
-            hidden = tuple(int(h) for h in alt)
-    if not hidden:
-        raise SystemExit(f"model_meta.json missing mlp_hidden at {discard_dir}.")
+    def _coerce_hidden(value):
+        if value is None:
+            return None
+        if isinstance(value, (list, tuple)):
+            return tuple(int(v) for v in value)
+        if isinstance(value, str):
+            parts = [p.strip() for p in value.split(",") if p.strip()]
+            if parts:
+                return tuple(int(p) for p in parts)
+        return None
+
+    base_hidden = _coerce_hidden(meta.get("mlp_hidden"))
+    discard_hidden = _coerce_hidden(meta.get("discard_mlp_hidden")) or base_hidden
+    pegging_hidden = _coerce_hidden(meta.get("pegging_mlp_hidden")) or base_hidden
+    if training_mode != "pegging_only" and not discard_hidden:
+        raise SystemExit(f"model_meta.json missing discard_mlp_hidden at {discard_dir}.")
+    if training_mode != "discard_only" and not pegging_hidden:
+        raise SystemExit(f"model_meta.json missing pegging_mlp_hidden at {pegging_dir}.")
     discard_dim = int(meta.get("discard_feature_dim", 0))
     pegging_dim = int(meta.get("pegging_feature_dim", 0))
     if training_mode != "pegging_only" and discard_dim <= 0:
@@ -408,12 +465,15 @@ def _build_policies(
         raise SystemExit(f"model_meta.json missing pegging feature dims at {pegging_dir}.")
     discard_policy = None
     if training_mode != "pegging_only":
-        discard_policy = PolicyMLP(discard_dim, hidden, seed)
+        discard_policy = PolicyMLP(discard_dim, discard_hidden, seed)
         discard_policy.load_from_value_model(discard_model)
     pegging_policy = None
     if training_mode != "discard_only":
-        pegging_policy = PolicyMLP(pegging_dim, hidden, seed + 1)
+        pegging_policy = PolicyMLP(pegging_dim, pegging_hidden, seed + 1)
         pegging_policy.load_from_value_model(pegging_model)
+    meta["mlp_hidden"] = list(base_hidden) if base_hidden else meta.get("mlp_hidden", [])
+    meta["discard_mlp_hidden"] = list(discard_hidden) if discard_hidden else meta.get("discard_mlp_hidden", [])
+    meta["pegging_mlp_hidden"] = list(pegging_hidden) if pegging_hidden else meta.get("pegging_mlp_hidden", [])
     return discard_policy, pegging_policy, meta, pegging_meta
 
 
@@ -461,6 +521,7 @@ def _collect_games_worker(args_tuple: tuple) -> tuple[list[PPODecision], list[PP
         discard_pegging_fallback,
         reward_mode,
         winrate_weight,
+        opponent_mix_spec,
     ) = args_tuple
     if games <= 0:
         return [], []
@@ -470,8 +531,16 @@ def _collect_games_worker(args_tuple: tuple) -> tuple[list[PPODecision], list[PP
     best_dir = Path(best_dir_str)
     discard_dir = Path(discard_dir_str)
     pegging_dir = Path(pegging_dir_str)
-    best_discard, _, _ = _load_value_models(discard_dir, training_mode)
-    _, best_pegging, _ = _load_value_models(pegging_dir, training_mode)
+    best_discard, _, _ = _load_value_models(
+        discard_dir,
+        training_mode,
+        require_pegging=False if training_mode == "pegging_only" else None,
+    )
+    _, best_pegging, _ = _load_value_models(
+        pegging_dir,
+        training_mode,
+        require_discard=False if training_mode == "discard_only" else None,
+    )
     base_opponent = _build_opponent(opponent_name)
     peg_fb = None
     if training_mode == "discard_only":
@@ -482,28 +551,21 @@ def _collect_games_worker(args_tuple: tuple) -> tuple[list[PPODecision], list[PP
                 raise SystemExit(f"Expected pegging model in {pegging_dir} for discard_only pegging.")
             peg_fb = _make_pegging_player(best_pegging, pegging_feature_set)
     if training_mode == "pegging_only":
-        opponent = NeuralPegOnlyPlayer(
+        best_opponent = NeuralPegOnlyPlayer(
             pegging_model=best_pegging,
             discard_fallback=base_opponent,
             name=f"best:{best_dir.name}",
             pegging_feature_set=pegging_feature_set,
         )
-    elif training_mode == "discard_only":
-        opponent = AIPlayer(
-            best_discard,
-            best_pegging,
-            name=f"best:{best_dir.name}",
-            discard_feature_set=discard_feature_set,
-            pegging_feature_set=pegging_feature_set,
-        )
     else:
-        opponent = AIPlayer(
+        best_opponent = AIPlayer(
             best_discard,
             best_pegging,
             name=f"best:{best_dir.name}",
             discard_feature_set=discard_feature_set,
             pegging_feature_set=pegging_feature_set,
         )
+    mix = _parse_opponent_mix(opponent_mix_spec, opponent_name)
     candidate = PPOPlayer(
         discard_policy,
         pegging_policy,
@@ -516,13 +578,20 @@ def _collect_games_worker(args_tuple: tuple) -> tuple[list[PPODecision], list[PP
         discard_fallback=base_opponent if training_mode == "pegging_only" else None,
         pegging_fallback=peg_fb,
     )
-    _ensure_unique_names(candidate, opponent)
     discard_samples: list[PPODecision] = []
     pegging_samples: list[PPODecision] = []
     base_seed = int(seed) + int(worker_idx) * 100000
     for i in range(games):
         candidate.reset_logs()
         game_seed = base_seed + i
+        opp_choice = rng.choice(len(mix), p=[w for _, w in mix])
+        opp_name = mix[int(opp_choice)][0]
+        if opp_name == "best":
+            opponent = best_opponent
+        else:
+            opponent = _build_opponent(opp_name)
+        _ensure_unique_names(candidate, opponent)
+
         if hands_per_game is None:
             if i % 2 == 0:
                 s0, s1 = play_game(
@@ -587,8 +656,16 @@ def _evaluate_worker(args_tuple: tuple) -> tuple[str, int, float, int]:
     best_dir = Path(best_dir_str)
     discard_dir = Path(discard_dir_str)
     pegging_dir = Path(pegging_dir_str)
-    best_discard, _, _ = _load_value_models(discard_dir, training_mode)
-    _, best_pegging, _ = _load_value_models(pegging_dir, training_mode)
+    best_discard, _, _ = _load_value_models(
+        discard_dir,
+        training_mode,
+        require_pegging=False if training_mode == "pegging_only" else None,
+    )
+    _, best_pegging, _ = _load_value_models(
+        pegging_dir,
+        training_mode,
+        require_discard=False if training_mode == "discard_only" else None,
+    )
     base_opponent = _build_opponent(opponent_name)
     peg_fb = None
     if training_mode == "discard_only":
@@ -671,8 +748,10 @@ def _evaluate_worker(args_tuple: tuple) -> tuple[str, int, float, int]:
 
 
 def _evaluate_head_to_head(
-    best_state: dict | None,
-    cand_state: dict | None,
+    best_discard_state: dict | None,
+    best_pegging_state: dict | None,
+    cand_discard_state: dict | None,
+    cand_pegging_state: dict | None,
     discard_feature_set: str,
     pegging_feature_set: str,
     best_dir: Path,
@@ -686,8 +765,16 @@ def _evaluate_head_to_head(
 ) -> dict:
     if games <= 0:
         return {"wins": 0, "games": 0, "winrate": 0.0, "avg_diff": 0.0}
-    best_discard, _, _ = _load_value_models(discard_dir, training_mode)
-    _, best_pegging, _ = _load_value_models(pegging_dir, training_mode)
+    best_discard, _, _ = _load_value_models(
+        discard_dir,
+        training_mode,
+        require_pegging=False if training_mode == "pegging_only" else None,
+    )
+    _, best_pegging, _ = _load_value_models(
+        pegging_dir,
+        training_mode,
+        require_discard=False if training_mode == "discard_only" else None,
+    )
     base_opponent = _build_opponent(opponent_name)
     peg_fb = None
     if training_mode == "discard_only":
@@ -698,9 +785,9 @@ def _evaluate_head_to_head(
                 raise SystemExit(f"Expected pegging model in {pegging_dir} for discard_only pegging.")
             peg_fb = _make_pegging_player(best_pegging, pegging_feature_set)
 
-    def _make_player(state: dict | None, name: str):
-        discard_policy = _load_policy_from_state(state) if state is not None else None
-        pegging_policy = _load_policy_from_state(state) if state is not None else None
+    def _make_player(discard_state: dict | None, pegging_state: dict | None, name: str):
+        discard_policy = _load_policy_from_state(discard_state) if discard_state is not None else None
+        pegging_policy = _load_policy_from_state(pegging_state) if pegging_state is not None else None
         return PPOPlayer(
             discard_policy,
             pegging_policy,
@@ -714,8 +801,8 @@ def _evaluate_head_to_head(
             pegging_fallback=peg_fb,
         )
 
-    best_player = _make_player(best_state, "best")
-    cand_player = _make_player(cand_state, "candidate")
+    best_player = _make_player(best_discard_state, best_pegging_state, "best")
+    cand_player = _make_player(cand_discard_state, cand_pegging_state, "candidate")
     wins = 0
     diffs = []
     for i in range(games):
@@ -902,6 +989,12 @@ def main() -> int:
         help="If set, use this opponent's pegging during discard-only training instead of the pegging model.",
     )
     ap.add_argument("--opponent", type=str, default="hard", choices=["hard", "medium", "beginner"])
+    ap.add_argument(
+        "--opponent_mix",
+        type=str,
+        default=None,
+        help="Comma list of opponent:weight entries for training (e.g. 'best:0.6,hard:0.4').",
+    )
     ap.add_argument("--loops", type=int, default=100, help="Number of PPO loops.")
     ap.add_argument("--lr", type=float, default=1e-4, help="Learning rate.")
     ap.add_argument("--ppo_epochs", type=int, default=2, help="PPO epochs per loop.")
@@ -931,6 +1024,7 @@ def main() -> int:
         help="If set, stop when there are zero accepted models in the last N loops.",
     )
     ap.add_argument("--plateau_winrate_step", type=float, default=0.1, help="Winrate weight step per plateau window.")
+    ap.add_argument("--no_opponent_eval", action="store_true", help="Skip eval vs opponent; use head-to-head only.")
     ap.add_argument("--seed", type=int, default=None, help="Random seed.")
     args = ap.parse_args()
 
@@ -1050,6 +1144,7 @@ def _run_single(args: argparse.Namespace) -> int:
                     args.discard_pegging_fallback,
                     args.reward_mode,
                     winrate_weight,
+                    args.opponent_mix,
                 )
             )
         ctx = mp.get_context("spawn")
@@ -1083,86 +1178,14 @@ def _run_single(args: argparse.Namespace) -> int:
             )
 
         eval_seed = seed + loop_idx * 2000
-        eval_counts = _split_games(args.eval_games, args.eval_workers)
-        eval_tasks = []
+        eval_games = int(args.eval_games)
         cand_discard_state = _policy_state(discard_policy) if discard_policy is not None else None
         cand_pegging_state = _policy_state(pegging_policy) if pegging_policy is not None else None
-        for idx, count in enumerate(eval_counts):
-            if count <= 0:
-                continue
-            eval_tasks.append(
-                (
-                    cand_discard_state,
-                    cand_pegging_state,
-                    discard_feature_set,
-                    pegging_feature_set,
-                    str(best_dir),
-                    "candidate",
-                    int(count),
-                    eval_seed,
-                    idx,
-                    run_training_mode,
-                    args.opponent,
-                    str(discard_source_dir),
-                    str(pegging_source_dir),
-                    args.discard_pegging_fallback,
-                    args.reward_mode,
-                    winrate_weight,
-                )
-            )
-            eval_tasks.append(
-                (
-                    best_discard_state,
-                    best_pegging_state,
-                    discard_feature_set,
-                    pegging_feature_set,
-                    str(best_dir),
-                    "best",
-                    int(count),
-                    eval_seed,
-                    idx + 10000,
-                    run_training_mode,
-                    args.opponent,
-                    str(discard_source_dir),
-                    str(pegging_source_dir),
-                    args.discard_pegging_fallback,
-                    args.reward_mode,
-                    winrate_weight,
-                )
-            )
-        wins = 0
-        total_games = 0
-        diff_sum = 0.0
-        best_wins = 0
-        best_games = 0
-        best_diff_sum = 0.0
-        with ctx.Pool(processes=args.eval_workers) as pool:
-            for kind, w, d_sum, g in pool.imap_unordered(_evaluate_worker, eval_tasks):
-                if kind == "candidate":
-                    wins += int(w)
-                    diff_sum += float(d_sum)
-                    total_games += int(g)
-                else:
-                    best_wins += int(w)
-                    best_diff_sum += float(d_sum)
-                    best_games += int(g)
-        if total_games <= 0:
-            raise SystemExit("No eval games were played.")
-        eval_result = {
-            "wins": wins,
-            "games": total_games,
-            "winrate": wins / total_games,
-            "avg_diff": diff_sum / total_games,
-        }
-        best_eval = {
-            "wins": best_wins,
-            "games": best_games,
-            "winrate": (best_wins / best_games) if best_games else 0.0,
-            "avg_diff": (best_diff_sum / best_games) if best_games else 0.0,
-        }
         h2h_eval = _evaluate_head_to_head(
             best_discard_state,
+            best_pegging_state,
             cand_discard_state,
+            cand_pegging_state,
             discard_feature_set,
             pegging_feature_set,
             best_dir,
@@ -1175,25 +1198,108 @@ def _run_single(args: argparse.Namespace) -> int:
             args.discard_pegging_fallback,
         )
         print(
-            f"eval: wins={eval_result['wins']}/{eval_result['games']} "
-            f"winrate={eval_result['winrate']:.3f} avg_diff={eval_result['avg_diff']:.2f}"
-        )
-        print(
             f"h2h: wins={h2h_eval['wins']}/{h2h_eval['games']} "
             f"winrate={h2h_eval['winrate']:.3f} avg_diff={h2h_eval['avg_diff']:.2f}"
         )
 
-        if args.accept_metric == "winrate":
-            cand_metric = eval_result["winrate"]
-            best_metric = best_eval["winrate"]
+        if h2h_eval["winrate"] <= 0.5:
+            print("Rejected candidate (did not beat best in head-to-head).")
+            accepted = False
+        elif args.no_opponent_eval:
+            accepted = True
         else:
-            cand_metric = eval_result["avg_diff"]
-            best_metric = best_eval["avg_diff"]
+            eval_counts = _split_games(args.eval_games, args.eval_workers)
+            eval_tasks = []
+            for idx, count in enumerate(eval_counts):
+                if count <= 0:
+                    continue
+                eval_tasks.append(
+                    (
+                        cand_discard_state,
+                        cand_pegging_state,
+                        discard_feature_set,
+                        pegging_feature_set,
+                        str(best_dir),
+                        "candidate",
+                        int(count),
+                        eval_seed,
+                        idx,
+                        run_training_mode,
+                        args.opponent,
+                        str(discard_source_dir),
+                        str(pegging_source_dir),
+                        args.discard_pegging_fallback,
+                        args.reward_mode,
+                        winrate_weight,
+                    )
+                )
+                eval_tasks.append(
+                    (
+                        best_discard_state,
+                        best_pegging_state,
+                        discard_feature_set,
+                        pegging_feature_set,
+                        str(best_dir),
+                        "best",
+                        int(count),
+                        eval_seed,
+                        idx + 10000,
+                        run_training_mode,
+                        args.opponent,
+                        str(discard_source_dir),
+                        str(pegging_source_dir),
+                        args.discard_pegging_fallback,
+                        args.reward_mode,
+                        winrate_weight,
+                    )
+                )
+            wins = 0
+            total_games = 0
+            diff_sum = 0.0
+            best_wins = 0
+            best_games = 0
+            best_diff_sum = 0.0
+            with ctx.Pool(processes=args.eval_workers) as pool:
+                for kind, w, d_sum, g in pool.imap_unordered(_evaluate_worker, eval_tasks):
+                    if kind == "candidate":
+                        wins += int(w)
+                        diff_sum += float(d_sum)
+                        total_games += int(g)
+                    else:
+                        best_wins += int(w)
+                        best_diff_sum += float(d_sum)
+                        best_games += int(g)
+            if total_games <= 0:
+                raise SystemExit("No eval games were played.")
+            eval_result = {
+                "wins": wins,
+                "games": total_games,
+                "winrate": wins / total_games,
+                "avg_diff": diff_sum / total_games,
+            }
+            best_eval = {
+                "wins": best_wins,
+                "games": best_games,
+                "winrate": (best_wins / best_games) if best_games else 0.0,
+                "avg_diff": (best_diff_sum / best_games) if best_games else 0.0,
+            }
+            print(
+                f"eval: wins={eval_result['wins']}/{eval_result['games']} "
+                f"winrate={eval_result['winrate']:.3f} avg_diff={eval_result['avg_diff']:.2f}"
+            )
+            print(
+                f"best: wins={best_eval['wins']}/{best_eval['games']} "
+                f"winrate={best_eval['winrate']:.3f} avg_diff={best_eval['avg_diff']:.2f}"
+            )
 
-        accepted = (
-            h2h_eval["winrate"] > 0.5
-            and cand_metric > (best_metric + float(args.accept_margin))
-        )
+            if args.accept_metric == "winrate":
+                cand_metric = eval_result["winrate"]
+                best_metric = best_eval["winrate"]
+            else:
+                cand_metric = eval_result["avg_diff"]
+                best_metric = best_eval["avg_diff"]
+
+            accepted = cand_metric > (best_metric + float(args.accept_margin))
         if accepted:
             run_id = _next_run_id(base_models_dir)
             run_dir = base_models_dir / run_id

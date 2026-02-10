@@ -256,6 +256,8 @@ def build_benchmark_parser() -> argparse.ArgumentParser:
         choices=["full", "discard_only", "pegging_only"],
         help="Play full games or isolate discard/pegging outcomes.",
     )
+    ap.add_argument("--discard_models_dir", type=str, default=None, help="Override discard model directory.")
+    ap.add_argument("--pegging_models_dir", type=str, default=None, help="Override pegging model directory.")
     return ap
 
 

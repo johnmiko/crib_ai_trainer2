@@ -158,16 +158,71 @@ def _build_player_factory(args, fallback_override: str | None):
         return os.path.basename(os.path.normpath(args.models_dir))
 
     # Load model metadata to align feature sets and model files.
-    meta_path = os.path.join(args.models_dir, "model_meta.json")
+    base_meta_path = os.path.join(args.models_dir, "model_meta.json")
+    discard_meta_path = None
+    pegging_meta_path = None
+    if getattr(args, "discard_models_dir", None):
+        alt = os.path.join(str(args.discard_models_dir), "model_meta.json")
+        if os.path.exists(alt):
+            discard_meta_path = alt
+    if getattr(args, "pegging_models_dir", None):
+        alt = os.path.join(str(args.pegging_models_dir), "model_meta.json")
+        if os.path.exists(alt):
+            pegging_meta_path = alt
     model_type = "linear"
     mlp_hidden = None
     discard_model_file = None
     pegging_model_file = None
     size_suffix = ""
-    if not os.path.exists(meta_path):
-        raise SystemExit(f"Expected model_meta.json at {meta_path} but it does not exist.")
-    with open(meta_path, "r", encoding="utf-8") as f:
-        meta = json.load(f)
+    base_meta = None
+    if os.path.exists(base_meta_path):
+        with open(base_meta_path, "r", encoding="utf-8") as f:
+            base_meta = json.load(f)
+    discard_meta = None
+    if discard_meta_path and os.path.exists(discard_meta_path):
+        with open(discard_meta_path, "r", encoding="utf-8") as f:
+            discard_meta = json.load(f)
+    pegging_meta = None
+    if pegging_meta_path and os.path.exists(pegging_meta_path):
+        with open(pegging_meta_path, "r", encoding="utf-8") as f:
+            pegging_meta = json.load(f)
+    if base_meta is None and discard_meta is None and pegging_meta is None:
+        raise SystemExit(
+            f"Expected model_meta.json at {base_meta_path} or in discard/pegging models dirs, but none were found."
+        )
+
+    meta = {}
+    if base_meta:
+        meta.update(base_meta)
+
+    def _merge_if_present(keys: tuple[str, ...], source: dict | None) -> None:
+        if not source:
+            return
+        for key in keys:
+            if key in source and source[key] is not None:
+                meta[key] = source[key]
+
+    # Prefer part-specific metadata from their respective dirs.
+    _merge_if_present(
+        (
+            "discard_feature_set",
+            "discard_model_type",
+            "discard_model_file",
+            "discard_mlp_hidden",
+            "model_type",
+        ),
+        discard_meta,
+    )
+    _merge_if_present(
+        (
+            "pegging_feature_set",
+            "pegging_model_type",
+            "pegging_model_file",
+            "pegging_mlp_hidden",
+            "model_type",
+        ),
+        pegging_meta,
+    )
     args.discard_feature_set = meta.get("discard_feature_set", args.discard_feature_set)
     args.pegging_feature_set = meta.get("pegging_feature_set", args.pegging_feature_set)
     model_type = meta.get("model_type", model_type)
@@ -175,6 +230,10 @@ def _build_player_factory(args, fallback_override: str | None):
     pegging_model_type = meta.get("pegging_model_type", model_type)
     discard_only = bool(meta.get("discard_only", False))
     pegging_only = bool(meta.get("pegging_only", False))
+    if getattr(args, "training_mode", "full") == "pegging_only":
+        pegging_only = True
+    if getattr(args, "training_mode", "full") == "discard_only":
+        discard_only = True
     mlp_hidden = meta.get("mlp_hidden", None)
     discard_model_file = meta.get("discard_model_file")
     pegging_model_file = meta.get("pegging_model_file")
@@ -215,10 +274,13 @@ def _build_player_factory(args, fallback_override: str | None):
     fallback_player_name = fallback_override or args.fallback_player
 
     def _load_discard_model():
+        local_models_dir = args.models_dir
+        if getattr(args, "discard_models_dir", None):
+            local_models_dir = str(Path(args.discard_models_dir))
         if discard_model_file is None:
             raise SystemExit("discard model file missing for this models_dir.")
         if discard_model_file is not None:
-            path = f"{args.models_dir}/{discard_model_file}"
+            path = f"{local_models_dir}/{discard_model_file}"
             if discard_model_type == "mlp":
                 return MLPValueModel.load_pt(path)
             if discard_model_type == "gru" or discard_model_type == "lstm":
@@ -231,24 +293,27 @@ def _build_player_factory(args, fallback_override: str | None):
                 return RandomForestValueModel.load_joblib(path)
             return LinearValueModel.load_npz(path)
         if discard_model_type == "mlp":
-            return MLPValueModel.load_pt(f"{args.models_dir}/discard_mlp.pt")
+            return MLPValueModel.load_pt(f"{local_models_dir}/discard_mlp.pt")
         if discard_model_type == "gru":
-            return PeggingRNNValueModel.load_pt(f"{args.models_dir}/discard_gru.pt")
+            return PeggingRNNValueModel.load_pt(f"{local_models_dir}/discard_gru.pt")
         if discard_model_type == "lstm":
-            return PeggingRNNValueModel.load_pt(f"{args.models_dir}/discard_lstm.pt")
+            return PeggingRNNValueModel.load_pt(f"{local_models_dir}/discard_lstm.pt")
         if discard_model_type == "transformer":
-            return PeggingTransformerValueModel.load_pt(f"{args.models_dir}/discard_transformer.pt")
+            return PeggingTransformerValueModel.load_pt(f"{local_models_dir}/discard_transformer.pt")
         if discard_model_type == "gbt":
-            return GBTValueModel.load_joblib(f"{args.models_dir}/discard_gbt.pkl")
+            return GBTValueModel.load_joblib(f"{local_models_dir}/discard_gbt.pkl")
         if discard_model_type == "rf":
-            return RandomForestValueModel.load_joblib(f"{args.models_dir}/discard_rf.pkl")
-        return LinearValueModel.load_npz(f"{args.models_dir}/discard_linear.npz")
+            return RandomForestValueModel.load_joblib(f"{local_models_dir}/discard_rf.pkl")
+        return LinearValueModel.load_npz(f"{local_models_dir}/discard_linear.npz")
 
     def _load_pegging_model():
+        local_models_dir = args.models_dir
+        if getattr(args, "pegging_models_dir", None):
+            local_models_dir = str(Path(args.pegging_models_dir))
         if pegging_model_file is None:
             raise SystemExit("pegging model file missing for this models_dir.")
         if pegging_model_file is not None:
-            path = f"{args.models_dir}/{pegging_model_file}"
+            path = f"{local_models_dir}/{pegging_model_file}"
             if pegging_model_type == "mlp":
                 return MLPValueModel.load_pt(path)
             if pegging_model_type == "gru" or pegging_model_type == "lstm":
@@ -261,18 +326,18 @@ def _build_player_factory(args, fallback_override: str | None):
                 return RandomForestValueModel.load_joblib(path)
             return LinearValueModel.load_npz(path)
         if pegging_model_type == "mlp":
-            return MLPValueModel.load_pt(f"{args.models_dir}/pegging_mlp.pt")
+            return MLPValueModel.load_pt(f"{local_models_dir}/pegging_mlp.pt")
         if pegging_model_type == "gru":
-            return PeggingRNNValueModel.load_pt(f"{args.models_dir}/pegging_gru.pt")
+            return PeggingRNNValueModel.load_pt(f"{local_models_dir}/pegging_gru.pt")
         if pegging_model_type == "lstm":
-            return PeggingRNNValueModel.load_pt(f"{args.models_dir}/pegging_lstm.pt")
+            return PeggingRNNValueModel.load_pt(f"{local_models_dir}/pegging_lstm.pt")
         if pegging_model_type == "transformer":
-            return PeggingTransformerValueModel.load_pt(f"{args.models_dir}/pegging_transformer.pt")
+            return PeggingTransformerValueModel.load_pt(f"{local_models_dir}/pegging_transformer.pt")
         if pegging_model_type == "gbt":
-            return GBTValueModel.load_joblib(f"{args.models_dir}/pegging_gbt.pkl")
+            return GBTValueModel.load_joblib(f"{local_models_dir}/pegging_gbt.pkl")
         if pegging_model_type == "rf":
-            return RandomForestValueModel.load_joblib(f"{args.models_dir}/pegging_rf.pkl")
-        return LinearValueModel.load_npz(f"{args.models_dir}/pegging_linear.npz")
+            return RandomForestValueModel.load_joblib(f"{local_models_dir}/pegging_rf.pkl")
+        return LinearValueModel.load_npz(f"{local_models_dir}/pegging_linear.npz")
 
     model_tag = resolve_model_tag()
     def player_factory(name: str):
@@ -484,20 +549,23 @@ def _benchmark_single(
         raise ValueError("Must specify exactly two players via --players")
 
     if fallback_override is None:
-        peg_only = "NeuralPegOnlyPlayer" in player_names
-        disc_only = "NeuralDiscardOnlyPlayer" in player_names
-        if peg_only and disc_only:
-            raise ValueError("Cannot benchmark both NeuralPegOnlyPlayer and NeuralDiscardOnlyPlayer together.")
-        if peg_only:
-            idx = player_names.index("NeuralPegOnlyPlayer")
-            other = player_names[1 - idx]
-            if other in {"beginner", "medium", "hard", "random"}:
-                fallback_override = other
-        if disc_only:
-            idx = player_names.index("NeuralDiscardOnlyPlayer")
-            other = player_names[1 - idx]
-            if other in {"beginner", "medium", "hard", "random"}:
-                fallback_override = other
+        if args.fallback_player:
+            fallback_override = args.fallback_player
+        else:
+            peg_only = "NeuralPegOnlyPlayer" in player_names
+            disc_only = "NeuralDiscardOnlyPlayer" in player_names
+            if peg_only and disc_only:
+                raise ValueError("Cannot benchmark both NeuralPegOnlyPlayer and NeuralDiscardOnlyPlayer together.")
+            if peg_only:
+                idx = player_names.index("NeuralPegOnlyPlayer")
+                other = player_names[1 - idx]
+                if other in {"beginner", "medium", "hard", "random"}:
+                    fallback_override = other
+            if disc_only:
+                idx = player_names.index("NeuralDiscardOnlyPlayer")
+                other = player_names[1 - idx]
+                if other in {"beginner", "medium", "hard", "random"}:
+                    fallback_override = other
 
     if fallback_override is not None:
         player_factory, model_tag, model_type, size_suffix = _build_player_factory(args, fallback_override)
