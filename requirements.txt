@@ -6,3 +6,4 @@ networkx>=3.6.0
 python-dotenv>=1.2.1
 pandas
 scikit-learn>=1.6.0
+cribbage-engine @ git+https://github.com/johnmiko/crib_engine
